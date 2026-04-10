@@ -116,7 +116,7 @@ const handleImageUpload = (e) => {
 ### 2~3단계 — 이미지 분석 + 키워드 생성 (단일 API 호출)
 
 ```js
-// POST https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={API_KEY}
+// POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={API_KEY}
 {
   "contents": [{
     "parts": [

@@ -1,4 +1,4 @@
-const MODELS = ['gemini-2.5-flash', 'gemini-1.5-flash']
+const MODELS = ['gemini-2.5-flash', 'gemini-2.0-flash']
 const RETRYABLE_STATUS = new Set([429, 500, 502, 503, 504])
 const MAX_RETRIES = 3
 
