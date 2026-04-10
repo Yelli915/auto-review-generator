@@ -1,6 +1,14 @@
+/* global Buffer, process */
 const MODELS = ['gemini-2.5-flash', 'gemini-2.0-flash']
 const RETRYABLE_STATUS = new Set([429, 500, 502, 503, 504])
 const MAX_RETRIES = 2
+const STREAM_MODEL = 'gemini-2.0-flash'
+
+const REVIEW_LENGTH_MAP = {
+  short: '2~3문장 이내로 간결하게',
+  medium: '4~5문장 분량으로',
+  long: '7~8문장의 상세한 내용으로',
+}
 
 function wait(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms))
@@ -8,6 +16,10 @@ function wait(ms) {
 
 function makeUrl(model) {
   return `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`
+}
+
+function makeStreamUrl(model) {
+  return `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?alt=sse`
 }
 
 function parseKeywordsFromText(text) {
@@ -33,7 +45,9 @@ function parseKeywordsFromText(text) {
     if (fromObject) return fromObject
     const fromArray = sanitizeKeywords(parsed)
     if (fromArray) return fromArray
-  } catch {}
+  } catch {
+    void 0
+  }
 
   const objBlock = normalized.match(/\{[\s\S]*\}/)
   if (objBlock) {
@@ -41,7 +55,9 @@ function parseKeywordsFromText(text) {
       const parsed = JSON.parse(objBlock[0])
       const fromObject = sanitizeKeywords(parsed?.keywords)
       if (fromObject) return fromObject
-    } catch {}
+    } catch {
+      void 0
+    }
   }
 
   const arrayBlock = normalized.match(/\[[\s\S]*\]/)
@@ -50,7 +66,9 @@ function parseKeywordsFromText(text) {
       const parsed = JSON.parse(arrayBlock[0])
       const fromArray = sanitizeKeywords(parsed)
       if (fromArray) return fromArray
-    } catch {}
+    } catch {
+      void 0
+    }
   }
 
   const lines = normalized
@@ -154,6 +172,107 @@ async function requestGemini({ key, payload, maxRetries = MAX_RETRIES }) {
   return { ok: false, error: message }
 }
 
+async function streamGeminiReview({ key, imageBase64, rating, keywords, length, mimeType, res }) {
+  const safeKeywords = Array.isArray(keywords)
+    ? keywords.filter((v) => typeof v === 'string' && v.trim()).map((v) => v.trim())
+    : []
+  const safeLength = REVIEW_LENGTH_MAP[length] ? length : 'medium'
+  const safeMimeType =
+    typeof mimeType === 'string' && mimeType.trim() ? mimeType.trim() : 'image/jpeg'
+
+  const prompt = `
+이 이미지와 아래 키워드를 바탕으로 리뷰를 작성해줘.
+키워드: ${safeKeywords.join(', ')}
+별점: ${rating}점
+길이: ${REVIEW_LENGTH_MAP[safeLength]}
+
+다음 표현은 절대 사용하지 말 것:
+"강추합니다", "맛있었어요", "또 오고 싶어요", "직원이 친절했어요",
+"가성비 최고", "분위기가 좋아요", "실망하지 않을 거예요"
+
+리뷰 텍스트만 반환해. 제목이나 부가 설명 없이.
+  `
+
+  const response = await fetch(makeStreamUrl(STREAM_MODEL), {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-goog-api-key': key,
+    },
+    body: JSON.stringify({
+      contents: [
+        {
+          parts: [
+            { inline_data: { mime_type: safeMimeType, data: imageBase64 } },
+            { text: prompt },
+          ],
+        },
+      ],
+      generationConfig: { temperature: 0.7, maxOutputTokens: 500 },
+    }),
+  })
+
+  if (!response.ok) {
+    let data = {}
+    try {
+      data = await response.json()
+    } catch {
+      data = {}
+    }
+    throw new Error(data?.error?.message || '리뷰 생성 실패')
+  }
+
+  if (!response.body) {
+    throw new Error('스트리밍 응답 본문이 없습니다.')
+  }
+
+  res.statusCode = 200
+  res.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8')
+  res.setHeader('Cache-Control', 'no-cache, no-transform')
+  res.setHeader('X-Accel-Buffering', 'no')
+
+  const reader = response.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+
+    buffer += decoder.decode(value, { stream: true })
+    const lines = buffer.split('\n')
+    buffer = lines.pop() || ''
+
+    for (const line of lines) {
+      if (!line.startsWith('data: ')) continue
+      const payload = line.slice(6).trim()
+      if (!payload || payload === '[DONE]') continue
+      try {
+        const json = JSON.parse(payload)
+        const text = json?.candidates?.[0]?.content?.parts?.[0]?.text
+        if (text) res.write(`${JSON.stringify({ text })}\n`)
+      } catch {
+        void 0
+      }
+    }
+  }
+
+  if (buffer.startsWith('data: ')) {
+    const payload = buffer.slice(6).trim()
+    if (payload && payload !== '[DONE]') {
+      try {
+        const json = JSON.parse(payload)
+        const text = json?.candidates?.[0]?.content?.parts?.[0]?.text
+        if (text) res.write(`${JSON.stringify({ text })}\n`)
+      } catch {
+        void 0
+      }
+    }
+  }
+
+  res.end()
+}
+
 function json(res, code, body) {
   res.statusCode = code
   res.setHeader('Content-Type', 'application/json; charset=utf-8')
@@ -255,6 +374,36 @@ export default async function handler(req, res) {
       error: '키워드 파싱 실패',
       rawText: firstParsed.rawText || '',
     })
+  }
+
+  if (body.action === 'review') {
+    const imageBase64 = body.imageBase64
+    const rating = Number.isFinite(Number(body.rating)) ? Number(body.rating) : 5
+    const keywords = body.keywords
+    const length = body.length
+    const mimeType = body.mimeType
+
+    if (!imageBase64 || typeof imageBase64 !== 'string') {
+      return json(res, 400, { ok: false, error: 'imageBase64가 필요합니다.' })
+    }
+
+    try {
+      await streamGeminiReview({
+        key,
+        imageBase64,
+        rating,
+        keywords,
+        length,
+        mimeType,
+        res,
+      })
+      return
+    } catch (err) {
+      return json(res, 502, {
+        ok: false,
+        error: err instanceof Error ? err.message : '리뷰 생성 실패',
+      })
+    }
   }
 
   return json(res, 400, { ok: false, error: '지원하지 않는 action입니다.' })
