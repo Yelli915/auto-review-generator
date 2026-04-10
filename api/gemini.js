@@ -72,6 +72,33 @@ function parseKeywordsFromText(text) {
   return null
 }
 
+function parseKeywordsFromAny(data) {
+  const parts = data?.candidates?.[0]?.content?.parts ?? []
+  const text = parts
+    .map((part) => (typeof part?.text === 'string' ? part.text : ''))
+    .join('\n')
+    .trim()
+
+  const direct = parseKeywordsFromText(text)
+  if (direct && direct.length >= 8) {
+    return { keywords: direct.slice(0, 8), rawText: text }
+  }
+
+  const tokenized = text
+    .replace(/^키워드\s*[:：]\s*/i, '')
+    .split(/[,\n|/]/g)
+    .map((v) => v.replace(/^[\s\-*0-9.()]+/, '').trim())
+    .filter(Boolean)
+  const cleaned = Array.from(new Set(tokenized)).filter(
+    (v) => v.length >= 2 && v.length <= 30,
+  )
+  if (cleaned.length >= 8) {
+    return { keywords: cleaned.slice(0, 8), rawText: text }
+  }
+
+  return { keywords: null, rawText: text }
+}
+
 async function requestGemini({ key, payload }) {
   let lastError = null
 
@@ -204,32 +231,56 @@ export default async function handler(req, res) {
           },
         ],
         generationConfig: {
-          temperature: 0.7,
+          temperature: 0.3,
           maxOutputTokens: 512,
+          responseMimeType: 'application/json',
         },
       },
     })
 
     if (!result.ok) return json(res, 502, result)
 
-    const parts = result.data?.candidates?.[0]?.content?.parts ?? []
-    const text = parts
-      .map((part) => (typeof part?.text === 'string' ? part.text : ''))
-      .join('\n')
-      .trim()
-    const keywords = parseKeywordsFromText(text)
-    if (!keywords || keywords.length < 8) {
+    const firstParsed = parseKeywordsFromAny(result.data)
+    if (firstParsed.keywords) {
+      return json(res, 200, {
+        ok: true,
+        keywords: firstParsed.keywords,
+        model: result.model,
+      })
+    }
+
+    const repairPrompt = `아래 텍스트에서 리뷰 키워드 8개만 추출해서 JSON으로만 반환해줘. 정확히 {"keywords":["..."]} 형식만 출력해.
+
+텍스트:
+${firstParsed.rawText || '(빈 응답)'}`
+
+    const repair = await requestGemini({
+      key,
+      payload: {
+        contents: [{ parts: [{ text: repairPrompt }] }],
+        generationConfig: {
+          temperature: 0,
+          maxOutputTokens: 256,
+          responseMimeType: 'application/json',
+        },
+      },
+    })
+
+    if (!repair.ok) return json(res, 502, repair)
+
+    const repaired = parseKeywordsFromAny(repair.data)
+    if (!repaired.keywords) {
       return json(res, 502, {
         ok: false,
         error: '키워드 파싱 실패',
-        rawText: text,
+        rawText: firstParsed.rawText || '',
       })
     }
 
     return json(res, 200, {
       ok: true,
-      keywords: keywords.slice(0, 8),
-      model: result.model,
+      keywords: repaired.keywords,
+      model: repair.model,
     })
   }
 
