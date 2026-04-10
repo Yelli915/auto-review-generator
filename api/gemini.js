@@ -1,6 +1,6 @@
 const MODELS = ['gemini-2.5-flash', 'gemini-2.0-flash']
 const RETRYABLE_STATUS = new Set([429, 500, 502, 503, 504])
-const MAX_RETRIES = 3
+const MAX_RETRIES = 2
 
 function wait(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms))
@@ -99,11 +99,11 @@ function parseKeywordsFromAny(data) {
   return { keywords: null, rawText: text }
 }
 
-async function requestGemini({ key, payload }) {
+async function requestGemini({ key, payload, maxRetries = MAX_RETRIES }) {
   let lastError = null
 
   for (const model of MODELS) {
-    for (let attempt = 0; attempt <= MAX_RETRIES; attempt += 1) {
+    for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
       try {
         const response = await fetch(makeUrl(model), {
           method: 'POST',
@@ -126,7 +126,7 @@ async function requestGemini({ key, payload }) {
         const message =
           data?.error?.message ?? `요청 실패 (HTTP ${response.status})`
 
-        if (!RETRYABLE_STATUS.has(response.status) || attempt === MAX_RETRIES) {
+        if (!RETRYABLE_STATUS.has(response.status) || attempt === maxRetries) {
           if (model === MODELS[MODELS.length - 1]) {
             return {
               ok: false,
@@ -141,7 +141,7 @@ async function requestGemini({ key, payload }) {
         await wait(700 * 2 ** attempt)
       } catch (err) {
         lastError = err
-        if (attempt === MAX_RETRIES) break
+        if (attempt === maxRetries) break
         await wait(700 * 2 ** attempt)
       }
     }
@@ -213,9 +213,10 @@ export default async function handler(req, res) {
       return json(res, 400, { ok: false, error: 'imageBase64가 필요합니다.' })
     }
 
-    const prompt = `별점 ${rating}점 기준 키워드 8개를 JSON으로만 반환해줘. 설명 문장, 마크다운, 코드블록 없이 정확히 아래 형식만 응답해: {"keywords":["키워드1","키워드2","키워드3","키워드4","키워드5","키워드6","키워드7","키워드8"]}`
+    const prompt = `별점 ${rating} 기준. JSON만: {"keywords":["...","...","...","...","...","...","...","..."]}`
     const result = await requestGemini({
       key,
+      maxRetries: 0,
       payload: {
         contents: [
           {
@@ -231,8 +232,8 @@ export default async function handler(req, res) {
           },
         ],
         generationConfig: {
-          temperature: 0.3,
-          maxOutputTokens: 512,
+          temperature: 0.1,
+          maxOutputTokens: 96,
           responseMimeType: 'application/json',
         },
       },
@@ -249,38 +250,10 @@ export default async function handler(req, res) {
       })
     }
 
-    const repairPrompt = `아래 텍스트에서 리뷰 키워드 8개만 추출해서 JSON으로만 반환해줘. 정확히 {"keywords":["..."]} 형식만 출력해.
-
-텍스트:
-${firstParsed.rawText || '(빈 응답)'}`
-
-    const repair = await requestGemini({
-      key,
-      payload: {
-        contents: [{ parts: [{ text: repairPrompt }] }],
-        generationConfig: {
-          temperature: 0,
-          maxOutputTokens: 256,
-          responseMimeType: 'application/json',
-        },
-      },
-    })
-
-    if (!repair.ok) return json(res, 502, repair)
-
-    const repaired = parseKeywordsFromAny(repair.data)
-    if (!repaired.keywords) {
-      return json(res, 502, {
-        ok: false,
-        error: '키워드 파싱 실패',
-        rawText: firstParsed.rawText || '',
-      })
-    }
-
-    return json(res, 200, {
-      ok: true,
-      keywords: repaired.keywords,
-      model: repair.model,
+    return json(res, 502, {
+      ok: false,
+      error: '키워드 파싱 실패',
+      rawText: firstParsed.rawText || '',
     })
   }
 
