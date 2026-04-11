@@ -1,7 +1,11 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 
 export default function KeywordStep({ keywords, onNext, onRefresh, isLoading }) {
   const [selected, setSelected] = useState([])
+
+  useEffect(() => {
+    setSelected([])
+  }, [keywords])
 
   const toggleKeyword = (keyword) => {
     setSelected((prev) =>

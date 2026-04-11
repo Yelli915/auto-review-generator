@@ -58,16 +58,11 @@ export async function generateKeywords({
 }
 
 export async function generateReview(
-  base64Image,
   rating,
   keywords,
   length,
   onChunk,
 ) {
-  if (!base64Image || typeof base64Image !== 'string') {
-    throw new Error('base64Image가 필요합니다.')
-  }
-
   const safeKeywords = Array.isArray(keywords) ? keywords : []
   const safeLength = lengthMap[length] ? length : 'medium'
   const safeOnChunk = typeof onChunk === 'function' ? onChunk : () => {}
@@ -77,11 +72,9 @@ export async function generateReview(
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       action: 'review',
-      imageBase64: base64Image,
       rating,
       keywords: safeKeywords,
       length: safeLength,
-      mimeType: 'image/jpeg',
     }),
   })
 
@@ -92,7 +85,8 @@ export async function generateReview(
     } catch {
       error = {}
     }
-    throw new Error(error?.error?.message || '리뷰 생성 실패')
+    const msg = typeof error?.error === 'string' ? error.error : error?.error?.message
+    throw new Error(msg || '리뷰 생성 실패')
   }
 
   if (!response.body) {

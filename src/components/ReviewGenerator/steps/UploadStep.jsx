@@ -1,4 +1,5 @@
-import { useId, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
+import { resizeAndConvertToBase64 } from '../utils/imageUtils'
 
 export default function UploadStep({ onNext, isLoading }) {
   const inputId = useId()
@@ -9,29 +10,34 @@ export default function UploadStep({ onNext, isLoading }) {
   const [rating, setRating] = useState(5)
   const [length, setLength] = useState('medium')
   const [message, setMessage] = useState('이미지를 선택해 주세요.')
+  const previewUrlRef = useRef('')
+
+  useEffect(() => {
+    return () => {
+      if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current)
+    }
+  }, [])
 
   function handleFileChange(e) {
     const file = e.target.files?.[0]
     if (!file) return
 
+    if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current)
     const objectUrl = URL.createObjectURL(file)
+    previewUrlRef.current = objectUrl
     setPreviewUrl(objectUrl)
     setMessage(`선택됨: ${file.name}`)
 
-    const reader = new FileReader()
-    reader.onload = () => {
-      const dataUrl = typeof reader.result === 'string' ? reader.result : ''
-      const commaIndex = dataUrl.indexOf(',')
-      const base64Image = commaIndex >= 0 ? dataUrl.slice(commaIndex + 1) : ''
-      setFileData({
-        file,
-        previewUrl: objectUrl,
-        base64Image,
-        mimeType: file.type || 'image/jpeg',
+    resizeAndConvertToBase64(file, { maxEdge: 512, quality: 0.75 })
+      .then((base64Image) => {
+        setFileData({
+          file,
+          previewUrl: objectUrl,
+          base64Image,
+          mimeType: 'image/jpeg',
+        })
       })
-    }
-    reader.onerror = () => setMessage('이미지 변환에 실패했습니다.')
-    reader.readAsDataURL(file)
+      .catch(() => setMessage('이미지 변환에 실패했습니다.'))
   }
 
   function handleNext() {

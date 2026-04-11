@@ -10,6 +10,12 @@ const REVIEW_LENGTH_MAP = {
   long: '7~8문장의 상세한 내용으로',
 }
 
+const MAX_OUTPUT_TOKENS = {
+  short: 150,
+  medium: 280,
+  long: 450,
+}
+
 function wait(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
@@ -98,7 +104,7 @@ function parseKeywordsFromAny(data) {
     .trim()
 
   const direct = parseKeywordsFromText(text)
-  if (direct && direct.length >= 8) {
+  if (direct && direct.length >= 1) {
     return { keywords: direct.slice(0, 8), rawText: text }
   }
 
@@ -110,7 +116,7 @@ function parseKeywordsFromAny(data) {
   const cleaned = Array.from(new Set(tokenized)).filter(
     (v) => v.length >= 2 && v.length <= 30,
   )
-  if (cleaned.length >= 8) {
+  if (cleaned.length >= 1) {
     return { keywords: cleaned.slice(0, 8), rawText: text }
   }
 
@@ -172,26 +178,13 @@ async function requestGemini({ key, payload, maxRetries = MAX_RETRIES }) {
   return { ok: false, error: message }
 }
 
-async function streamGeminiReview({ key, imageBase64, rating, keywords, length, mimeType, res }) {
+async function streamGeminiReview({ key, rating, keywords, length, res }) {
   const safeKeywords = Array.isArray(keywords)
     ? keywords.filter((v) => typeof v === 'string' && v.trim()).map((v) => v.trim())
     : []
   const safeLength = REVIEW_LENGTH_MAP[length] ? length : 'medium'
-  const safeMimeType =
-    typeof mimeType === 'string' && mimeType.trim() ? mimeType.trim() : 'image/jpeg'
 
-  const prompt = `
-이 이미지와 아래 키워드를 바탕으로 리뷰를 작성해줘.
-키워드: ${safeKeywords.join(', ')}
-별점: ${rating}점
-길이: ${REVIEW_LENGTH_MAP[safeLength]}
-
-다음 표현은 절대 사용하지 말 것:
-"강추합니다", "맛있었어요", "또 오고 싶어요", "직원이 친절했어요",
-"가성비 최고", "분위기가 좋아요", "실망하지 않을 거예요"
-
-리뷰 텍스트만 반환해. 제목이나 부가 설명 없이.
-  `
+  const prompt = `키워드: ${safeKeywords.join(', ')}\n별점: ${rating}점\n길이: ${REVIEW_LENGTH_MAP[safeLength]}\n\n위 내용으로 리뷰만 작성해. 제목 없이.`
 
   const response = await fetch(makeStreamUrl(STREAM_MODEL), {
     method: 'POST',
@@ -200,15 +193,8 @@ async function streamGeminiReview({ key, imageBase64, rating, keywords, length, 
       'x-goog-api-key': key,
     },
     body: JSON.stringify({
-      contents: [
-        {
-          parts: [
-            { inline_data: { mime_type: safeMimeType, data: imageBase64 } },
-            { text: prompt },
-          ],
-        },
-      ],
-      generationConfig: { temperature: 0.7, maxOutputTokens: 500 },
+      contents: [{ parts: [{ text: prompt }] }],
+      generationConfig: { temperature: 0.7, maxOutputTokens: MAX_OUTPUT_TOKENS[safeLength] ?? 280 },
     }),
   })
 
@@ -377,24 +363,16 @@ export default async function handler(req, res) {
   }
 
   if (body.action === 'review') {
-    const imageBase64 = body.imageBase64
     const rating = Number.isFinite(Number(body.rating)) ? Number(body.rating) : 5
     const keywords = body.keywords
     const length = body.length
-    const mimeType = body.mimeType
-
-    if (!imageBase64 || typeof imageBase64 !== 'string') {
-      return json(res, 400, { ok: false, error: 'imageBase64가 필요합니다.' })
-    }
 
     try {
       await streamGeminiReview({
         key,
-        imageBase64,
         rating,
         keywords,
         length,
-        mimeType,
         res,
       })
       return

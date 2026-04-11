@@ -2,11 +2,18 @@ import { useState } from 'react'
 
 export default function ReviewStep({ review, isStreaming }) {
   const [copied, setCopied] = useState(false)
+  const [copyError, setCopyError] = useState(false)
 
   const handleCopy = async () => {
-    await navigator.clipboard.writeText(review)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
+    try {
+      await navigator.clipboard.writeText(review)
+      setCopied(true)
+      setCopyError(false)
+      setTimeout(() => setCopied(false), 2000)
+    } catch {
+      setCopyError(true)
+      setTimeout(() => setCopyError(false), 2000)
+    }
   }
 
   return (
@@ -32,7 +39,7 @@ export default function ReviewStep({ review, isStreaming }) {
         disabled={isStreaming || !review}
         style={{ width: '100%', height: '52px', fontSize: '16px' }}
       >
-        {copied ? '복사됨 ✓' : '클립보드 복사'}
+        {copied ? '복사됨 ✓' : copyError ? '복사 실패' : '클립보드 복사'}
       </button>
     </div>
   )
