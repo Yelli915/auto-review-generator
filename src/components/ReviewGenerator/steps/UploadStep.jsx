@@ -49,12 +49,18 @@ export default function UploadStep({ onNext, isLoading }) {
   return (
     <section className="step-card">
       <h2 className="step-card__title">사진 업로드</h2>
+      <p className="step-card__lede">
+        제품 사진과 별점을 정하면, 그에 맞는 키워드를 자동으로 뽑습니다.
+      </p>
 
       <div className="field">
         <span className="field__label" id={`${inputId}-label`}>
           이미지
         </span>
-        <label className="file-drop" htmlFor={inputId}>
+        <label
+          className={`file-drop${fileData ? ' file-drop--ready' : ''}`}
+          htmlFor={inputId}
+        >
           <input
             id={inputId}
             type="file"
@@ -83,6 +89,7 @@ export default function UploadStep({ onNext, isLoading }) {
           className="select-input"
           value={rating}
           onChange={(e) => setRating(Number(e.target.value))}
+          disabled={isLoading}
         >
           <option value={1}>1점</option>
           <option value={2}>2점</option>

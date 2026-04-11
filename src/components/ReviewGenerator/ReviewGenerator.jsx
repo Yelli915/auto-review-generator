@@ -122,19 +122,28 @@ export default function ReviewGenerator({ onReviewComplete }) {
       </header>
 
       <nav className="stepper" aria-label="진행 단계">
-        <div className={stepClass(0)}>
+        <div
+          className={stepClass(0)}
+          aria-current={step === STEPS.UPLOAD ? 'step' : undefined}
+        >
           <span className="stepper__dot" aria-hidden="true">
             1
           </span>
           <span className="stepper__label">사진</span>
         </div>
-        <div className={stepClass(1)}>
+        <div
+          className={stepClass(1)}
+          aria-current={step === STEPS.KEYWORD ? 'step' : undefined}
+        >
           <span className="stepper__dot" aria-hidden="true">
             2
           </span>
-          <span className="stepper__label">키워드</span>
+          <span className="stepper__label">옵션</span>
         </div>
-        <div className={stepClass(2)}>
+        <div
+          className={stepClass(2)}
+          aria-current={step === STEPS.REVIEW ? 'step' : undefined}
+        >
           <span className="stepper__dot" aria-hidden="true">
             3
           </span>

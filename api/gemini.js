@@ -1,6 +1,7 @@
 /* global Buffer, process */
 const MODELS = ['gemini-2.5-flash']
-const RETRYABLE_STATUS = new Set([429, 500, 502, 503, 504])
+/** 429는 쿼터·RPM이라 즉시 반환(재시도 안 함). 나머지만 백오프 재시도 */
+const RETRYABLE_STATUS = new Set([500, 502, 503, 504])
 const MAX_RETRIES = 2
 const STREAM_MODEL = 'gemini-2.5-flash'
 
@@ -39,6 +40,35 @@ const KEYWORDS_MAX_COUNT = 8
 
 function wait(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+function parseGeminiRetryAfterSeconds(message) {
+  if (typeof message !== 'string') return null
+  const m = message.match(/retry in ([\d.]+)\s*s/i)
+  if (!m) return null
+  const sec = Math.ceil(Number.parseFloat(m[1], 10))
+  return Number.isFinite(sec) && sec > 0 ? sec : null
+}
+
+/** 무료 한도·RPM 등 쿼터 관련 응답을 사용자용 한국어로 */
+function humanizeGeminiApiError(status, rawMessage) {
+  const msg = typeof rawMessage === 'string' ? rawMessage : ''
+  const quotaLike =
+    status === 429 ||
+    /quota exceeded|resource_exhausted|free_tier|rate.?limit|exceeded your current quota/i.test(
+      msg,
+    )
+  if (!quotaLike) {
+    return msg || `요청 실패 (HTTP ${status})`
+  }
+  const waitSec = parseGeminiRetryAfterSeconds(msg)
+  const waitHint =
+    waitSec != null ? ` 약 ${waitSec}초 뒤에 다시 시도해 보세요.` : ''
+  return (
+    `Gemini API 호출 한도에 걸렸습니다. 메시지에 따르면 아직 무료 등급(free tier) 요청 한도로 집계되고 있습니다.${waitHint} ` +
+    `Google AI Studio에서 이 API 키의 결제·플랜을 연결했는지, 프로젝트가 맞는지 확인하세요. ` +
+    `https://ai.google.dev/gemini-api/docs/rate-limits · https://ai.dev/rate-limit`
+  )
 }
 
 function makeUrl(model) {
@@ -281,8 +311,18 @@ async function requestGemini({ key, payload, maxRetries = MAX_RETRIES }) {
 
         if (response.ok) return { ok: true, data, model }
 
-        const message =
+        const rawMessage =
           data?.error?.message ?? `요청 실패 (HTTP ${response.status})`
+        const message = humanizeGeminiApiError(response.status, rawMessage)
+
+        if (response.status === 429) {
+          return {
+            ok: false,
+            error: message,
+            status: response.status,
+            details: data,
+          }
+        }
 
         if (!RETRYABLE_STATUS.has(response.status) || attempt === maxRetries) {
           if (model === MODELS[MODELS.length - 1]) {
@@ -342,7 +382,8 @@ async function streamGeminiReview({ key, rating, keywords, length, tone, res }) 
     } catch {
       data = {}
     }
-    throw new Error(data?.error?.message || '리뷰 생성 실패')
+    const raw = data?.error?.message || '리뷰 생성 실패'
+    throw new Error(humanizeGeminiApiError(response.status, raw))
   }
 
   if (!response.body) {
