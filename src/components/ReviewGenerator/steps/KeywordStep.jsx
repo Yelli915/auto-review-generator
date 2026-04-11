@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useId, useMemo, useState } from 'react'
 
 export default function KeywordStep({
   keywords,
@@ -7,6 +7,10 @@ export default function KeywordStep({
   onBackToUpload,
   isLoading,
 }) {
+  const lengthId = useId()
+  const toneId = useId()
+  const [reviewLength, setReviewLength] = useState('medium')
+  const [reviewTone, setReviewTone] = useState('neutral')
   const [selected, setSelected] = useState([])
   const list = useMemo(
     () => (Array.isArray(keywords) ? keywords : []),
@@ -29,9 +33,9 @@ export default function KeywordStep({
 
   return (
     <div className="step-card">
-      <h2 className="step-card__title">키워드 선택</h2>
+      <h2 className="step-card__title">키워드·길이·말투</h2>
       <p className="step-card__lede">
-        리뷰에 넣고 싶은 표현을 골라 주세요. 여러 개 선택할 수 있습니다.
+        키워드를 고르고, 리뷰 길이와 말투를 정한 뒤 리뷰를 생성합니다.
       </p>
 
       {isEmpty ? (
@@ -70,6 +74,49 @@ export default function KeywordStep({
         </div>
       )}
 
+      <div className="field">
+        <label className="field__label" htmlFor={lengthId}>
+          리뷰 길이
+        </label>
+        <select
+          id={lengthId}
+          className="select-input"
+          value={reviewLength}
+          onChange={(e) => setReviewLength(e.target.value)}
+          disabled={isLoading}
+          aria-describedby={`${lengthId}-hint`}
+        >
+          <option value="short">짧게</option>
+          <option value="medium">보통</option>
+          <option value="long">길게</option>
+        </select>
+        <p className="field__hint" id={`${lengthId}-hint`}>
+          선택한 키워드를 바탕으로 이 길이에 맞게 작성합니다.
+        </p>
+      </div>
+
+      <div className="field">
+        <label className="field__label" htmlFor={toneId}>
+          말투
+        </label>
+        <select
+          id={toneId}
+          className="select-input"
+          value={reviewTone}
+          onChange={(e) => setReviewTone(e.target.value)}
+          disabled={isLoading}
+          aria-describedby={`${toneId}-hint`}
+        >
+          <option value="neutral">기본 (자연스러운 리뷰)</option>
+          <option value="friendly">친근하게</option>
+          <option value="formal">정중·격식</option>
+          <option value="casual">편한 반말</option>
+        </select>
+        <p className="field__hint" id={`${toneId}-hint`}>
+          전체 문장의 말투를 이에 맞춥니다.
+        </p>
+      </div>
+
       <div className="btn-row btn-row--tight">
         <button
           type="button"
@@ -83,7 +130,7 @@ export default function KeywordStep({
         <button
           type="button"
           className="btn btn--primary btn--lg"
-          onClick={() => onNext(selected)}
+          onClick={() => onNext(selected, reviewLength, reviewTone)}
           disabled={selected.length === 0 || isEmpty}
         >
           리뷰 작성

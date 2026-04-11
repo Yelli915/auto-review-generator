@@ -4,11 +4,9 @@ import { resizeAndConvertToBase64 } from '../utils/imageUtils'
 export default function UploadStep({ onNext, isLoading }) {
   const inputId = useId()
   const ratingId = useId()
-  const lengthId = useId()
   const [fileData, setFileData] = useState(null)
   const [previewUrl, setPreviewUrl] = useState('')
   const [rating, setRating] = useState(5)
-  const [length, setLength] = useState('medium')
   const [message, setMessage] = useState('이미지를 선택해 주세요.')
   const previewUrlRef = useRef('')
 
@@ -45,7 +43,6 @@ export default function UploadStep({ onNext, isLoading }) {
     onNext({
       ...fileData,
       rating: Number(rating),
-      length,
     })
   }
 
@@ -92,22 +89,6 @@ export default function UploadStep({ onNext, isLoading }) {
           <option value={3}>3점</option>
           <option value={4}>4점</option>
           <option value={5}>5점</option>
-        </select>
-      </div>
-
-      <div className="field">
-        <label className="field__label" htmlFor={lengthId}>
-          리뷰 길이
-        </label>
-        <select
-          id={lengthId}
-          className="select-input"
-          value={length}
-          onChange={(e) => setLength(e.target.value)}
-        >
-          <option value="short">짧게</option>
-          <option value="medium">보통</option>
-          <option value="long">길게</option>
         </select>
       </div>
 

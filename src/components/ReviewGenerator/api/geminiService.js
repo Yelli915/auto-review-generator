@@ -6,6 +6,13 @@ const lengthMap = {
   long: '7~8문장의 상세한 내용으로',
 }
 
+const toneMap = {
+  neutral: true,
+  friendly: true,
+  formal: true,
+  casual: true,
+}
+
 async function callApi(payload) {
   try {
     const response = await fetch(API_PATH, {
@@ -61,10 +68,12 @@ export async function generateReview(
   rating,
   keywords,
   length,
+  tone,
   onChunk,
 ) {
   const safeKeywords = Array.isArray(keywords) ? keywords : []
   const safeLength = lengthMap[length] ? length : 'medium'
+  const safeTone = toneMap[tone] ? tone : 'neutral'
   const safeOnChunk = typeof onChunk === 'function' ? onChunk : () => {}
 
   const response = await fetch(API_PATH, {
@@ -75,6 +84,7 @@ export async function generateReview(
       rating,
       keywords: safeKeywords,
       length: safeLength,
+      tone: safeTone,
     }),
   })
 

@@ -10,6 +10,17 @@ const REVIEW_LENGTH_MAP = {
   long: '7~8문장의 상세한 내용으로',
 }
 
+const REVIEW_TONE_MAP = {
+  neutral:
+    '1인칭 구매자 입장의 자연스러운 온라인 쇼핑몰 리뷰 말투. 과장하지 말 것.',
+  friendly:
+    '친근하고 부드러운 말투. 이모티콘·느낌표 남발은 피할 것.',
+  formal:
+    '정중한 존댓말(~습니다·해요체)로 격식 있게. 무례하지 않게.',
+  casual:
+    '편한 일상 반말(~했어, ~야 느낌). 공격적·무례한 표현은 금지.',
+}
+
 const MAX_OUTPUT_TOKENS = {
   short: 150,
   medium: 280,
@@ -21,6 +32,10 @@ const KEYWORD_LEN_MIN = 2
 const KEYWORD_LEN_MAX = 30
 
 const KEYWORDS_MAX_OUTPUT_TOKENS = 192
+
+/** 서로 다른 키워드 개수(한글 필터 통과 후) */
+const KEYWORDS_MIN_COUNT = 3
+const KEYWORDS_MAX_COUNT = 8
 
 function wait(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms))
@@ -62,12 +77,35 @@ function sliceBalancedSegment(str, openCh, closeCh) {
   return null
 }
 
+function hasHangul(s) {
+  return /[\uAC00-\uD7A3]/.test(s)
+}
+
+/** 모델이 붙이는 영어 안내 줄을 제거해 JSON 파싱이 되도록 함 */
+function stripEnglishJsonPreamble(str) {
+  let s = str.trimStart()
+  for (let i = 0; i < 3; i += 1) {
+    const next = s
+      .replace(
+        /^(?:here\s+is\s+the\s+json\s+requested\s*\.?\s*[:：]?\s*|here\s+is\s+the\s+json\s*[:：]\s*|below\s+is\s+the\s+json\s*[:：]?\s*|the\s+following\s+is\s+(?:the\s+)?json\s*[:：]?\s*|json\s+(?:output|response)\s*[:：]?\s*)/i,
+        '',
+      )
+      .trimStart()
+    if (next === s) break
+    s = next
+  }
+  return s
+}
+
 function sanitizeKeywordArray(arr) {
   if (!Array.isArray(arr)) return null
   const cleaned = arr
     .map((v) => (typeof v === 'string' ? v.trim() : ''))
     .filter(
-      (s) => s.length >= KEYWORD_LEN_MIN && s.length <= KEYWORD_LEN_MAX,
+      (s) =>
+        s.length >= KEYWORD_LEN_MIN &&
+        s.length <= KEYWORD_LEN_MAX &&
+        hasHangul(s),
     )
   return cleaned.length ? Array.from(new Set(cleaned)) : null
 }
@@ -76,10 +114,11 @@ function parseKeywordsFromText(text) {
   if (typeof text !== 'string' || !text.trim()) return null
 
   const raw = text.trim()
-  const normalized = raw
+  let normalized = raw
     .replace(/^```json\s*/i, '')
     .replace(/^```\s*/i, '')
     .replace(/\s*```$/i, '')
+  normalized = stripEnglishJsonPreamble(normalized)
 
   try {
     const parsed = JSON.parse(normalized)
@@ -145,7 +184,13 @@ function parseKeywordsFromAny(data) {
 
   const direct = parseKeywordsFromText(text)
   if (direct && direct.length >= 1) {
-    return { keywords: direct.slice(0, 8), rawText: text }
+    if (direct.length < KEYWORDS_MIN_COUNT) {
+      return { keywords: null, rawText: text, tooFew: true, partial: direct }
+    }
+    return {
+      keywords: direct.slice(0, KEYWORDS_MAX_COUNT),
+      rawText: text,
+    }
   }
 
   const tokenized = text
@@ -154,10 +199,19 @@ function parseKeywordsFromAny(data) {
     .map((v) => v.replace(/^[\s\-*0-9.()]+/, '').trim())
     .filter(Boolean)
   const cleaned = Array.from(new Set(tokenized)).filter(
-    (v) => v.length >= KEYWORD_LEN_MIN && v.length <= KEYWORD_LEN_MAX,
+    (v) =>
+      v.length >= KEYWORD_LEN_MIN &&
+      v.length <= KEYWORD_LEN_MAX &&
+      hasHangul(v),
   )
+  if (cleaned.length >= KEYWORDS_MIN_COUNT) {
+    return {
+      keywords: cleaned.slice(0, KEYWORDS_MAX_COUNT),
+      rawText: text,
+    }
+  }
   if (cleaned.length >= 1) {
-    return { keywords: cleaned.slice(0, 8), rawText: text }
+    return { keywords: null, rawText: text, tooFew: true, partial: cleaned }
   }
 
   return { keywords: null, rawText: text }
@@ -258,13 +312,16 @@ async function requestGemini({ key, payload, maxRetries = MAX_RETRIES }) {
   return { ok: false, error: message }
 }
 
-async function streamGeminiReview({ key, rating, keywords, length, res }) {
+async function streamGeminiReview({ key, rating, keywords, length, tone, res }) {
   const safeKeywords = Array.isArray(keywords)
     ? keywords.filter((v) => typeof v === 'string' && v.trim()).map((v) => v.trim())
     : []
   const safeLength = REVIEW_LENGTH_MAP[length] ? length : 'medium'
+  const safeTone = REVIEW_TONE_MAP[tone] ? tone : 'neutral'
 
-  const prompt = `키워드: ${safeKeywords.join(', ')}\n별점: ${rating}점\n길이: ${REVIEW_LENGTH_MAP[safeLength]}\n\n위 내용으로 리뷰만 작성해. 제목 없이.`
+  const prompt =
+    `키워드: ${safeKeywords.join(', ')}\n별점: ${rating}점\n길이: ${REVIEW_LENGTH_MAP[safeLength]}\n말투: ${REVIEW_TONE_MAP[safeTone]}\n\n` +
+    '위 조건을 모두 지켜 리뷰 본문만 작성해. 제목·머리말·번호 목록 없이.'
 
   const response = await fetch(makeStreamUrl(STREAM_MODEL), {
     method: 'POST',
@@ -399,8 +456,10 @@ export default async function handler(req, res) {
     }
 
     const prompt =
-      `이미지에 보이는 제품·상황에 맞고, 별점 ${rating}점 톤에 어울리는 리뷰용 키워드 8개를 한국어 짧은 구(명사구)로 제안해. ` +
-      'JSON만 출력: {"keywords":["...","...","...","...","...","...","...","..."]}'
+      `이미지에 보이는 제품·상황에 맞고, 별점 ${rating}점 톤에 어울리는 리뷰용 키워드를 한국어 짧은 구(명사구)로만 제안해. ` +
+      `서로 다른 키워드를 최소 ${KEYWORDS_MIN_COUNT}개 이상, 많으면 ${KEYWORDS_MAX_COUNT}개까지 넣어(권장 4~8개). ` +
+      '각 값은 반드시 한글을 포함해야 해. 설명 문장·영어 안내(예: Here is the JSON)는 넣지 마. ' +
+      '출력은 이 JSON 형식만: {"keywords":["...","...","...","...","...","...","...","..."]}'
     const result = await requestGemini({
       key,
       payload: {
@@ -428,11 +487,25 @@ export default async function handler(req, res) {
     if (!result.ok) return json(res, 502, result)
 
     const firstParsed = parseKeywordsFromAny(result.data)
-    if (firstParsed.keywords?.length) {
+    if (
+      firstParsed.keywords &&
+      firstParsed.keywords.length >= KEYWORDS_MIN_COUNT
+    ) {
       return json(res, 200, {
         ok: true,
         keywords: firstParsed.keywords,
         model: result.model,
+      })
+    }
+
+    if (firstParsed.tooFew) {
+      const n = firstParsed.partial?.length ?? 0
+      if (firstParsed.rawText) {
+        console.warn('[gemini keywords] too few after filter:', n)
+      }
+      return json(res, 502, {
+        ok: false,
+        error: `키워드가 ${n}개뿐입니다. 최소 ${KEYWORDS_MIN_COUNT}개(권장 4~8개)가 필요합니다. 다시 생성해 주세요.`,
       })
     }
 
@@ -459,6 +532,10 @@ export default async function handler(req, res) {
     const rating = Number.isFinite(Number(body.rating)) ? Number(body.rating) : 5
     const keywords = body.keywords
     const length = body.length
+    const tone =
+      typeof body.tone === 'string' && REVIEW_TONE_MAP[body.tone]
+        ? body.tone
+        : 'neutral'
 
     try {
       await streamGeminiReview({
@@ -466,6 +543,7 @@ export default async function handler(req, res) {
         rating,
         keywords,
         length,
+        tone,
         res,
       })
       return

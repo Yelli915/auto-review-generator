@@ -32,7 +32,6 @@ export default function ReviewGenerator({ onReviewComplete }) {
       ...data,
       base64Image: data?.base64Image || data?.base64 || '',
       rating: Number.isFinite(Number(data?.rating)) ? Number(data.rating) : 5,
-      length: data?.length || 'medium',
     }
 
     setImageData(normalizedData)
@@ -69,7 +68,11 @@ export default function ReviewGenerator({ onReviewComplete }) {
     setError(null)
   }
 
-  const handleKeywordNext = async (selectedKeywords) => {
+  const handleKeywordNext = async (
+    selectedKeywords,
+    reviewLength = 'medium',
+    reviewTone = 'neutral',
+  ) => {
     setReview('')
     setError(null)
     setStep(STEPS.REVIEW)
@@ -80,7 +83,8 @@ export default function ReviewGenerator({ onReviewComplete }) {
       await generateReview(
         imageData.rating,
         selectedKeywords,
-        imageData.length,
+        reviewLength,
+        reviewTone,
         (chunk) => {
           fullReview += chunk
           setReview(fullReview)
@@ -112,7 +116,8 @@ export default function ReviewGenerator({ onReviewComplete }) {
       <header className="review-app__header">
         <h1 className="review-app__title">Auto Review</h1>
         <p className="review-app__tagline">
-          사진과 별점만으로 키워드를 고르고, AI가 리뷰 초안을 만들어 드립니다.
+          사진·별점으로 키워드를 만든 뒤, 키워드·길이·말투에 맞춰 리뷰 초안을
+          만들어 드립니다.
         </p>
       </header>
 
