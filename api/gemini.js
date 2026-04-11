@@ -1,8 +1,8 @@
 /* global Buffer, process */
-const MODELS = ['gemini-2.5-flash', 'gemini-2.0-flash']
+const MODELS = ['gemini-2.5-flash']
 const RETRYABLE_STATUS = new Set([429, 500, 502, 503, 504])
 const MAX_RETRIES = 2
-const STREAM_MODEL = 'gemini-2.0-flash'
+const STREAM_MODEL = 'gemini-2.5-flash'
 
 const REVIEW_LENGTH_MAP = {
   short: '2~3문장 이내로 간결하게',
@@ -16,6 +16,12 @@ const MAX_OUTPUT_TOKENS = {
   long: 450,
 }
 
+/** 키워드 칩·토큰 폴백 공통 길이 (한국어 짧은 구) */
+const KEYWORD_LEN_MIN = 2
+const KEYWORD_LEN_MAX = 30
+
+const KEYWORDS_MAX_OUTPUT_TOKENS = 192
+
 function wait(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
@@ -28,6 +34,44 @@ function makeStreamUrl(model) {
   return `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?alt=sse`
 }
 
+/** 첫 번째 균형 잡힌 `{…}` 또는 `[…]` 구간 (문자열 안의 괄호는 무시) */
+function sliceBalancedSegment(str, openCh, closeCh) {
+  const start = str.indexOf(openCh)
+  if (start < 0) return null
+  let depth = 0
+  let inStr = false
+  let esc = false
+  for (let i = start; i < str.length; i += 1) {
+    const c = str[i]
+    if (inStr) {
+      if (esc) esc = false
+      else if (c === '\\') esc = true
+      else if (c === '"') inStr = false
+      continue
+    }
+    if (c === '"') {
+      inStr = true
+      continue
+    }
+    if (c === openCh) depth += 1
+    else if (c === closeCh) {
+      depth -= 1
+      if (depth === 0) return str.slice(start, i + 1)
+    }
+  }
+  return null
+}
+
+function sanitizeKeywordArray(arr) {
+  if (!Array.isArray(arr)) return null
+  const cleaned = arr
+    .map((v) => (typeof v === 'string' ? v.trim() : ''))
+    .filter(
+      (s) => s.length >= KEYWORD_LEN_MIN && s.length <= KEYWORD_LEN_MAX,
+    )
+  return cleaned.length ? Array.from(new Set(cleaned)) : null
+}
+
 function parseKeywordsFromText(text) {
   if (typeof text !== 'string' || !text.trim()) return null
 
@@ -37,40 +81,32 @@ function parseKeywordsFromText(text) {
     .replace(/^```\s*/i, '')
     .replace(/\s*```$/i, '')
 
-  function sanitizeKeywords(arr) {
-    if (!Array.isArray(arr)) return null
-    const cleaned = arr
-      .map((v) => (typeof v === 'string' ? v.trim() : ''))
-      .filter(Boolean)
-    return cleaned.length ? Array.from(new Set(cleaned)) : null
-  }
-
   try {
     const parsed = JSON.parse(normalized)
-    const fromObject = sanitizeKeywords(parsed?.keywords)
+    const fromObject = sanitizeKeywordArray(parsed?.keywords)
     if (fromObject) return fromObject
-    const fromArray = sanitizeKeywords(parsed)
+    const fromArray = sanitizeKeywordArray(parsed)
     if (fromArray) return fromArray
   } catch {
     void 0
   }
 
-  const objBlock = normalized.match(/\{[\s\S]*\}/)
-  if (objBlock) {
+  const objSlice = sliceBalancedSegment(normalized, '{', '}')
+  if (objSlice) {
     try {
-      const parsed = JSON.parse(objBlock[0])
-      const fromObject = sanitizeKeywords(parsed?.keywords)
+      const parsed = JSON.parse(objSlice)
+      const fromObject = sanitizeKeywordArray(parsed?.keywords)
       if (fromObject) return fromObject
     } catch {
       void 0
     }
   }
 
-  const arrayBlock = normalized.match(/\[[\s\S]*\]/)
-  if (arrayBlock) {
+  const arraySlice = sliceBalancedSegment(normalized, '[', ']')
+  if (arraySlice) {
     try {
-      const parsed = JSON.parse(arrayBlock[0])
-      const fromArray = sanitizeKeywords(parsed)
+      const parsed = JSON.parse(arraySlice)
+      const fromArray = sanitizeKeywordArray(parsed)
       if (fromArray) return fromArray
     } catch {
       void 0
@@ -81,15 +117,19 @@ function parseKeywordsFromText(text) {
     .split('\n')
     .map((line) => line.replace(/^[\s\-*0-9.]+/, '').trim())
     .filter(Boolean)
-  const fromLines = sanitizeKeywords(lines)
+  const fromLines = sanitizeKeywordArray(lines)
   if (fromLines) return fromLines
 
   const keywordArrayHint = normalized.match(/"keywords"\s*:\s*\[([\s\S]*)$/i)
   if (keywordArrayHint) {
+    const quoted = new RegExp(
+      `"([^"\\n]{${KEYWORD_LEN_MIN},${KEYWORD_LEN_MAX}})"`,
+      'g',
+    )
     const candidates = Array.from(
-      keywordArrayHint[1].matchAll(/"([^"\n]{1,40})"/g),
+      keywordArrayHint[1].matchAll(quoted),
     ).map((m) => m[1])
-    const fromHint = sanitizeKeywords(candidates)
+    const fromHint = sanitizeKeywordArray(candidates)
     if (fromHint) return fromHint
   }
 
@@ -114,13 +154,53 @@ function parseKeywordsFromAny(data) {
     .map((v) => v.replace(/^[\s\-*0-9.()]+/, '').trim())
     .filter(Boolean)
   const cleaned = Array.from(new Set(tokenized)).filter(
-    (v) => v.length >= 2 && v.length <= 30,
+    (v) => v.length >= KEYWORD_LEN_MIN && v.length <= KEYWORD_LEN_MAX,
   )
   if (cleaned.length >= 1) {
     return { keywords: cleaned.slice(0, 8), rawText: text }
   }
 
   return { keywords: null, rawText: text }
+}
+
+/** 파싱 실패 시 사용자에게 줄 수 있는 API/안전 관련 설명 (텍스트 없음·차단 등) */
+function describeKeywordGeminiIssue(data, extractedText) {
+  const blockReason = data?.promptFeedback?.blockReason
+  if (blockReason) {
+    return '입력이 정책에 의해 차단되었습니다. 다른 이미지로 시도해 주세요.'
+  }
+
+  const cand = data?.candidates?.[0]
+  if (!cand) {
+    return '모델이 응답 후보를 반환하지 않았습니다. 잠시 후 다시 시도해 주세요.'
+  }
+
+  const hasText =
+    typeof extractedText === 'string' && extractedText.trim().length > 0
+  const fr = cand.finishReason
+
+  if (!hasText) {
+    if (
+      fr === 'SAFETY' ||
+      fr === 'PROHIBITED_CONTENT' ||
+      fr === 'IMAGE_SAFETY' ||
+      fr === 'IMAGE_PROHIBITED_CONTENT'
+    ) {
+      return '안전 정책으로 인해 키워드를 생성할 수 없습니다. 다른 이미지로 시도해 주세요.'
+    }
+    if (fr === 'RECITATION') {
+      return '저작권 정책으로 인해 응답을 생성할 수 없습니다.'
+    }
+    if (fr === 'MAX_TOKENS') {
+      return '응답이 중간에 잘렸습니다. 키워드 다시 생성을 눌러 주세요.'
+    }
+    if (fr && fr !== 'STOP') {
+      return `모델이 텍스트 응답을 만들지 않았습니다. (${fr})`
+    }
+    return '모델이 빈 응답을 반환했습니다. 다시 시도해 주세요.'
+  }
+
+  return null
 }
 
 async function requestGemini({ key, payload, maxRetries = MAX_RETRIES }) {
@@ -339,7 +419,7 @@ export default async function handler(req, res) {
         ],
         generationConfig: {
           temperature: 0.1,
-          maxOutputTokens: 96,
+          maxOutputTokens: KEYWORDS_MAX_OUTPUT_TOKENS,
           responseMimeType: 'application/json',
         },
       },
@@ -356,10 +436,22 @@ export default async function handler(req, res) {
       })
     }
 
+    const apiIssue = describeKeywordGeminiIssue(
+      result.data,
+      firstParsed.rawText,
+    )
+    if (firstParsed.rawText) {
+      console.warn(
+        '[gemini keywords] parse failed, snippet:',
+        firstParsed.rawText.slice(0, 200),
+      )
+    }
+
     return json(res, 502, {
       ok: false,
-      error: '키워드 파싱 실패',
-      rawText: firstParsed.rawText || '',
+      error:
+        apiIssue ??
+        '키워드 형식을 읽을 수 없습니다. 키워드 다시 생성을 눌러 주세요.',
     })
   }
 
