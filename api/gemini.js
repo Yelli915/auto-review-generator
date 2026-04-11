@@ -318,10 +318,11 @@ export default async function handler(req, res) {
       return json(res, 400, { ok: false, error: 'imageBase64가 필요합니다.' })
     }
 
-    const prompt = `별점 ${rating} 기준. JSON만: {"keywords":["...","...","...","...","...","...","...","..."]}`
+    const prompt =
+      `이미지에 보이는 제품·상황에 맞고, 별점 ${rating}점 톤에 어울리는 리뷰용 키워드 8개를 한국어 짧은 구(명사구)로 제안해. ` +
+      'JSON만 출력: {"keywords":["...","...","...","...","...","...","...","..."]}'
     const result = await requestGemini({
       key,
-      maxRetries: 0,
       payload: {
         contents: [
           {
@@ -347,7 +348,7 @@ export default async function handler(req, res) {
     if (!result.ok) return json(res, 502, result)
 
     const firstParsed = parseKeywordsFromAny(result.data)
-    if (firstParsed.keywords) {
+    if (firstParsed.keywords?.length) {
       return json(res, 200, {
         ok: true,
         keywords: firstParsed.keywords,

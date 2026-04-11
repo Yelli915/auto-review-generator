@@ -6,6 +6,18 @@ import { generateKeywords, generateReview } from './api/geminiService'
 
 const STEPS = { UPLOAD: 'upload', KEYWORD: 'keyword', REVIEW: 'review' }
 
+async function loadKeywordsFromImage(imagePayload) {
+  const result = await generateKeywords({
+    imageBase64: imagePayload.base64Image,
+    rating: imagePayload.rating,
+    mimeType: imagePayload.mimeType || 'image/jpeg',
+  })
+  if (!result?.ok) {
+    throw new Error(result?.error || '키워드 생성 실패')
+  }
+  return Array.isArray(result.keywords) ? result.keywords : []
+}
+
 export default function ReviewGenerator({ onReviewComplete }) {
   const [step, setStep] = useState(STEPS.UPLOAD)
   const [imageData, setImageData] = useState(null)
@@ -27,15 +39,8 @@ export default function ReviewGenerator({ onReviewComplete }) {
     setError(null)
     setIsLoading(true)
     try {
-      const result = await generateKeywords({
-        imageBase64: normalizedData.base64Image,
-        rating: normalizedData.rating,
-        mimeType: normalizedData.mimeType || 'image/jpeg',
-      })
-      if (!result?.ok) {
-        throw new Error(result?.error || '키워드 생성 실패')
-      }
-      setKeywords(Array.isArray(result.keywords) ? result.keywords : [])
+      const nextKeywords = await loadKeywordsFromImage(normalizedData)
+      setKeywords(nextKeywords)
       setStep(STEPS.KEYWORD)
     } catch (e) {
       setError(e instanceof Error ? e.message : '키워드 생성 실패')
@@ -49,20 +54,19 @@ export default function ReviewGenerator({ onReviewComplete }) {
     setError(null)
     setIsLoading(true)
     try {
-      const result = await generateKeywords({
-        imageBase64: imageData.base64Image,
-        rating: imageData.rating,
-        mimeType: imageData.mimeType || 'image/jpeg',
-      })
-      if (!result?.ok) {
-        throw new Error(result?.error || '키워드 생성 실패')
-      }
-      setKeywords(Array.isArray(result.keywords) ? result.keywords : [])
+      const nextKeywords = await loadKeywordsFromImage(imageData)
+      setKeywords(nextKeywords)
     } catch (e) {
       setError(e instanceof Error ? e.message : '키워드 생성 실패')
     } finally {
       setIsLoading(false)
     }
+  }
+
+  const handleBackToUpload = () => {
+    setStep(STEPS.UPLOAD)
+    setKeywords([])
+    setError(null)
   }
 
   const handleKeywordNext = async (selectedKeywords) => {
@@ -91,38 +95,71 @@ export default function ReviewGenerator({ onReviewComplete }) {
     }
   }
 
-  return (
-    <div style={{ maxWidth: '480px', margin: '0 auto' }}>
-      {error && (
-        <div
-          style={{
-            padding: '12px 16px',
-            margin: '8px 16px',
-            background: '#fff0f0',
-            border: '1px solid #ffcccc',
-            borderRadius: '8px',
-            color: '#cc0000',
-            fontSize: '14px',
-          }}
-        >
-          {error}
-        </div>
-      )}
+  const stepIndex = {
+    [STEPS.UPLOAD]: 0,
+    [STEPS.KEYWORD]: 1,
+    [STEPS.REVIEW]: 2,
+  }[step]
 
-      {step === STEPS.UPLOAD && (
-        <UploadStep onNext={handleUploadNext} isLoading={isLoading} />
-      )}
-      {step === STEPS.KEYWORD && (
-        <KeywordStep
-          keywords={keywords}
-          onNext={handleKeywordNext}
-          onRefresh={handleRefresh}
-          isLoading={isLoading}
-        />
-      )}
-      {step === STEPS.REVIEW && (
-        <ReviewStep review={review} isStreaming={isStreaming} />
-      )}
+  const stepClass = (i) => {
+    if (i < stepIndex) return 'stepper__item is-done'
+    if (i === stepIndex) return 'stepper__item is-active'
+    return 'stepper__item'
+  }
+
+  return (
+    <div className="review-app">
+      <header className="review-app__header">
+        <h1 className="review-app__title">Auto Review</h1>
+        <p className="review-app__tagline">
+          사진과 별점만으로 키워드를 고르고, AI가 리뷰 초안을 만들어 드립니다.
+        </p>
+      </header>
+
+      <nav className="stepper" aria-label="진행 단계">
+        <div className={stepClass(0)}>
+          <span className="stepper__dot" aria-hidden="true">
+            1
+          </span>
+          <span className="stepper__label">사진</span>
+        </div>
+        <div className={stepClass(1)}>
+          <span className="stepper__dot" aria-hidden="true">
+            2
+          </span>
+          <span className="stepper__label">키워드</span>
+        </div>
+        <div className={stepClass(2)}>
+          <span className="stepper__dot" aria-hidden="true">
+            3
+          </span>
+          <span className="stepper__label">리뷰</span>
+        </div>
+      </nav>
+
+      <main className="review-app__main">
+        {error && (
+          <div className="banner banner--error" role="alert">
+            {error}
+          </div>
+        )}
+
+        {step === STEPS.UPLOAD && (
+          <UploadStep onNext={handleUploadNext} isLoading={isLoading} />
+        )}
+        {step === STEPS.KEYWORD && (
+          <KeywordStep
+            keywords={keywords}
+            onNext={handleKeywordNext}
+            onRefresh={handleRefresh}
+            onBackToUpload={handleBackToUpload}
+            isLoading={isLoading}
+          />
+        )}
+        {step === STEPS.REVIEW && (
+          <ReviewStep review={review} isStreaming={isStreaming} />
+        )}
+      </main>
     </div>
   )
 }

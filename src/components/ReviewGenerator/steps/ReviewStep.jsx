@@ -17,30 +17,24 @@ export default function ReviewStep({ review, isStreaming }) {
   }
 
   return (
-    <div style={{ padding: '16px' }}>
-      <div
-        style={{
-          minHeight: '160px',
-          padding: '16px',
-          border: '1px solid #ccc',
-          borderRadius: '8px',
-          lineHeight: '1.7',
-          whiteSpace: 'pre-wrap',
-          marginBottom: '16px',
-          fontSize: '15px',
-        }}
-      >
+    <div className="step-card">
+      <h2 className="step-card__title">생성된 리뷰</h2>
+      <div className="review-output" aria-live="polite">
         {review}
-        {isStreaming && <span style={{ opacity: 0.5 }}>▌</span>}
+        {isStreaming && <span className="review-cursor" aria-hidden="true">▌</span>}
       </div>
 
       <button
+        type="button"
+        className="btn btn--primary btn--lg"
         onClick={handleCopy}
         disabled={isStreaming || !review}
-        style={{ width: '100%', height: '52px', fontSize: '16px' }}
       >
-        {copied ? '복사됨 ✓' : copyError ? '복사 실패' : '클립보드 복사'}
+        {copied ? '복사됨 ✓' : copyError ? '복사 실패' : '클립보드에 복사'}
       </button>
+      {copied && (
+        <p className="field__hint copy-hint">붙여넣기 해서 사용하세요.</p>
+      )}
     </div>
   )
 }

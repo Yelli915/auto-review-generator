@@ -50,15 +50,40 @@ export default function UploadStep({ onNext, isLoading }) {
   }
 
   return (
-    <section>
-      <h3>1. 사진 업로드</h3>
-      <label htmlFor={inputId}>사진 선택</label>
-      <input id={inputId} type="file" accept="image/*" onChange={handleFileChange} />
+    <section className="step-card">
+      <h2 className="step-card__title">사진 업로드</h2>
 
-      <div style={{ marginTop: '12px' }}>
-        <label htmlFor={ratingId}>별점</label>
+      <div className="field">
+        <span className="field__label" id={`${inputId}-label`}>
+          이미지
+        </span>
+        <label className="file-drop" htmlFor={inputId}>
+          <input
+            id={inputId}
+            type="file"
+            accept="image/*"
+            onChange={handleFileChange}
+            aria-labelledby={`${inputId}-label`}
+          />
+          <p className="file-drop__text">탭하여 사진 선택</p>
+          <p className="file-drop__sub">JPG, PNG 등 (최대 화면에 맞게 줄여 전송)</p>
+        </label>
+        <p className="field__hint">{message}</p>
+      </div>
+
+      {previewUrl && (
+        <div className="preview-frame">
+          <img src={previewUrl} alt="선택한 이미지 미리보기" />
+        </div>
+      )}
+
+      <div className="field">
+        <label className="field__label" htmlFor={ratingId}>
+          별점
+        </label>
         <select
           id={ratingId}
+          className="select-input"
           value={rating}
           onChange={(e) => setRating(Number(e.target.value))}
         >
@@ -70,25 +95,32 @@ export default function UploadStep({ onNext, isLoading }) {
         </select>
       </div>
 
-      <div style={{ marginTop: '8px' }}>
-        <label htmlFor={lengthId}>리뷰 길이</label>
-        <select id={lengthId} value={length} onChange={(e) => setLength(e.target.value)}>
+      <div className="field">
+        <label className="field__label" htmlFor={lengthId}>
+          리뷰 길이
+        </label>
+        <select
+          id={lengthId}
+          className="select-input"
+          value={length}
+          onChange={(e) => setLength(e.target.value)}
+        >
           <option value="short">짧게</option>
           <option value="medium">보통</option>
           <option value="long">길게</option>
         </select>
       </div>
 
-      <p>{message}</p>
-      {previewUrl && <img src={previewUrl} alt="업로드 미리보기" style={{ maxWidth: '100%' }} />}
-      <button
-        type="button"
-        onClick={handleNext}
-        disabled={!fileData || isLoading}
-        style={{ width: '100%', height: '48px', marginTop: '12px' }}
-      >
-        {isLoading ? '키워드 생성 중...' : '다음'}
-      </button>
+      <div className="btn-row">
+        <button
+          type="button"
+          className="btn btn--primary btn--lg"
+          onClick={handleNext}
+          disabled={!fileData || isLoading}
+        >
+          {isLoading ? '키워드 생성 중…' : '다음: 키워드'}
+        </button>
+      </div>
     </section>
   )
 }
