@@ -140,6 +140,44 @@ function sanitizeKeywordArray(arr) {
   return cleaned.length ? Array.from(new Set(cleaned)) : null
 }
 
+/** keywords 필드가 배열이 아니라 "a, b, c" 한 줄일 때 */
+function sanitizeKeywordsField(keywords) {
+  if (Array.isArray(keywords)) return sanitizeKeywordArray(keywords)
+  if (typeof keywords === 'string') {
+    const parts = keywords
+      .split(/[,，、\n|/]+/g)
+      .map((s) => s.trim())
+      .filter(Boolean)
+    return sanitizeKeywordArray(parts)
+  }
+  return null
+}
+
+/** JSON 이외·깨진 JSON에서 큰따옴표 문자열 중 한글 구만 모음 */
+function extractQuotedHangulKeywords(text) {
+  const re = /"((?:[^"\\]|\\.)*)"/g
+  const out = []
+  let m
+  while ((m = re.exec(text)) !== null) {
+    const s = m[1]
+      .replace(/\\"/g, '"')
+      .replace(/\\\\/g, '\\')
+      .trim()
+    if (
+      s.length >= KEYWORD_LEN_MIN &&
+      s.length <= KEYWORD_LEN_MAX &&
+      hasHangul(s)
+    ) {
+      out.push(s)
+    }
+  }
+  return out.length ? Array.from(new Set(out)) : null
+}
+
+function loosenJsonCommas(s) {
+  return s.replace(/,\s*([\]}])/g, '$1')
+}
+
 function parseKeywordsFromText(text) {
   if (typeof text !== 'string' || !text.trim()) return null
 
@@ -149,36 +187,41 @@ function parseKeywordsFromText(text) {
     .replace(/^```\s*/i, '')
     .replace(/\s*```$/i, '')
   normalized = stripEnglishJsonPreamble(normalized)
+  const loose = loosenJsonCommas(normalized)
 
-  try {
-    const parsed = JSON.parse(normalized)
-    const fromObject = sanitizeKeywordArray(parsed?.keywords)
-    if (fromObject) return fromObject
-    const fromArray = sanitizeKeywordArray(parsed)
-    if (fromArray) return fromArray
-  } catch {
-    void 0
+  const tryParse = (s) => {
+    try {
+      return JSON.parse(s)
+    } catch {
+      return null
+    }
+  }
+
+  for (const candidate of [normalized, loose]) {
+    const parsed = tryParse(candidate)
+    if (parsed) {
+      const fromObject = sanitizeKeywordsField(parsed?.keywords)
+      if (fromObject) return fromObject
+      const fromArray = sanitizeKeywordArray(parsed)
+      if (fromArray) return fromArray
+    }
   }
 
   const objSlice = sliceBalancedSegment(normalized, '{', '}')
   if (objSlice) {
-    try {
-      const parsed = JSON.parse(objSlice)
-      const fromObject = sanitizeKeywordArray(parsed?.keywords)
+    const parsed = tryParse(loosenJsonCommas(objSlice))
+    if (parsed) {
+      const fromObject = sanitizeKeywordsField(parsed?.keywords)
       if (fromObject) return fromObject
-    } catch {
-      void 0
     }
   }
 
   const arraySlice = sliceBalancedSegment(normalized, '[', ']')
   if (arraySlice) {
-    try {
-      const parsed = JSON.parse(arraySlice)
+    const parsed = tryParse(loosenJsonCommas(arraySlice))
+    if (parsed) {
       const fromArray = sanitizeKeywordArray(parsed)
       if (fromArray) return fromArray
-    } catch {
-      void 0
     }
   }
 
@@ -201,6 +244,9 @@ function parseKeywordsFromText(text) {
     const fromHint = sanitizeKeywordArray(candidates)
     if (fromHint) return fromHint
   }
+
+  const fromAnyQuotes = extractQuotedHangulKeywords(normalized)
+  if (fromAnyQuotes) return fromAnyQuotes
 
   return null
 }
