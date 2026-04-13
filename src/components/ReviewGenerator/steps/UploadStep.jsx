@@ -1,13 +1,49 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import { resizeAndConvertToBase64 } from '../utils/imageUtils'
 
+const MAX_FILE_SIZE_MB = 15
+const RATING_LABELS = ['', '매우 불만족', '불만족', '보통', '만족', '매우 만족']
+
+function StarRating({ value, onChange, disabled }) {
+  const [hovered, setHovered] = useState(null)
+  const display = hovered ?? value
+
+  return (
+    <div
+      className="star-rating"
+      role="group"
+      aria-label="별점 선택"
+      onMouseLeave={() => setHovered(null)}
+    >
+      {[1, 2, 3, 4, 5].map((star) => (
+        <button
+          key={star}
+          type="button"
+          className={`star${display >= star ? ' star--on' : ''}`}
+          onMouseEnter={() => !disabled && setHovered(star)}
+          onClick={() => !disabled && onChange(star)}
+          aria-label={`${star}점`}
+          aria-pressed={value === star}
+          tabIndex={disabled ? -1 : 0}
+        >
+          ★
+        </button>
+      ))}
+      <span className="star-rating__label">
+        {value}점 · {RATING_LABELS[display]}
+      </span>
+    </div>
+  )
+}
+
 export default function UploadStep({ onNext, isLoading }) {
   const inputId = useId()
-  const ratingId = useId()
   const [fileData, setFileData] = useState(null)
   const [previewUrl, setPreviewUrl] = useState('')
   const [rating, setRating] = useState(5)
-  const [message, setMessage] = useState('이미지를 선택해 주세요.')
+  const [status, setStatus] = useState({ text: '', isError: false })
+  const [isDragging, setIsDragging] = useState(false)
+  const [isProcessing, setIsProcessing] = useState(false)
   const previewUrlRef = useRef('')
 
   useEffect(() => {
@@ -16,41 +52,74 @@ export default function UploadStep({ onNext, isLoading }) {
     }
   }, [])
 
-  function handleFileChange(e) {
-    const file = e.target.files?.[0]
-    if (!file) return
+  function processFile(file) {
+    if (!file.type.startsWith('image/')) {
+      setStatus({ text: '이미지 파일(JPG, PNG 등)만 업로드할 수 있습니다.', isError: true })
+      return
+    }
+    if (file.size > MAX_FILE_SIZE_MB * 1024 * 1024) {
+      setStatus({ text: `파일 크기는 ${MAX_FILE_SIZE_MB}MB 이하여야 합니다.`, isError: true })
+      return
+    }
 
     if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current)
     const objectUrl = URL.createObjectURL(file)
     previewUrlRef.current = objectUrl
     setPreviewUrl(objectUrl)
-    setMessage(`선택됨: ${file.name}`)
+    setFileData(null)
+    setIsProcessing(true)
+    setStatus({ text: '', isError: false })
 
     resizeAndConvertToBase64(file, { maxEdge: 512, quality: 0.75 })
       .then((base64Image) => {
-        setFileData({
-          file,
-          previewUrl: objectUrl,
-          base64Image,
-          mimeType: 'image/jpeg',
-        })
+        setFileData({ file, previewUrl: objectUrl, base64Image, mimeType: 'image/jpeg' })
+        setStatus({ text: file.name, isError: false })
       })
-      .catch(() => setMessage('이미지 변환에 실패했습니다.'))
+      .catch(() => setStatus({ text: '이미지 변환에 실패했습니다.', isError: true }))
+      .finally(() => setIsProcessing(false))
+  }
+
+  function handleFileChange(e) {
+    const file = e.target.files?.[0]
+    if (file) processFile(file)
+  }
+
+  function handleDragOver(e) {
+    e.preventDefault()
+    setIsDragging(true)
+  }
+
+  function handleDragLeave(e) {
+    if (!e.currentTarget.contains(e.relatedTarget)) setIsDragging(false)
+  }
+
+  function handleDrop(e) {
+    e.preventDefault()
+    setIsDragging(false)
+    const file = e.dataTransfer.files?.[0]
+    if (file) processFile(file)
   }
 
   function handleNext() {
     if (!fileData || typeof onNext !== 'function') return
-    onNext({
-      ...fileData,
-      rating: Number(rating),
-    })
+    onNext({ ...fileData, rating: Number(rating) })
   }
 
+  const dropClass = [
+    'file-drop',
+    fileData ? 'file-drop--ready' : '',
+    isDragging ? 'file-drop--drag' : '',
+  ]
+    .filter(Boolean)
+    .join(' ')
+
+  const busy = isLoading || isProcessing
+
   return (
-    <section className="step-card">
+    <section className="step-card step-card--enter">
       <h2 className="step-card__title">사진 업로드</h2>
       <p className="step-card__lede">
-        제품 사진과 별점을 정하면, 그에 맞는 키워드를 자동으로 뽑습니다.
+        제품 사진과 별점을 선택하면 그에 맞는 키워드를 자동으로 추출합니다.
       </p>
 
       <div className="field">
@@ -58,8 +127,11 @@ export default function UploadStep({ onNext, isLoading }) {
           이미지
         </span>
         <label
-          className={`file-drop${fileData ? ' file-drop--ready' : ''}`}
+          className={dropClass}
           htmlFor={inputId}
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
         >
           <input
             id={inputId}
@@ -68,10 +140,26 @@ export default function UploadStep({ onNext, isLoading }) {
             onChange={handleFileChange}
             aria-labelledby={`${inputId}-label`}
           />
-          <p className="file-drop__text">탭하여 사진 선택</p>
-          <p className="file-drop__sub">JPG, PNG 등 (최대 화면에 맞게 줄여 전송)</p>
+          {isDragging ? (
+            <p className="file-drop__text file-drop__text--drag">여기에 놓으세요</p>
+          ) : (
+            <>
+              <p className="file-drop__text">
+                {fileData ? '다른 사진으로 교체' : '탭하거나 파일을 끌어다 놓으세요'}
+              </p>
+              <p className="file-drop__sub">
+                JPG · PNG · WEBP 등 · 최대 {MAX_FILE_SIZE_MB}MB
+              </p>
+            </>
+          )}
         </label>
-        <p className="field__hint">{message}</p>
+        {status.text && (
+          <p
+            className={`field__hint ${status.isError ? 'field__hint--error' : 'field__hint--file'}`}
+          >
+            {status.text}
+          </p>
+        )}
       </div>
 
       {previewUrl && (
@@ -80,23 +168,9 @@ export default function UploadStep({ onNext, isLoading }) {
         </div>
       )}
 
-      <div className="field">
-        <label className="field__label" htmlFor={ratingId}>
-          별점
-        </label>
-        <select
-          id={ratingId}
-          className="select-input"
-          value={rating}
-          onChange={(e) => setRating(Number(e.target.value))}
-          disabled={isLoading}
-        >
-          <option value={1}>1점</option>
-          <option value={2}>2점</option>
-          <option value={3}>3점</option>
-          <option value={4}>4점</option>
-          <option value={5}>5점</option>
-        </select>
+      <div className="field field--no-mb">
+        <label className="field__label">별점</label>
+        <StarRating value={rating} onChange={setRating} disabled={busy} />
       </div>
 
       <div className="btn-row">
@@ -104,9 +178,13 @@ export default function UploadStep({ onNext, isLoading }) {
           type="button"
           className="btn btn--primary btn--lg"
           onClick={handleNext}
-          disabled={!fileData || isLoading}
+          disabled={!fileData || busy}
         >
-          {isLoading ? '키워드 생성 중…' : '다음: 키워드'}
+          {isLoading
+            ? '키워드 생성 중…'
+            : isProcessing
+              ? '이미지 처리 중…'
+              : '다음: 키워드 선택'}
         </button>
       </div>
     </section>

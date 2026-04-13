@@ -728,3 +728,306 @@ code {
   padding: 4px 8px;
   background: var(--code-bg);
 }
+
+/* ── Step enter animation ───────────────────────────────────────────── */
+
+@keyframes step-enter {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.step-card--enter {
+  animation: step-enter 0.22s ease both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .step-card--enter {
+    animation: none;
+  }
+}
+
+/* ── Field modifiers ────────────────────────────────────────────────── */
+
+.field--no-mb {
+  margin-bottom: 0;
+}
+
+.field__hint--file {
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.field__hint--error {
+  color: var(--error-text);
+}
+
+/* ── File drop drag state ───────────────────────────────────────────── */
+
+.file-drop--drag {
+  border-style: solid;
+  border-color: var(--accent);
+  background: var(--accent-bg);
+}
+
+.file-drop__text--drag {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+/* ── Star rating input ──────────────────────────────────────────────── */
+
+.star-rating {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-wrap: wrap;
+}
+
+.star {
+  background: none;
+  border: none;
+  padding: 4px 3px;
+  cursor: pointer;
+  font-size: 1.75rem;
+  line-height: 1;
+  color: var(--border-strong);
+  transition:
+    color 0.12s ease,
+    transform 0.1s ease;
+  border-radius: 4px;
+}
+
+.star:hover,
+.star--on {
+  color: #f59e0b;
+}
+
+.star:hover {
+  transform: scale(1.18);
+}
+
+.star:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.star-rating__label {
+  margin-left: 8px;
+  font-size: 0.875rem;
+  color: var(--text-muted);
+  min-width: 9em;
+}
+
+/* ── Small stars (review context) ──────────────────────────────────── */
+
+.star-sm {
+  font-size: 0.9rem;
+  color: var(--border-strong);
+  line-height: 1;
+}
+
+.star-sm--on {
+  color: #f59e0b;
+}
+
+/* ── Keyword header row ─────────────────────────────────────────────── */
+
+.keyword-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.keyword-header .step-section__label {
+  margin-bottom: 0;
+}
+
+/* ── Inline link-style button ───────────────────────────────────────── */
+
+.btn-link {
+  background: none;
+  border: none;
+  padding: 2px 6px;
+  font: inherit;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--accent);
+  cursor: pointer;
+  border-radius: 4px;
+  transition: opacity 0.15s ease;
+  flex-shrink: 0;
+}
+
+.btn-link:hover:not(:disabled) {
+  opacity: 0.72;
+}
+
+.btn-link:disabled {
+  opacity: 0.38;
+  cursor: not-allowed;
+}
+
+.btn-link:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* ── Chip skeleton loading ──────────────────────────────────────────── */
+
+.chip-skeleton-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 22px;
+}
+
+.chip-skeleton {
+  height: 44px;
+  border-radius: var(--radius-pill);
+  background: var(--border);
+  background-image: linear-gradient(
+    90deg,
+    var(--border) 0%,
+    var(--bg-page) 45%,
+    var(--border) 90%
+  );
+  background-size: 200% 100%;
+  animation: chip-shimmer 1.4s ease-in-out infinite;
+}
+
+@keyframes chip-shimmer {
+  0% {
+    background-position: 100% 0;
+  }
+  100% {
+    background-position: -100% 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chip-skeleton {
+    animation: none;
+    background-image: none;
+  }
+}
+
+/* ── Review context summary card ────────────────────────────────────── */
+
+.review-context {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 11px 14px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  margin-bottom: 14px;
+}
+
+.review-context__row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.review-context__row--chips {
+  align-items: flex-start;
+}
+
+.review-context__icon {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  padding-top: 2px;
+  min-width: 3.5em;
+  flex-shrink: 0;
+}
+
+.review-context__stars {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.review-context__meta {
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+  padding-top: 1px;
+  margin-left: 4px;
+}
+
+.review-context__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.context-chip {
+  display: inline-block;
+  padding: 2px 9px;
+  border-radius: var(--radius-pill);
+  background: var(--accent-bg);
+  border: 1px solid var(--accent-border);
+  font-size: 0.8125rem;
+  color: var(--accent);
+  font-weight: 500;
+  line-height: 1.6;
+}
+
+/* ── Review character count ─────────────────────────────────────────── */
+
+.review-meta {
+  text-align: right;
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+  margin: -6px 0 14px;
+}
+
+/* ── Review bottom navigation ───────────────────────────────────────── */
+
+.review-nav {
+  margin-top: 12px;
+}
+
+.review-reset {
+  width: 100%;
+  margin-top: 8px;
+  font-size: 0.875rem;
+  min-height: 42px;
+  color: var(--text-muted);
+}
+
+.review-reset:hover:not(:disabled) {
+  color: var(--text-h);
+  background: var(--bg);
+}
+
+/* ── Footer ─────────────────────────────────────────────────────────── */
+
+.review-app__footer {
+  margin-top: 36px;
+  padding: 14px 0 6px;
+  text-align: center;
+  width: 100%;
+  max-width: 520px;
+  border-top: 1px solid var(--border);
+}
+
+.review-app__footer p {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin: 0;
+  letter-spacing: 0.02em;
+}
+

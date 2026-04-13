@@ -62,7 +62,7 @@ function parseGeminiRetryAfterSeconds(message) {
   if (typeof message !== 'string') return null
   const m = message.match(/retry in ([\d.]+)\s*s/i)
   if (!m) return null
-  const sec = Math.ceil(Number.parseFloat(m[1], 10))
+  const sec = Math.ceil(Number.parseFloat(m[1]))
   return Number.isFinite(sec) && sec > 0 ? sec : null
 }
 
@@ -407,66 +407,62 @@ function describeKeywordGeminiIssue(data, extractedText) {
 }
 
 async function requestGemini({ key, payload, maxRetries = MAX_RETRIES }) {
+  const model = MODELS[0]
   let lastError = null
 
-  for (const model of MODELS) {
-    for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
+  for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
+    try {
+      const response = await fetch(makeUrl(model), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-goog-api-key': key,
+        },
+        body: JSON.stringify(payload),
+      })
+
+      let data = {}
       try {
-        const response = await fetch(makeUrl(model), {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'x-goog-api-key': key,
-          },
-          body: JSON.stringify(payload),
-        })
-
-        let data = {}
-        try {
-          data = await response.json()
-        } catch {
-          data = {}
-        }
-
-        if (response.ok) return { ok: true, data, model }
-
-        const rawMessage =
-          data?.error?.message ?? `요청 실패 (HTTP ${response.status})`
-        const message = humanizeGeminiApiError(response.status, rawMessage)
-
-        if (response.status === 429) {
-          const highDemand = isTemporaryHighDemandMessage(rawMessage)
-          if (highDemand && attempt < maxRetries) {
-            const retryAfterSec = parseGeminiRetryAfterSeconds(rawMessage) ?? 2
-            await wait(Math.min(6000, retryAfterSec * 1000))
-            continue
-          }
-          return {
-            ok: false,
-            error: message,
-            status: response.status,
-            details: data,
-          }
-        }
-
-        if (!RETRYABLE_STATUS.has(response.status) || attempt === maxRetries) {
-          if (model === MODELS[MODELS.length - 1]) {
-            return {
-              ok: false,
-              error: message,
-              status: response.status,
-              details: data,
-            }
-          }
-          break
-        }
-
-        await wait(700 * 2 ** attempt)
-      } catch (err) {
-        lastError = err
-        if (attempt === maxRetries) break
-        await wait(700 * 2 ** attempt)
+        data = await response.json()
+      } catch {
+        data = {}
       }
+
+      if (response.ok) return { ok: true, data, model }
+
+      const rawMessage =
+        data?.error?.message ?? `요청 실패 (HTTP ${response.status})`
+      const message = humanizeGeminiApiError(response.status, rawMessage)
+
+      if (response.status === 429) {
+        const highDemand = isTemporaryHighDemandMessage(rawMessage)
+        if (highDemand && attempt < maxRetries) {
+          const retryAfterSec = parseGeminiRetryAfterSeconds(rawMessage) ?? 2
+          await wait(Math.min(6000, retryAfterSec * 1000))
+          continue
+        }
+        return {
+          ok: false,
+          error: message,
+          status: response.status,
+          details: data,
+        }
+      }
+
+      if (!RETRYABLE_STATUS.has(response.status) || attempt === maxRetries) {
+        return {
+          ok: false,
+          error: message,
+          status: response.status,
+          details: data,
+        }
+      }
+
+      await wait(700 * 2 ** attempt)
+    } catch (err) {
+      lastError = err
+      if (attempt === maxRetries) break
+      await wait(700 * 2 ** attempt)
     }
   }
 

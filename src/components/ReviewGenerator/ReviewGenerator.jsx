@@ -26,6 +26,7 @@ export default function ReviewGenerator({ onReviewComplete }) {
   const [isLoading, setIsLoading] = useState(false)
   const [isStreaming, setIsStreaming] = useState(false)
   const [error, setError] = useState(null)
+  const [lastUsedOptions, setLastUsedOptions] = useState(null)
 
   const handleUploadNext = async (data) => {
     const normalizedData = {
@@ -48,8 +49,23 @@ export default function ReviewGenerator({ onReviewComplete }) {
     }
   }
 
+  const handleRegenerate = () => {
+    if (!lastUsedOptions) return
+    handleKeywordNext(
+      lastUsedOptions.keywords,
+      lastUsedOptions.length,
+      lastUsedOptions.tone,
+    )
+  }
+
+  const handleBackToKeyword = () => {
+    setStep(STEPS.KEYWORD)
+    setReview('')
+    setError(null)
+  }
+
   const handleRefresh = async () => {
-    if (!imageData?.base64Image) return
+    if (!imageData?.base64Image || isLoading) return
     setError(null)
     setIsLoading(true)
     try {
@@ -73,6 +89,7 @@ export default function ReviewGenerator({ onReviewComplete }) {
     reviewLength = 'medium',
     reviewTone = 'neutral',
   ) => {
+    setLastUsedOptions({ keywords: selectedKeywords, length: reviewLength, tone: reviewTone })
     setReview('')
     setError(null)
     setStep(STEPS.REVIEW)
@@ -171,9 +188,23 @@ export default function ReviewGenerator({ onReviewComplete }) {
           />
         )}
         {step === STEPS.REVIEW && (
-          <ReviewStep review={review} isStreaming={isStreaming} />
+          <ReviewStep
+            review={review}
+            isStreaming={isStreaming}
+            onBack={handleBackToKeyword}
+            onReset={handleBackToUpload}
+            onRegenerate={handleRegenerate}
+            rating={imageData?.rating}
+            selectedKeywords={lastUsedOptions?.keywords}
+            reviewLength={lastUsedOptions?.length}
+            reviewTone={lastUsedOptions?.tone}
+          />
         )}
       </main>
+
+      <footer className="review-app__footer">
+        <p>Powered by Gemini 2.5 Flash</p>
+      </footer>
     </div>
   )
 }

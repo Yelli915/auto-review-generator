@@ -1,12 +1,3 @@
-export function fileToDataUrl(file) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = () => resolve(reader.result)
-    reader.onerror = reject
-    reader.readAsDataURL(file)
-  })
-}
-
 export function resizeAndConvertToBase64(
   file,
   { maxEdge = 1280, quality = 0.85 } = {},

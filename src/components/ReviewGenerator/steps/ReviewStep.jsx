@@ -1,6 +1,25 @@
 import { useState } from 'react'
 
-export default function ReviewStep({ review, isStreaming }) {
+const RATING_LABELS = ['', '매우 불만족', '불만족', '보통', '만족', '매우 만족']
+const LENGTH_LABELS = { short: '짧게', medium: '보통', long: '길게' }
+const TONE_LABELS = {
+  neutral: '기본',
+  friendly: '친근',
+  formal: '격식',
+  casual: '반말',
+}
+
+export default function ReviewStep({
+  review,
+  isStreaming,
+  onBack,
+  onReset,
+  onRegenerate,
+  rating,
+  selectedKeywords,
+  reviewLength,
+  reviewTone,
+}) {
   const [copied, setCopied] = useState(false)
   const [copyError, setCopyError] = useState(false)
 
@@ -18,13 +37,66 @@ export default function ReviewStep({ review, isStreaming }) {
 
   const trimmed = review.trim()
   const showWait = isStreaming && !trimmed
+  const charCount = trimmed.length
+
+  const hasContext =
+    rating != null ||
+    (selectedKeywords && selectedKeywords.length > 0) ||
+    reviewLength ||
+    reviewTone
 
   return (
-    <div className="step-card">
+    <div className="step-card step-card--enter">
       <h2 className="step-card__title">생성된 리뷰</h2>
       <p className="step-card__lede">
         아래 문장을 복사해 쇼핑몰·앱 리뷰에 붙여넣을 수 있습니다.
       </p>
+
+      {hasContext && (
+        <div className="review-context">
+          {rating != null && (
+            <div className="review-context__row">
+              <span className="review-context__icon">별점</span>
+              <div className="review-context__stars">
+                {[1, 2, 3, 4, 5].map((s) => (
+                  <span
+                    key={s}
+                    className={`star-sm${rating >= s ? ' star-sm--on' : ''}`}
+                  >
+                    ★
+                  </span>
+                ))}
+                <span className="review-context__meta">
+                  {rating}점 · {RATING_LABELS[rating]}
+                </span>
+              </div>
+            </div>
+          )}
+          {(reviewLength || reviewTone) && (
+            <div className="review-context__row">
+              <span className="review-context__icon">옵션</span>
+              <span className="review-context__meta">
+                {[LENGTH_LABELS[reviewLength], TONE_LABELS[reviewTone]]
+                  .filter(Boolean)
+                  .join(' · ')}
+              </span>
+            </div>
+          )}
+          {selectedKeywords && selectedKeywords.length > 0 && (
+            <div className="review-context__row review-context__row--chips">
+              <span className="review-context__icon">키워드</span>
+              <div className="review-context__chips">
+                {selectedKeywords.map((kw) => (
+                  <span key={kw} className="context-chip">
+                    {kw}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       <div
         className={
           showWait ? 'review-output review-output--placeholder' : 'review-output'
@@ -40,6 +112,10 @@ export default function ReviewStep({ review, isStreaming }) {
         ) : null}
       </div>
 
+      {!isStreaming && trimmed && (
+        <p className="review-meta">{charCount.toLocaleString()}자</p>
+      )}
+
       <button
         type="button"
         className="btn btn--primary btn--lg"
@@ -51,6 +127,36 @@ export default function ReviewStep({ review, isStreaming }) {
       {copied && (
         <p className="field__hint copy-hint">붙여넣기 해서 사용하세요.</p>
       )}
+
+      <div className="btn-row btn-row--split review-nav">
+        {typeof onRegenerate === 'function' && (
+          <button
+            type="button"
+            className="btn btn--secondary"
+            onClick={onRegenerate}
+            disabled={isStreaming}
+          >
+            리뷰 다시 생성
+          </button>
+        )}
+        <button
+          type="button"
+          className="btn btn--secondary"
+          onClick={onBack}
+          disabled={isStreaming}
+        >
+          키워드 다시 선택
+        </button>
+      </div>
+
+      <button
+        type="button"
+        className="btn btn--ghost review-reset"
+        onClick={onReset}
+        disabled={isStreaming}
+      >
+        처음으로 돌아가기
+      </button>
     </div>
   )
 }

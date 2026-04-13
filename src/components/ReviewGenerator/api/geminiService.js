@@ -1,4 +1,11 @@
 const API_PATH = '/api/gemini'
+const KEYWORD_DEBOUNCE_MS = 900
+const DAILY_LIMIT = 20
+const DAILY_USAGE_KEY = 'autoReviewGeminiDailyUsage'
+
+let inFlightKeywordKey = null
+let inFlightKeywordPromise = null
+let lastKeywordAt = 0
 
 const lengthMap = {
   short: '2~3문장 이내로 간결하게',
@@ -6,14 +13,48 @@ const lengthMap = {
   long: '7~8문장의 상세한 내용으로',
 }
 
-const toneMap = {
-  neutral: true,
-  friendly: true,
-  formal: true,
-  casual: true,
+const validTones = new Set(['neutral', 'friendly', 'formal', 'casual'])
+
+function getLocalDayKey() {
+  const d = new Date()
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
+function consumeDailyQuota(action) {
+  if (action === 'ping' || typeof window === 'undefined') {
+    return { ok: true }
+  }
+  try {
+    const today = getLocalDayKey()
+    const raw = window.localStorage.getItem(DAILY_USAGE_KEY)
+    const parsed = raw ? JSON.parse(raw) : null
+    const base =
+      parsed && typeof parsed === 'object'
+        ? parsed
+        : { dayKey: today, count: 0 }
+    const count = base.dayKey === today ? Number(base.count) || 0 : 0
+    if (count >= DAILY_LIMIT) {
+      return {
+        ok: false,
+        error: `일일 요청 한도(${DAILY_LIMIT}회)를 초과했습니다. 내일 다시 시도해 주세요.`,
+      }
+    }
+    window.localStorage.setItem(
+      DAILY_USAGE_KEY,
+      JSON.stringify({ dayKey: today, count: count + 1 }),
+    )
+    return { ok: true }
+  } catch {
+    return { ok: true }
+  }
 }
 
 async function callApi(payload) {
+  const quota = consumeDailyQuota(payload?.action)
+  if (!quota.ok) return quota
   try {
     const response = await fetch(API_PATH, {
       method: 'POST',
@@ -56,12 +97,33 @@ export async function generateKeywords({
   if (!imageBase64 || typeof imageBase64 !== 'string') {
     return { ok: false, error: 'imageBase64가 필요합니다.' }
   }
-  return callApi({
+  const payload = {
     action: 'keywords',
     imageBase64,
     rating,
     mimeType,
+  }
+  const requestKey = JSON.stringify(payload)
+  const now = Date.now()
+
+  if (inFlightKeywordPromise && inFlightKeywordKey === requestKey) {
+    return inFlightKeywordPromise
+  }
+  if (now - lastKeywordAt < KEYWORD_DEBOUNCE_MS) {
+    return {
+      ok: false,
+      error: '요청이 너무 빠릅니다. 잠시 후 다시 시도해 주세요.',
+    }
+  }
+
+  inFlightKeywordKey = requestKey
+  lastKeywordAt = now
+  inFlightKeywordPromise = callApi(payload).finally(() => {
+    inFlightKeywordKey = null
+    inFlightKeywordPromise = null
   })
+
+  return inFlightKeywordPromise
 }
 
 export async function generateReview(
@@ -71,9 +133,12 @@ export async function generateReview(
   tone,
   onChunk,
 ) {
+  const quota = consumeDailyQuota('review')
+  if (!quota.ok) throw new Error(quota.error)
+
   const safeKeywords = Array.isArray(keywords) ? keywords : []
   const safeLength = lengthMap[length] ? length : 'medium'
-  const safeTone = toneMap[tone] ? tone : 'neutral'
+  const safeTone = validTones.has(tone) ? tone : 'neutral'
   const safeOnChunk = typeof onChunk === 'function' ? onChunk : () => {}
 
   const response = await fetch(API_PATH, {
