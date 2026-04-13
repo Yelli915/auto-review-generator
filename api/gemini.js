@@ -568,6 +568,12 @@ function json(res, code, body) {
   res.end(JSON.stringify(body))
 }
 
+function toClientErrorStatus(status) {
+  if (!Number.isInteger(status)) return 502
+  if (status >= 400 && status <= 599) return status
+  return 502
+}
+
 async function readJsonBody(req) {
   const chunks = []
   for await (const chunk of req) chunks.push(chunk)
@@ -606,7 +612,7 @@ export default async function handler(req, res) {
       key,
       payload: { contents: [{ parts: [{ text: 'hello' }] }] },
     })
-    return json(res, result.ok ? 200 : 502, result)
+    return json(res, result.ok ? 200 : toClientErrorStatus(result.status), result)
   }
 
   if (body.action === 'keywords') {
@@ -664,7 +670,9 @@ export default async function handler(req, res) {
       },
     })
 
-    if (!result.ok) return json(res, 502, result)
+    if (!result.ok) {
+      return json(res, toClientErrorStatus(result.status), result)
+    }
 
     const firstParsed = parseKeywordsFromAny(result.data)
     if (
