@@ -38,6 +38,22 @@ const KEYWORDS_MAX_OUTPUT_TOKENS = 192
 const KEYWORDS_MIN_COUNT = 3
 const KEYWORDS_MAX_COUNT = 8
 
+function keywordSentimentGuide(rating) {
+  if (rating <= 1) {
+    return '전반적으로 매우 불만족 톤. 부정 키워드 위주로 제안.'
+  }
+  if (rating <= 2) {
+    return '불만족 톤. 부정 키워드를 중심으로 하되 사실 기반으로 제안.'
+  }
+  if (rating < 4) {
+    return '보통 톤. 장단점이 섞인 중립 키워드 위주로 제안.'
+  }
+  if (rating < 5) {
+    return '만족 톤. 긍정 키워드를 중심으로 제안.'
+  }
+  return '매우 만족 톤. 강한 긍정 키워드를 중심으로 제안.'
+}
+
 function wait(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
@@ -174,6 +190,53 @@ function extractQuotedHangulKeywords(text) {
   return out.length ? Array.from(new Set(out)) : null
 }
 
+function extractSingleQuotedHangulKeywords(text) {
+  const re = /'((?:[^'\\]|\\.)*)'/g
+  const out = []
+  let m
+  while ((m = re.exec(text)) !== null) {
+    const s = m[1]
+      .replace(/\\'/g, "'")
+      .replace(/\\\\/g, '\\')
+      .trim()
+    if (
+      s.length >= KEYWORD_LEN_MIN &&
+      s.length <= KEYWORD_LEN_MAX &&
+      hasHangul(s)
+    ) {
+      out.push(s)
+    }
+  }
+  return out.length ? Array.from(new Set(out)) : null
+}
+
+function mergeUniqueKeywordLists(...lists) {
+  const flat = lists.filter(Boolean).flat()
+  if (!flat.length) return null
+  return Array.from(new Set(flat))
+}
+
+function trimToJsonStart(s) {
+  const a = s.indexOf('{')
+  const b = s.indexOf('[')
+  let i = -1
+  if (a >= 0 && b >= 0) i = Math.min(a, b)
+  else i = a >= 0 ? a : b
+  return i > 0 ? s.slice(i) : s
+}
+
+function gatherKeywordResponseText(data) {
+  const chunks = []
+  for (const cand of data?.candidates ?? []) {
+    for (const part of cand?.content?.parts ?? []) {
+      if (typeof part?.text === 'string' && part.text.trim()) {
+        chunks.push(part.text.trim())
+      }
+    }
+  }
+  return chunks.join('\n')
+}
+
 function loosenJsonCommas(s) {
   return s.replace(/,\s*([\]}])/g, '$1')
 }
@@ -187,6 +250,7 @@ function parseKeywordsFromText(text) {
     .replace(/^```\s*/i, '')
     .replace(/\s*```$/i, '')
   normalized = stripEnglishJsonPreamble(normalized)
+  normalized = trimToJsonStart(normalized)
   const loose = loosenJsonCommas(normalized)
 
   const tryParse = (s) => {
@@ -245,18 +309,17 @@ function parseKeywordsFromText(text) {
     if (fromHint) return fromHint
   }
 
-  const fromAnyQuotes = extractQuotedHangulKeywords(normalized)
+  const fromAnyQuotes = mergeUniqueKeywordLists(
+    extractQuotedHangulKeywords(normalized),
+    extractSingleQuotedHangulKeywords(normalized),
+  )
   if (fromAnyQuotes) return fromAnyQuotes
 
   return null
 }
 
 function parseKeywordsFromAny(data) {
-  const parts = data?.candidates?.[0]?.content?.parts ?? []
-  const text = parts
-    .map((part) => (typeof part?.text === 'string' ? part.text : ''))
-    .join('\n')
-    .trim()
+  const text = gatherKeywordResponseText(data)
 
   const direct = parseKeywordsFromText(text)
   if (direct && direct.length >= 1) {
@@ -271,7 +334,7 @@ function parseKeywordsFromAny(data) {
 
   const tokenized = text
     .replace(/^키워드\s*[:：]\s*/i, '')
-    .split(/[,\n|/]/g)
+    .split(/[,，、·•\n|/]+/g)
     .map((v) => v.replace(/^[\s\-*0-9.()]+/, '').trim())
     .filter(Boolean)
   const cleaned = Array.from(new Set(tokenized)).filter(
@@ -532,7 +595,8 @@ export default async function handler(req, res) {
 
   if (body.action === 'keywords') {
     const imageBase64 = body.imageBase64
-    const rating = Number.isFinite(Number(body.rating)) ? Number(body.rating) : 5
+    const rawRating = Number.isFinite(Number(body.rating)) ? Number(body.rating) : 5
+    const rating = Math.max(1, Math.min(5, rawRating))
     const mimeType =
       typeof body.mimeType === 'string' && body.mimeType
         ? body.mimeType
@@ -543,7 +607,8 @@ export default async function handler(req, res) {
     }
 
     const prompt =
-      `이미지에 보이는 제품·상황에 맞고, 별점 ${rating}점 톤에 어울리는 리뷰용 키워드를 한국어 짧은 구(명사구)로만 제안해. ` +
+      `이미지에 보이는 제품·상황에 맞고, 별점 ${rating}점의 감정 강도를 반영한 리뷰용 키워드를 한국어 짧은 구(명사구)로만 제안해. ` +
+      `별점 반영 기준: ${keywordSentimentGuide(rating)} ` +
       `서로 다른 키워드를 최소 ${KEYWORDS_MIN_COUNT}개 이상, 많으면 ${KEYWORDS_MAX_COUNT}개까지 넣어(권장 4~8개). ` +
       '각 값은 반드시 한글을 포함해야 해. 설명 문장·영어 안내(예: Here is the JSON)는 넣지 마. ' +
       '출력은 이 JSON 형식만: {"keywords":["...","...","...","...","...","...","...","..."]}'
@@ -567,6 +632,18 @@ export default async function handler(req, res) {
           temperature: 0.1,
           maxOutputTokens: KEYWORDS_MAX_OUTPUT_TOKENS,
           responseMimeType: 'application/json',
+          responseJsonSchema: {
+            type: 'object',
+            properties: {
+              keywords: {
+                type: 'array',
+                items: { type: 'string' },
+                minItems: KEYWORDS_MIN_COUNT,
+                maxItems: KEYWORDS_MAX_COUNT,
+              },
+            },
+            required: ['keywords'],
+          },
         },
       },
     })
