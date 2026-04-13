@@ -66,9 +66,19 @@ function parseGeminiRetryAfterSeconds(message) {
   return Number.isFinite(sec) && sec > 0 ? sec : null
 }
 
+function isTemporaryHighDemandMessage(message) {
+  if (typeof message !== 'string') return false
+  return /currently experiencing high demand|spikes in demand are usually temporary|please try again later/i.test(
+    message,
+  )
+}
+
 /** 무료 한도·RPM 등 쿼터 관련 응답을 사용자용 한국어로 */
 function humanizeGeminiApiError(status, rawMessage) {
   const msg = typeof rawMessage === 'string' ? rawMessage : ''
+  if (isTemporaryHighDemandMessage(msg)) {
+    return '현재 모델 요청이 몰려 일시적으로 처리 지연 중입니다. 잠시 후 자동/수동으로 다시 시도해 주세요.'
+  }
   const quotaLike =
     status === 429 ||
     /quota exceeded|resource_exhausted|free_tier|rate.?limit|exceeded your current quota/i.test(
@@ -425,6 +435,12 @@ async function requestGemini({ key, payload, maxRetries = MAX_RETRIES }) {
         const message = humanizeGeminiApiError(response.status, rawMessage)
 
         if (response.status === 429) {
+          const highDemand = isTemporaryHighDemandMessage(rawMessage)
+          if (highDemand && attempt < maxRetries) {
+            const retryAfterSec = parseGeminiRetryAfterSeconds(rawMessage) ?? 2
+            await wait(Math.min(6000, retryAfterSec * 1000))
+            continue
+          }
           return {
             ok: false,
             error: message,
