@@ -2,12 +2,8 @@ const API_PATH = '/api/gemini'
 const KEYWORD_DEBOUNCE_MS = 900
 const DAILY_LIMIT = 20
 const DAILY_USAGE_KEY = 'autoReviewGeminiDailyUsage'
-const API_AUTH_TOKEN =
-  typeof import.meta !== 'undefined' &&
-  import.meta.env &&
-  typeof import.meta.env.VITE_API_AUTH_TOKEN === 'string'
-    ? import.meta.env.VITE_API_AUTH_TOKEN.trim()
-    : ''
+let googleIdToken = ''
+let onUnauthorized = null
 
 let inFlightKeywordKey = null
 let inFlightKeywordPromise = null
@@ -20,6 +16,18 @@ const lengthMap = {
 }
 
 const validTones = new Set(['neutral', 'friendly', 'formal', 'casual'])
+
+export function setGoogleIdToken(token) {
+  googleIdToken = typeof token === 'string' ? token.trim() : ''
+}
+
+export function setUnauthorizedHandler(handler) {
+  onUnauthorized = typeof handler === 'function' ? handler : null
+}
+
+function buildAuthHeaders() {
+  return googleIdToken ? { Authorization: `Bearer ${googleIdToken}` } : {}
+}
 
 function getLocalDayKey() {
   const d = new Date()
@@ -66,7 +74,7 @@ async function callApi(payload) {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        ...(API_AUTH_TOKEN ? { 'x-api-auth-token': API_AUTH_TOKEN } : {}),
+        ...buildAuthHeaders(),
       },
       body: JSON.stringify(payload),
     })
@@ -78,6 +86,9 @@ async function callApi(payload) {
     }
 
     if (!response.ok) {
+      if (response.status === 401 && onUnauthorized) {
+        onUnauthorized()
+      }
       return {
         ok: false,
         error: data?.error ?? `요청 실패 (HTTP ${response.status})`,
@@ -154,7 +165,7 @@ export async function generateReview(
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      ...(API_AUTH_TOKEN ? { 'x-api-auth-token': API_AUTH_TOKEN } : {}),
+      ...buildAuthHeaders(),
     },
     body: JSON.stringify({
       action: 'review',
@@ -173,6 +184,9 @@ export async function generateReview(
       error = {}
     }
     const msg = typeof error?.error === 'string' ? error.error : error?.error?.message
+    if (response.status === 401 && onUnauthorized) {
+      onUnauthorized()
+    }
     throw new Error(msg || '리뷰 생성 실패')
   }
 

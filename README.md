@@ -279,14 +279,15 @@ vercel dev
 
 ```
 GEMINI_API_KEY=your_google_gemini_api_key
-API_AUTH_TOKEN=your_server_side_token
 ALLOWED_ORIGINS=http://localhost:5173,https://your-domain.com
-VITE_API_AUTH_TOKEN=your_server_side_token
+GOOGLE_CLIENT_ID=your_google_oauth_client_id
+VITE_GOOGLE_CLIENT_ID=your_google_oauth_client_id
 ```
 
 Gemini API 키는 [Google AI Studio](https://aistudio.google.com/)에서 무료로 발급받을 수 있습니다.
-`API_AUTH_TOKEN`을 설정하면 클라이언트 요청 헤더 토큰이 일치해야 API가 동작합니다.
+Google OAuth Client ID는 Google Cloud Console에서 발급한 웹 클라이언트 ID를 사용합니다.
 운영 환경에서는 `ALLOWED_ORIGINS`를 반드시 설정해 허용 도메인만 호출 가능하게 제한하세요.
+운영 환경에서는 `GOOGLE_CLIENT_ID`가 없으면 API가 500으로 차단되도록 설정되어 있습니다.
 
 ---
 

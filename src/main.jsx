@@ -1,10 +1,24 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
+import { GoogleOAuthProvider } from '@react-oauth/google'
 import './index.css'
 import App from './App.jsx'
 
+const googleClientId =
+  typeof import.meta !== 'undefined' &&
+  import.meta.env &&
+  typeof import.meta.env.VITE_GOOGLE_CLIENT_ID === 'string'
+    ? import.meta.env.VITE_GOOGLE_CLIENT_ID.trim()
+    : ''
+
 createRoot(document.getElementById('root')).render(
   <StrictMode>
-    <App />
+    {googleClientId ? (
+      <GoogleOAuthProvider clientId={googleClientId}>
+        <App />
+      </GoogleOAuthProvider>
+    ) : (
+      <App />
+    )}
   </StrictMode>,
 )

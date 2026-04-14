@@ -1,4 +1,6 @@
 /* global Buffer, process */
+import { OAuth2Client } from 'google-auth-library'
+
 const MODELS = ['gemini-2.5-flash']
 /** 429는 쿼터·RPM이라 즉시 반환(재시도 안 함). 나머지만 백오프 재시도 */
 const RETRYABLE_STATUS = new Set([500, 502, 503, 504])
@@ -39,6 +41,7 @@ const RATE_LIMIT_MAX_REQUESTS = 20
 const RATE_LIMIT_STORE = new Map()
 const DEBUG_LOGS =
   process.env.NODE_ENV !== 'production' || process.env.GEMINI_DEBUG_LOGS === '1'
+const GOOGLE_OAUTH_CLIENT = new OAuth2Client()
 
 /** 서로 다른 키워드 개수(한글 필터 통과 후) */
 const KEYWORDS_MIN_COUNT = 3
@@ -85,10 +88,10 @@ function getClientIp(req) {
   return normalizeIp(req.socket?.remoteAddress || '')
 }
 
-function applyRateLimit(req) {
+function applyRateLimit(identifier) {
   const now = Date.now()
   const windowStart = now - RATE_LIMIT_WINDOW_MS
-  const key = getClientIp(req) || 'unknown'
+  const key = typeof identifier === 'string' && identifier ? identifier : 'unknown'
   const prev = RATE_LIMIT_STORE.get(key)
   const hits = (prev?.hits ?? []).filter((t) => t > windowStart)
   if (hits.length >= RATE_LIMIT_MAX_REQUESTS) {
@@ -142,12 +145,75 @@ function hasValidAppToken(req) {
   return headerToken.trim() === secret
 }
 
-function authorizeRequest(req) {
-  if (!hasValidAppToken(req)) return false
-  if (process.env.NODE_ENV === 'production') {
-    return isTrustedOrigin(req)
+function getGoogleClientId() {
+  return typeof process.env.GOOGLE_CLIENT_ID === 'string'
+    ? process.env.GOOGLE_CLIENT_ID.trim()
+    : ''
+}
+
+function getBearerToken(req) {
+  const auth = req.headers?.authorization
+  if (typeof auth !== 'string') return ''
+  const m = auth.match(/^Bearer\s+(.+)$/i)
+  if (!m) return ''
+  return m[1].trim()
+}
+
+async function verifyGoogleToken(idToken) {
+  const audience = getGoogleClientId()
+  if (!audience) {
+    return {
+      ok: false,
+      status: 500,
+      error: '서버 설정 오류: GOOGLE_CLIENT_ID가 없습니다.',
+    }
   }
-  return true
+  try {
+    const ticket = await GOOGLE_OAUTH_CLIENT.verifyIdToken({
+      idToken,
+      audience,
+    })
+    const payload = ticket.getPayload()
+    if (!payload?.sub) {
+      return { ok: false, status: 401, error: '유효하지 않은 로그인 토큰입니다.' }
+    }
+    return { ok: true, userId: payload.sub }
+  } catch {
+    return { ok: false, status: 401, error: '로그인이 만료되었거나 유효하지 않습니다.' }
+  }
+}
+
+async function authorizeRequest(req) {
+  const googleClientId = getGoogleClientId()
+  if (process.env.NODE_ENV === 'production' && !googleClientId) {
+    return {
+      ok: false,
+      status: 500,
+      error: '서버 설정 오류: 운영 환경에는 GOOGLE_CLIENT_ID가 필요합니다.',
+    }
+  }
+  if (googleClientId) {
+    const bearer = getBearerToken(req)
+    if (!bearer) {
+      return { ok: false, status: 401, error: 'Google 로그인이 필요합니다.' }
+    }
+    const verified = await verifyGoogleToken(bearer)
+    if (!verified.ok) return verified
+    if (process.env.NODE_ENV === 'production' && !isTrustedOrigin(req)) {
+      return { ok: false, status: 403, error: '허용되지 않은 출처(origin)입니다.' }
+    }
+    return { ok: true, userId: verified.userId }
+  }
+
+  if (!hasValidAppToken(req)) {
+    return { ok: false, status: 401, error: '인증되지 않은 요청입니다.' }
+  }
+  if (process.env.NODE_ENV === 'production') {
+    if (!isTrustedOrigin(req)) {
+      return { ok: false, status: 403, error: '허용되지 않은 출처(origin)입니다.' }
+    }
+  }
+  return { ok: true, userId: null }
 }
 
 function parseGeminiRetryAfterSeconds(message) {
@@ -690,10 +756,12 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return json(res, 405, { ok: false, error: 'Method Not Allowed' })
   }
-  if (!authorizeRequest(req)) {
-    return json(res, 401, { ok: false, error: '인증되지 않은 요청입니다.' })
+  const auth = await authorizeRequest(req)
+  if (!auth.ok) {
+    return json(res, auth.status, { ok: false, error: auth.error })
   }
-  const rate = applyRateLimit(req)
+  const rateKey = auth.userId || getClientIp(req) || 'unknown'
+  const rate = applyRateLimit(rateKey)
   if (!rate.ok) {
     res.setHeader('Retry-After', String(rate.retryAfterSec))
     return json(res, 429, {
