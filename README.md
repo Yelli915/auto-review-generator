@@ -267,7 +267,7 @@ npm install
 
 # 환경변수 설정
 cp .env.example .env
-# .env 파일에 GEMINI_API_KEY=your_api_key 입력
+# .env 파일에 GEMINI_API_KEY 등 필수값 입력
 
 # 개발 서버 실행(프론트)
 npm run dev
@@ -279,9 +279,14 @@ vercel dev
 
 ```
 GEMINI_API_KEY=your_google_gemini_api_key
+API_AUTH_TOKEN=your_server_side_token
+ALLOWED_ORIGINS=http://localhost:5173,https://your-domain.com
+VITE_API_AUTH_TOKEN=your_server_side_token
 ```
 
 Gemini API 키는 [Google AI Studio](https://aistudio.google.com/)에서 무료로 발급받을 수 있습니다.
+`API_AUTH_TOKEN`을 설정하면 클라이언트 요청 헤더 토큰이 일치해야 API가 동작합니다.
+운영 환경에서는 `ALLOWED_ORIGINS`를 반드시 설정해 허용 도메인만 호출 가능하게 제한하세요.
 
 ---
 

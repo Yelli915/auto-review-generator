@@ -2,6 +2,12 @@ const API_PATH = '/api/gemini'
 const KEYWORD_DEBOUNCE_MS = 900
 const DAILY_LIMIT = 20
 const DAILY_USAGE_KEY = 'autoReviewGeminiDailyUsage'
+const API_AUTH_TOKEN =
+  typeof import.meta !== 'undefined' &&
+  import.meta.env &&
+  typeof import.meta.env.VITE_API_AUTH_TOKEN === 'string'
+    ? import.meta.env.VITE_API_AUTH_TOKEN.trim()
+    : ''
 
 let inFlightKeywordKey = null
 let inFlightKeywordPromise = null
@@ -58,7 +64,10 @@ async function callApi(payload) {
   try {
     const response = await fetch(API_PATH, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        ...(API_AUTH_TOKEN ? { 'x-api-auth-token': API_AUTH_TOKEN } : {}),
+      },
       body: JSON.stringify(payload),
     })
     let data = {}
@@ -143,7 +152,10 @@ export async function generateReview(
 
   const response = await fetch(API_PATH, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      ...(API_AUTH_TOKEN ? { 'x-api-auth-token': API_AUTH_TOKEN } : {}),
+    },
     body: JSON.stringify({
       action: 'review',
       rating,

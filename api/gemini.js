@@ -33,6 +33,12 @@ const KEYWORD_LEN_MIN = 2
 const KEYWORD_LEN_MAX = 30
 
 const KEYWORDS_MAX_OUTPUT_TOKENS = 192
+const MAX_REQUEST_BODY_BYTES = 2 * 1024 * 1024
+const RATE_LIMIT_WINDOW_MS = 60 * 1000
+const RATE_LIMIT_MAX_REQUESTS = 20
+const RATE_LIMIT_STORE = new Map()
+const DEBUG_LOGS =
+  process.env.NODE_ENV !== 'production' || process.env.GEMINI_DEBUG_LOGS === '1'
 
 /** 서로 다른 키워드 개수(한글 필터 통과 후) */
 const KEYWORDS_MIN_COUNT = 3
@@ -56,6 +62,92 @@ function keywordSentimentGuide(rating) {
 
 function wait(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+function setCommonSecurityHeaders(res) {
+  res.setHeader('X-Content-Type-Options', 'nosniff')
+  res.setHeader('Referrer-Policy', 'same-origin')
+  res.setHeader('X-Frame-Options', 'DENY')
+}
+
+function normalizeIp(raw) {
+  if (typeof raw !== 'string') return ''
+  return raw.trim().replace(/^::ffff:/, '')
+}
+
+function getClientIp(req) {
+  const forwarded = req.headers?.['x-forwarded-for']
+  if (typeof forwarded === 'string' && forwarded.trim()) {
+    return normalizeIp(forwarded.split(',')[0])
+  }
+  const realIp = req.headers?.['x-real-ip']
+  if (typeof realIp === 'string' && realIp.trim()) return normalizeIp(realIp)
+  return normalizeIp(req.socket?.remoteAddress || '')
+}
+
+function applyRateLimit(req) {
+  const now = Date.now()
+  const windowStart = now - RATE_LIMIT_WINDOW_MS
+  const key = getClientIp(req) || 'unknown'
+  const prev = RATE_LIMIT_STORE.get(key)
+  const hits = (prev?.hits ?? []).filter((t) => t > windowStart)
+  if (hits.length >= RATE_LIMIT_MAX_REQUESTS) {
+    const retryAfterMs = Math.max(1000, RATE_LIMIT_WINDOW_MS - (now - hits[0]))
+    return { ok: false, retryAfterSec: Math.ceil(retryAfterMs / 1000) }
+  }
+  hits.push(now)
+  RATE_LIMIT_STORE.set(key, { hits, updatedAt: now })
+
+  if (RATE_LIMIT_STORE.size > 2000) {
+    for (const [ip, value] of RATE_LIMIT_STORE.entries()) {
+      if (!value || value.updatedAt < windowStart) RATE_LIMIT_STORE.delete(ip)
+    }
+  }
+  return { ok: true }
+}
+
+function parseAllowOrigins() {
+  const raw = process.env.ALLOWED_ORIGINS
+  if (typeof raw !== 'string' || !raw.trim()) return null
+  const list = raw
+    .split(',')
+    .map((v) => v.trim())
+    .filter(Boolean)
+  return list.length ? new Set(list) : null
+}
+
+function isTrustedOrigin(req) {
+  const origin = req.headers?.origin
+  if (typeof origin !== 'string' || !origin.trim()) return false
+  const allowSet = parseAllowOrigins()
+  if (allowSet) return allowSet.has(origin)
+  const host = req.headers?.host
+  if (typeof host !== 'string' || !host.trim()) return false
+  try {
+    const u = new URL(origin)
+    return u.host === host
+  } catch {
+    return false
+  }
+}
+
+function hasValidAppToken(req) {
+  const secret =
+    typeof process.env.API_AUTH_TOKEN === 'string'
+      ? process.env.API_AUTH_TOKEN.trim()
+      : ''
+  if (!secret) return true
+  const headerToken = req.headers?.['x-api-auth-token']
+  if (typeof headerToken !== 'string') return false
+  return headerToken.trim() === secret
+}
+
+function authorizeRequest(req) {
+  if (!hasValidAppToken(req)) return false
+  if (process.env.NODE_ENV === 'production') {
+    return isTrustedOrigin(req)
+  }
+  return true
 }
 
 function parseGeminiRetryAfterSeconds(message) {
@@ -512,6 +604,7 @@ async function streamGeminiReview({ key, rating, keywords, length, tone, res }) 
   }
 
   res.statusCode = 200
+  setCommonSecurityHeaders(res)
   res.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8')
   res.setHeader('Cache-Control', 'no-cache, no-transform')
   res.setHeader('X-Accel-Buffering', 'no')
@@ -560,6 +653,7 @@ async function streamGeminiReview({ key, rating, keywords, length, tone, res }) 
 
 function json(res, code, body) {
   res.statusCode = code
+  setCommonSecurityHeaders(res)
   res.setHeader('Content-Type', 'application/json; charset=utf-8')
   res.end(JSON.stringify(body))
 }
@@ -572,7 +666,17 @@ function toClientErrorStatus(status) {
 
 async function readJsonBody(req) {
   const chunks = []
-  for await (const chunk of req) chunks.push(chunk)
+  let totalBytes = 0
+  for await (const chunk of req) {
+    const size = Buffer.isBuffer(chunk)
+      ? chunk.length
+      : Buffer.byteLength(String(chunk))
+    totalBytes += size
+    if (totalBytes > MAX_REQUEST_BODY_BYTES) {
+      return { tooLarge: true }
+    }
+    chunks.push(chunk)
+  }
   const raw = Buffer.concat(chunks).toString('utf8')
   if (!raw) return {}
   try {
@@ -585,6 +689,17 @@ async function readJsonBody(req) {
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return json(res, 405, { ok: false, error: 'Method Not Allowed' })
+  }
+  if (!authorizeRequest(req)) {
+    return json(res, 401, { ok: false, error: '인증되지 않은 요청입니다.' })
+  }
+  const rate = applyRateLimit(req)
+  if (!rate.ok) {
+    res.setHeader('Retry-After', String(rate.retryAfterSec))
+    return json(res, 429, {
+      ok: false,
+      error: '요청이 너무 많습니다. 잠시 후 다시 시도해 주세요.',
+    })
   }
 
   const key =
@@ -599,6 +714,12 @@ export default async function handler(req, res) {
   }
 
   const body = await readJsonBody(req)
+  if (body?.tooLarge) {
+    return json(res, 413, {
+      ok: false,
+      error: '요청 본문이 너무 큽니다. 이미지 크기를 줄여 다시 시도해 주세요.',
+    })
+  }
   if (!body) {
     return json(res, 400, { ok: false, error: '잘못된 JSON 본문입니다.' })
   }
@@ -684,7 +805,7 @@ export default async function handler(req, res) {
 
     if (firstParsed.tooFew) {
       const n = firstParsed.partial?.length ?? 0
-      if (firstParsed.rawText) {
+      if (DEBUG_LOGS && firstParsed.rawText) {
         console.warn('[gemini keywords] too few after filter:', n)
       }
       return json(res, 502, {
@@ -697,11 +818,8 @@ export default async function handler(req, res) {
       result.data,
       firstParsed.rawText,
     )
-    if (firstParsed.rawText) {
-      console.warn(
-        '[gemini keywords] parse failed, snippet:',
-        firstParsed.rawText.slice(0, 200),
-      )
+    if (DEBUG_LOGS && firstParsed.rawText) {
+      console.warn('[gemini keywords] parse failed')
     }
 
     return json(res, 502, {
