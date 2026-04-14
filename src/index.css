@@ -117,10 +117,13 @@ body {
   top: 10px;
   right: 14px;
   z-index: 20;
-  width: auto;
   min-height: 30px;
   padding-inline: 8px;
   font-size: 0.78rem;
+}
+
+.app-logout-floating.btn {
+  width: auto;
 }
 
 .app-shell--authed .review-app {
@@ -1006,12 +1009,6 @@ code {
   .step-card--enter {
     animation: none;
   }
-}
-
-/* ── Field modifiers ────────────────────────────────────────────────── */
-
-.field--no-mb {
-  margin-bottom: 0;
 }
 
 .field__hint--file {

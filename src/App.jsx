@@ -33,12 +33,11 @@ function App() {
     const content = flowContentRef.current
     if (!content) return
     setFlowMaxHeight(isFlowOpen ? `${content.scrollHeight}px` : '0px')
-  }, [isFlowOpen, token])
+  }, [isFlowOpen])
 
   useEffect(() => {
     setUnauthorizedHandler(() => {
       setToken('')
-      setGoogleIdToken('')
       setAuthError('로그인이 만료되었습니다. 다시 로그인해 주세요.')
     })
     return () => setUnauthorizedHandler(null)
@@ -55,13 +54,11 @@ function App() {
     }
     setAuthError('')
     setToken(credential)
-    setGoogleIdToken(credential)
   }
 
   const handleLogout = () => {
     googleLogout()
     setToken('')
-    setGoogleIdToken('')
   }
 
   if (!googleClientId) {
