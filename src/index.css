@@ -132,7 +132,7 @@ body {
 
 .app-topbar__brand {
   margin: 0;
-  font-size: 0.9rem;
+  font-size: 1rem;
   font-weight: 700;
   letter-spacing: 0.01em;
   color: var(--text-h);
@@ -140,15 +140,15 @@ body {
 
 .app-topbar__sub {
   margin: 0;
-  font-size: 0.76rem;
+  font-size: 0.84rem;
   color: var(--text-muted);
 }
 
 .app-topbar__logout {
   width: auto;
-  min-height: 32px;
-  padding-inline: 10px;
-  font-size: 0.82rem;
+  min-height: 30px;
+  padding-inline: 8px;
+  font-size: 0.78rem;
   flex-shrink: 0;
 }
 
@@ -260,9 +260,7 @@ body {
 }
 
 .auth-intro__login {
-  margin: 30px auto 0;
-  padding-top: 24px;
-  border-top: 1px solid var(--border);
+  margin: 18px auto 0;
   max-width: 520px;
 }
 
@@ -378,26 +376,25 @@ body {
   justify-content: center;
   gap: 0;
   margin-top: 12px;
-  max-width: 760px;
-  width: 100%;
+  width: fit-content;
+  max-width: 100%;
 }
 
 .stepper__item {
   display: flex;
   align-items: center;
   gap: 8px;
-  flex: 1;
-  min-width: 0;
+  flex: 0 0 auto;
+  min-width: auto;
 }
 
 .stepper__item:not(:last-child)::after {
   content: '';
-  flex: 1;
+  flex: 0 0 46px;
   height: 2px;
   margin: 0 6px;
   background: var(--border);
   border-radius: 1px;
-  min-width: 8px;
 }
 
 .stepper__item.is-done:not(:last-child)::after {

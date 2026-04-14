@@ -29,7 +29,7 @@ function StarRating({ value, onChange, disabled, ratingLabels }) {
         </button>
       ))}
       <span className="star-rating__label">
-        {value}점 · {ratingLabels[display]}
+        {display}점 · {ratingLabels[display]}
       </span>
     </div>
   )
@@ -123,6 +123,16 @@ export default function UploadStep({ onNext, isLoading, ratingLabels }) {
       </p>
 
       <div className="field">
+        <label className="field__label">별점</label>
+        <StarRating
+          value={rating}
+          onChange={setRating}
+          disabled={busy}
+          ratingLabels={ratingLabels}
+        />
+      </div>
+
+      <div className="field">
         <span className="field__label" id={`${inputId}-label`}>
           이미지
         </span>
@@ -180,16 +190,6 @@ export default function UploadStep({ onNext, isLoading, ratingLabels }) {
           </div>
         </>
       )}
-
-      <div className="field field--no-mb">
-        <label className="field__label">별점</label>
-        <StarRating
-          value={rating}
-          onChange={setRating}
-          disabled={busy}
-          ratingLabels={ratingLabels}
-        />
-      </div>
 
       <div className="btn-row">
         <button

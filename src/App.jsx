@@ -106,19 +106,7 @@ function App() {
             <p className="auth-intro__text">
               업로드부터 복사까지, 3단계로 빠르게 끝냅니다.
             </p>
-            <details className="auth-intro__flow-wrap" open>
-              <summary>사용 흐름 보기</summary>
-              <ol className="auth-intro__flow">
-                <li>이미지와 별점 입력</li>
-                <li>키워드/길이/말투 선택</li>
-                <li>리뷰 생성 후 복사</li>
-              </ol>
-            </details>
             <div className="auth-intro__login">
-              <h2 className="auth-card__title">Google 로그인</h2>
-              <p className="auth-card__text">
-              로그인 후 리뷰 생성 기능을 사용할 수 있습니다.
-              </p>
               {authError && (
                 <div className="banner banner--error" role="alert">
                   {authError}
@@ -129,9 +117,18 @@ function App() {
                   onSuccess={handleLoginSuccess}
                   onError={() => setAuthError('Google 로그인에 실패했습니다.')}
                   useOneTap
+                  shape="pill"
                 />
               </div>
             </div>
+            <details className="auth-intro__flow-wrap" open>
+              <summary>사용 흐름 보기</summary>
+              <ol className="auth-intro__flow">
+                <li>이미지와 별점 입력</li>
+                <li>키워드/길이/말투 선택</li>
+                <li>리뷰 생성 후 복사</li>
+              </ol>
+            </details>
           </section>
         </main>
       </div>
