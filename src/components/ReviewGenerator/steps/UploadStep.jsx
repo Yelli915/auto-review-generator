@@ -45,6 +45,7 @@ export default function UploadStep({ onNext, isLoading, ratingLabels }) {
   const [isDragging, setIsDragging] = useState(false)
   const [isProcessing, setIsProcessing] = useState(false)
   const previewUrlRef = useRef('')
+  const processTokenRef = useRef(0)
 
   useEffect(() => {
     return () => {
@@ -53,6 +54,8 @@ export default function UploadStep({ onNext, isLoading, ratingLabels }) {
   }, [])
 
   function processFile(file) {
+    const token = processTokenRef.current + 1
+    processTokenRef.current = token
     if (!file.type.startsWith('image/')) {
       setStatus({ text: '이미지 파일(JPG, PNG 등)만 업로드할 수 있습니다.', isError: true })
       return
@@ -72,11 +75,18 @@ export default function UploadStep({ onNext, isLoading, ratingLabels }) {
 
     resizeAndConvertToBase64(file, { maxEdge: 512, quality: 0.75 })
       .then((base64Image) => {
+        if (processTokenRef.current !== token) return
         setFileData({ file, previewUrl: objectUrl, base64Image, mimeType: 'image/jpeg' })
         setStatus({ text: file.name, isError: false })
       })
-      .catch(() => setStatus({ text: '이미지 변환에 실패했습니다.', isError: true }))
-      .finally(() => setIsProcessing(false))
+      .catch(() => {
+        if (processTokenRef.current !== token) return
+        setStatus({ text: '이미지 변환에 실패했습니다.', isError: true })
+      })
+      .finally(() => {
+        if (processTokenRef.current !== token) return
+        setIsProcessing(false)
+      })
   }
 
   function handleFileChange(e) {
@@ -132,7 +142,8 @@ export default function UploadStep({ onNext, isLoading, ratingLabels }) {
         />
       </div>
 
-      <div className="field">
+      <div className="upload-row">
+        <div className="field upload-row__drop">
         <span className="field__label" id={`${inputId}-label`}>
           이미지
         </span>
@@ -171,19 +182,20 @@ export default function UploadStep({ onNext, isLoading, ratingLabels }) {
             {status.text}
           </p>
         )}
-      </div>
+        </div>
 
-      {previewUrl && (
-        <button
-          type="button"
-          className="preview-frame preview-frame--replace"
-          onClick={() => inputRef.current?.click()}
-          disabled={busy}
-          aria-label="업로드된 이미지를 다른 사진으로 교체"
-        >
-          <img src={previewUrl} alt="선택한 이미지 미리보기" />
-        </button>
-      )}
+        {previewUrl && (
+          <button
+            type="button"
+            className="preview-frame preview-frame--replace upload-row__preview"
+            onClick={() => inputRef.current?.click()}
+            disabled={busy}
+            aria-label="업로드된 이미지를 다른 사진으로 교체"
+          >
+            <img src={previewUrl} alt="선택한 이미지 미리보기" />
+          </button>
+        )}
+      </div>
 
       <div className="btn-row">
         <button

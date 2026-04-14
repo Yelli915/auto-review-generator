@@ -576,6 +576,21 @@ body {
   color: var(--text-muted);
 }
 
+.upload-row {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+  align-items: start;
+}
+
+.upload-row__drop {
+  margin-bottom: 0;
+}
+
+.upload-row__preview {
+  margin-top: 0;
+}
+
 .file-drop {
   position: relative;
   display: block;
@@ -664,6 +679,12 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+@media (min-width: 760px) {
+  .upload-row {
+    grid-template-columns: minmax(280px, 1fr) minmax(240px, 0.95fr);
+  }
 }
 
 .preview-frame--replace {

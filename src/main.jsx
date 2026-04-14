@@ -3,13 +3,9 @@ import { createRoot } from 'react-dom/client'
 import { GoogleOAuthProvider } from '@react-oauth/google'
 import './index.css'
 import App from './App.jsx'
+import { getGoogleClientId } from './utils/env'
 
-const googleClientId =
-  typeof import.meta !== 'undefined' &&
-  import.meta.env &&
-  typeof import.meta.env.VITE_GOOGLE_CLIENT_ID === 'string'
-    ? import.meta.env.VITE_GOOGLE_CLIENT_ID.trim()
-    : ''
+const googleClientId = getGoogleClientId()
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>

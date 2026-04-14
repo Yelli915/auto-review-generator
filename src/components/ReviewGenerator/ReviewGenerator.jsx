@@ -97,6 +97,7 @@ export default function ReviewGenerator({ onReviewComplete }) {
     setIsStreaming(true)
 
     let fullReview = ''
+    let isSuccess = false
     try {
       await generateReview(
         imageData.rating,
@@ -108,12 +109,15 @@ export default function ReviewGenerator({ onReviewComplete }) {
           setReview(fullReview)
         },
       )
+      isSuccess = true
     } catch (e) {
       setError(e instanceof Error ? e.message : '리뷰 생성 실패')
       setStep(STEPS.KEYWORD)
     } finally {
       setIsStreaming(false)
-      onReviewComplete?.(fullReview)
+      if (isSuccess) {
+        onReviewComplete?.(fullReview)
+      }
     }
   }
 

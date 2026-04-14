@@ -5,24 +5,14 @@ import {
   setGoogleIdToken,
   setUnauthorizedHandler,
 } from './components/ReviewGenerator/api/geminiService'
-
-function getEnvGoogleClientId() {
-  if (
-    typeof import.meta === 'undefined' ||
-    !import.meta.env ||
-    typeof import.meta.env.VITE_GOOGLE_CLIENT_ID !== 'string'
-  ) {
-    return ''
-  }
-  return import.meta.env.VITE_GOOGLE_CLIENT_ID.trim()
-}
+import { getGoogleClientId } from './utils/env'
 
 function App() {
   const [token, setToken] = useState('')
   const [authError, setAuthError] = useState('')
   const [isFlowOpen, setIsFlowOpen] = useState(true)
   const [flowMaxHeight, setFlowMaxHeight] = useState('0px')
-  const googleClientId = useMemo(() => getEnvGoogleClientId(), [])
+  const googleClientId = useMemo(() => getGoogleClientId(), [])
   const flowContentRef = useRef(null)
 
   useEffect(() => {

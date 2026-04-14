@@ -37,7 +37,7 @@ function getLocalDayKey() {
   return `${y}-${m}-${day}`
 }
 
-function consumeDailyQuota(action) {
+function consumeDailyQuota(action, { commit = false } = {}) {
   if (action === 'ping' || typeof window === 'undefined') {
     return { ok: true }
   }
@@ -56,10 +56,12 @@ function consumeDailyQuota(action) {
         error: `일일 요청 한도(${DAILY_LIMIT}회)를 초과했습니다. 내일 다시 시도해 주세요.`,
       }
     }
-    window.localStorage.setItem(
-      DAILY_USAGE_KEY,
-      JSON.stringify({ dayKey: today, count: count + 1 }),
-    )
+    if (commit) {
+      window.localStorage.setItem(
+        DAILY_USAGE_KEY,
+        JSON.stringify({ dayKey: today, count: count + 1 }),
+      )
+    }
     return { ok: true }
   } catch {
     return { ok: true }
@@ -96,6 +98,8 @@ async function callApi(payload) {
         details: data,
       }
     }
+    const quotaCommit = consumeDailyQuota(payload?.action, { commit: true })
+    if (!quotaCommit.ok) return quotaCommit
     return data
   } catch (err) {
     return {
@@ -227,5 +231,10 @@ export async function generateReview(
     } catch {
       // 불완전한 청크 무시
     }
+  }
+
+  const quotaCommit = consumeDailyQuota('review', { commit: true })
+  if (!quotaCommit.ok) {
+    throw new Error(quotaCommit.error)
   }
 }
