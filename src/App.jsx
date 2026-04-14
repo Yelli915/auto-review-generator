@@ -99,8 +99,8 @@ function App() {
   if (!token) {
     return (
       <div className="app-shell">
-        <main className="auth-layout">
-          <section className="auth-intro">
+        <main className="auth-layout auth-layout--single">
+          <section className="auth-intro auth-intro--with-login">
             <p className="auth-intro__eyebrow">리뷰 작성 자동화</p>
             <h1 className="auth-intro__title">사진 한 장으로 리뷰 초안까지</h1>
             <p className="auth-intro__text">
@@ -114,24 +114,23 @@ function App() {
                 <li>리뷰 생성 후 복사</li>
               </ol>
             </details>
-          </section>
-
-          <section className="auth-card">
-            <h2 className="auth-card__title">Google 로그인</h2>
-            <p className="auth-card__text">
+            <div className="auth-intro__login">
+              <h2 className="auth-card__title">Google 로그인</h2>
+              <p className="auth-card__text">
               로그인 후 리뷰 생성 기능을 사용할 수 있습니다.
-            </p>
-            {authError && (
-              <div className="banner banner--error" role="alert">
-                {authError}
+              </p>
+              {authError && (
+                <div className="banner banner--error" role="alert">
+                  {authError}
+                </div>
+              )}
+              <div className="auth-card__login">
+                <GoogleLogin
+                  onSuccess={handleLoginSuccess}
+                  onError={() => setAuthError('Google 로그인에 실패했습니다.')}
+                  useOneTap
+                />
               </div>
-            )}
-            <div className="auth-card__login">
-              <GoogleLogin
-                onSuccess={handleLoginSuccess}
-                onError={() => setAuthError('Google 로그인에 실패했습니다.')}
-                useOneTap
-              />
             </div>
           </section>
         </main>

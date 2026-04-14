@@ -101,6 +101,10 @@ body {
 .app-shell {
   width: 100%;
   min-height: 100svh;
+  height: 100svh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .app-topbar {
@@ -113,28 +117,38 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
-  padding: 14px 20px;
+  gap: 10px;
+  padding: 8px 16px;
+  min-height: 48px;
+}
+
+.app-topbar > div {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+  white-space: nowrap;
 }
 
 .app-topbar__brand {
   margin: 0;
-  font-size: 0.95rem;
+  font-size: 0.9rem;
   font-weight: 700;
   letter-spacing: 0.01em;
   color: var(--text-h);
 }
 
 .app-topbar__sub {
-  margin: 2px 0 0;
-  font-size: 0.8rem;
+  margin: 0;
+  font-size: 0.76rem;
   color: var(--text-muted);
 }
 
 .app-topbar__logout {
   width: auto;
-  min-height: 40px;
-  padding-inline: 14px;
+  min-height: 32px;
+  padding-inline: 10px;
+  font-size: 0.82rem;
   flex-shrink: 0;
 }
 
@@ -150,12 +164,23 @@ body {
   box-sizing: border-box;
 }
 
+.auth-layout--single {
+  max-width: 760px;
+  grid-template-columns: minmax(320px, 1fr);
+  justify-content: center;
+}
+
 .auth-intro {
   background: color-mix(in oklab, var(--surface) 88%, transparent);
   border: 1px solid var(--border);
   border-radius: 20px;
   box-shadow: var(--shadow);
   padding: clamp(24px, 5vw, 42px);
+}
+
+.auth-intro--with-login {
+  text-align: center;
+  padding: clamp(30px, 6vw, 54px) clamp(20px, 6vw, 52px);
 }
 
 .auth-intro__eyebrow {
@@ -180,8 +205,8 @@ body {
 }
 
 .auth-intro__text {
-  margin: 14px 0 0;
-  max-width: 42ch;
+  margin: 14px auto 0;
+  max-width: 48ch;
   color: var(--text);
 }
 
@@ -197,11 +222,13 @@ body {
 }
 
 .auth-intro__flow {
-  margin: 24px 0 0;
+  margin: 24px auto 0;
   padding: 0;
   list-style: none;
   display: grid;
   gap: 10px;
+  max-width: 520px;
+  counter-reset: auth-flow-step;
 }
 
 .auth-intro__flow li {
@@ -217,7 +244,8 @@ body {
 }
 
 .auth-intro__flow li::before {
-  content: counter(list-item);
+  counter-increment: auth-flow-step;
+  content: counter(auth-flow-step);
   width: 22px;
   height: 22px;
   border-radius: 50%;
@@ -229,6 +257,13 @@ body {
   align-items: center;
   justify-content: center;
   margin-right: 10px;
+}
+
+.auth-intro__login {
+  margin: 30px auto 0;
+  padding-top: 24px;
+  border-top: 1px solid var(--border);
+  max-width: 520px;
 }
 
 .auth-card {
@@ -254,6 +289,8 @@ body {
 
 .auth-card__login {
   margin-top: 16px;
+  display: flex;
+  justify-content: center;
 }
 
 @media (max-width: 880px) {
@@ -285,8 +322,17 @@ body {
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 26px 20px 52px;
+  padding: 18px 20px 18px;
   box-sizing: border-box;
+  min-height: 0;
+}
+
+.review-app--upload-center {
+  justify-content: center;
+}
+
+.review-app--upload-center .review-app__main {
+  margin-top: 14px;
 }
 
 .review-app__header {
@@ -323,7 +369,7 @@ body {
 .review-app__main {
   width: 100%;
   max-width: 760px;
-  margin-top: 18px;
+  margin-top: 12px;
 }
 
 .stepper {
@@ -331,7 +377,7 @@ body {
   align-items: center;
   justify-content: center;
   gap: 0;
-  margin-top: 18px;
+  margin-top: 12px;
   max-width: 760px;
   width: 100%;
 }
@@ -411,7 +457,7 @@ body {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 18px;
-  padding: 26px 24px;
+  padding: 22px 20px;
   box-shadow: var(--shadow);
   text-align: left;
 }
@@ -438,12 +484,12 @@ body {
   font-size: 1.125rem;
   font-weight: 600;
   color: var(--text-h);
-  margin: 0 0 18px;
+  margin: 0 0 14px;
   letter-spacing: -0.02em;
 }
 
 .step-card__lede {
-  margin: -10px 0 18px;
+  margin: -8px 0 14px;
   font-size: 0.8125rem;
   color: var(--text-muted);
   line-height: 1.5;
@@ -501,7 +547,7 @@ body {
 }
 
 .field {
-  margin-bottom: 16px;
+  margin-bottom: 12px;
 }
 
 .field__label {
@@ -524,7 +570,7 @@ body {
   display: block;
   border: 2px dashed var(--border-strong);
   border-radius: var(--radius-md);
-  padding: 28px 16px;
+  padding: 20px 14px;
   text-align: center;
   cursor: pointer;
   background: var(--bg);
@@ -598,12 +644,12 @@ body {
 }
 
 .preview-frame {
-  margin-top: 16px;
+  margin-top: 10px;
   border-radius: var(--radius-md);
   overflow: hidden;
   border: 1px solid var(--border);
   background: var(--code-bg);
-  aspect-ratio: 4 / 3;
+  aspect-ratio: 16 / 10;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -615,13 +661,26 @@ body {
   object-fit: contain;
 }
 
+.preview-actions {
+  margin-top: 8px;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.btn--compact {
+  width: auto;
+  min-height: 30px;
+  padding: 0 10px;
+  font-size: 0.8rem;
+}
+
 .btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
   width: 100%;
-  min-height: 48px;
+  min-height: 44px;
   padding: 0 18px;
   font: inherit;
   font-size: 0.9375rem;
@@ -684,7 +743,7 @@ body {
 }
 
 .btn--lg {
-  min-height: 52px;
+  min-height: 48px;
   font-size: 1rem;
 }
 
@@ -692,7 +751,7 @@ body {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  margin-top: 20px;
+  margin-top: 14px;
 }
 
 .btn-row--tight {
@@ -1323,12 +1382,40 @@ code {
 /* ── Footer ─────────────────────────────────────────────────────────── */
 
 .review-app__footer {
-  margin-top: 36px;
-  padding: 14px 0 6px;
+  margin-top: 14px;
+  padding: 8px 0 2px;
   text-align: center;
   width: 100%;
   max-width: 760px;
   border-top: 1px solid var(--border);
+}
+
+@media (max-height: 900px) {
+  .review-app {
+    padding-top: 12px;
+    padding-bottom: 10px;
+  }
+
+  .review-app__eyebrow {
+    margin-bottom: 6px;
+  }
+
+  .review-app__title {
+    margin-bottom: 4px;
+    font-size: clamp(1.35rem, 3.4vw, 1.7rem);
+  }
+
+  .review-app__tagline {
+    font-size: 0.88rem;
+  }
+
+  .step-card {
+    padding: 18px 16px;
+  }
+
+  .preview-frame {
+    max-height: 180px;
+  }
 }
 
 .review-app__footer p {

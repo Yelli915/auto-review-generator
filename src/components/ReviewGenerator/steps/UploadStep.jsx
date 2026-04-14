@@ -37,6 +37,7 @@ function StarRating({ value, onChange, disabled, ratingLabels }) {
 
 export default function UploadStep({ onNext, isLoading, ratingLabels }) {
   const inputId = useId()
+  const inputRef = useRef(null)
   const [fileData, setFileData] = useState(null)
   const [previewUrl, setPreviewUrl] = useState('')
   const [rating, setRating] = useState(5)
@@ -134,6 +135,7 @@ export default function UploadStep({ onNext, isLoading, ratingLabels }) {
         >
           <input
             id={inputId}
+            ref={inputRef}
             type="file"
             accept="image/*"
             onChange={handleFileChange}
@@ -144,7 +146,7 @@ export default function UploadStep({ onNext, isLoading, ratingLabels }) {
           ) : (
             <>
               <p className="file-drop__text">
-                {fileData ? '다른 사진으로 교체' : '탭하거나 파일을 끌어다 놓으세요'}
+                {fileData ? '이미지 업로드됨' : '탭하거나 파일을 끌어다 놓으세요'}
               </p>
               <p className="file-drop__sub">
                 JPG · PNG · WEBP 등 · 최대 {MAX_FILE_SIZE_MB}MB
@@ -162,9 +164,21 @@ export default function UploadStep({ onNext, isLoading, ratingLabels }) {
       </div>
 
       {previewUrl && (
-        <div className="preview-frame">
-          <img src={previewUrl} alt="선택한 이미지 미리보기" />
-        </div>
+        <>
+          <div className="preview-frame">
+            <img src={previewUrl} alt="선택한 이미지 미리보기" />
+          </div>
+          <div className="preview-actions">
+            <button
+              type="button"
+              className="btn btn--ghost btn--compact"
+              onClick={() => inputRef.current?.click()}
+              disabled={busy}
+            >
+              다른 사진으로 교체
+            </button>
+          </div>
+        </>
       )}
 
       <div className="field field--no-mb">

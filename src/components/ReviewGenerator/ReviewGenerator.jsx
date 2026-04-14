@@ -134,8 +134,10 @@ export default function ReviewGenerator({ onReviewComplete }) {
     return 'stepper__item'
   }
 
+  const isUploadStep = step === STEPS.UPLOAD
+
   return (
-    <div className="review-app">
+    <div className={`review-app ${isUploadStep ? 'review-app--upload-center' : ''}`}>
       <header className="review-app__header">
         <p className="review-app__eyebrow">STEP {stepIndex + 1} / 3</p>
         <h1 className="review-app__title">{stepMeta.title}</h1>
