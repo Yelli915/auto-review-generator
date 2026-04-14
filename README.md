@@ -2,7 +2,7 @@
 
 > 사진 한 장과 별점만으로 자동으로 리뷰를 작성해주는 AI 웹 애플리케이션
 
-![React](https://img.shields.io/badge/React-18-61DAFB?style=flat-square&logo=react)
+![React](https://img.shields.io/badge/React-19-61DAFB?style=flat-square&logo=react)
 ![JavaScript](https://img.shields.io/badge/JavaScript-ES2022-F7DF1E?style=flat-square&logo=javascript)
 ![Gemini](https://img.shields.io/badge/Gemini_Flash-Free_Tier-4285F4?style=flat-square&logo=google)
 
@@ -28,10 +28,10 @@
 
 | 분류 | 기술 | 선택 이유 |
 |------|------|-----------|
-| 프론트엔드 | React 18 | 컴포넌트 기반 구조로 외부 삽입 용이 |
+| 프론트엔드 | React 19 | 컴포넌트 기반 구조로 외부 삽입 용이 |
 | 언어 | JavaScript ES2022+ | 표준 비동기 처리, ReadableStream 지원 |
 | 스타일 | CSS Variables | 라이트 / 다크 모드 자동 대응 |
-| AI API | Google Gemini 1.5 Flash | 무료티어 제공, 멀티모달 단일 호출 지원 |
+| AI API | Google Gemini 2.5 Flash | 무료티어 제공, 멀티모달 단일 호출 지원 |
 
 ### Gemini Flash를 선택한 이유
 
@@ -43,6 +43,8 @@ Claude Sonnet, GPT-4o 등 상용 API 대비 **무료 한도가 넓고**, 이미�
 | 일일 요청 | 1,500회 |
 | 분당 토큰 | 1,000,000 tokens |
 | 일일 가용 사용자 (추정) | 약 500~750명 |
+
+> 무료티어 수치는 변동될 수 있어, 배포 전 [공식 문서](https://ai.google.dev/gemini-api/docs/rate-limits) 기준으로 재확인하는 것을 권장합니다.
 
 ---
 
@@ -259,7 +261,7 @@ LLM이 자주 쓰는 뻔한 표현을 명시적으로 금지합니다.
 
 ```bash
 # 저장소 클론
-git clone https://github.com/your-username/auto-review-generator.git
+git clone https://github.com/Yelli915/auto-review-generator.git
 cd auto-review-generator
 
 # 의존성 설치
@@ -272,7 +274,7 @@ cp .env.example .env
 # 개발 서버 실행(프론트)
 npm run dev
 # 또는 Vercel 서버리스까지 함께 테스트
-vercel dev
+npm run dev:vercel
 ```
 
 ### 환경변수

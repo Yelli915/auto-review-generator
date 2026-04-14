@@ -1,5 +1,5 @@
 {
-  "name": "previewer",
+  "name": "auto-review-generator",
   "private": true,
   "version": "1.0.0",
   "type": "module",
@@ -16,15 +16,15 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Yelli915/previewer.git"
+    "url": "git+https://github.com/Yelli915/auto-review-generator.git"
   },
   "keywords": [],
   "author": "",
   "license": "MIT",
   "bugs": {
-    "url": "https://github.com/Yelli915/previewer/issues"
+    "url": "https://github.com/Yelli915/auto-review-generator/issues"
   },
-  "homepage": "https://github.com/Yelli915/previewer#readme",
+  "homepage": "https://github.com/Yelli915/auto-review-generator#readme",
   "dependencies": {
     "@react-oauth/google": "^0.13.5",
     "google-auth-library": "^10.6.2",
