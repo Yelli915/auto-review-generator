@@ -156,7 +156,7 @@ export default function UploadStep({ onNext, isLoading, ratingLabels }) {
           ) : (
             <>
               <p className="file-drop__text">
-                {fileData ? '이미지 업로드됨' : '탭하거나 파일을 끌어다 놓으세요'}
+                탭하거나 파일을 끌어다 놓으세요
               </p>
               <p className="file-drop__sub">
                 JPG · PNG · WEBP 등 · 최대 {MAX_FILE_SIZE_MB}MB
@@ -174,21 +174,15 @@ export default function UploadStep({ onNext, isLoading, ratingLabels }) {
       </div>
 
       {previewUrl && (
-        <>
-          <div className="preview-frame">
-            <img src={previewUrl} alt="선택한 이미지 미리보기" />
-          </div>
-          <div className="preview-actions">
-            <button
-              type="button"
-              className="btn btn--ghost btn--compact"
-              onClick={() => inputRef.current?.click()}
-              disabled={busy}
-            >
-              다른 사진으로 교체
-            </button>
-          </div>
-        </>
+        <button
+          type="button"
+          className="preview-frame preview-frame--replace"
+          onClick={() => inputRef.current?.click()}
+          disabled={busy}
+          aria-label="업로드된 이미지를 다른 사진으로 교체"
+        >
+          <img src={previewUrl} alt="선택한 이미지 미리보기" />
+        </button>
       )}
 
       <div className="btn-row">

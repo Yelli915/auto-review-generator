@@ -6,8 +6,6 @@ import {
   setUnauthorizedHandler,
 } from './components/ReviewGenerator/api/geminiService'
 
-const AUTH_STORAGE_KEY = 'autoReviewGoogleIdToken'
-
 function getEnvGoogleClientId() {
   if (
     typeof import.meta === 'undefined' ||
@@ -20,13 +18,7 @@ function getEnvGoogleClientId() {
 }
 
 function App() {
-  const [token, setToken] = useState(() => {
-    try {
-      return (window.sessionStorage.getItem(AUTH_STORAGE_KEY) || '').trim()
-    } catch {
-      return ''
-    }
-  })
+  const [token, setToken] = useState('')
   const [authError, setAuthError] = useState('')
   const [isFlowOpen, setIsFlowOpen] = useState(true)
   const [flowMaxHeight, setFlowMaxHeight] = useState('0px')
@@ -48,11 +40,6 @@ function App() {
       setToken('')
       setGoogleIdToken('')
       setAuthError('로그인이 만료되었습니다. 다시 로그인해 주세요.')
-      try {
-        window.sessionStorage.removeItem(AUTH_STORAGE_KEY)
-      } catch {
-        void 0
-      }
     })
     return () => setUnauthorizedHandler(null)
   }, [])
@@ -69,22 +56,12 @@ function App() {
     setAuthError('')
     setToken(credential)
     setGoogleIdToken(credential)
-    try {
-      window.sessionStorage.setItem(AUTH_STORAGE_KEY, credential)
-    } catch {
-      void 0
-    }
   }
 
   const handleLogout = () => {
     googleLogout()
     setToken('')
     setGoogleIdToken('')
-    try {
-      window.sessionStorage.removeItem(AUTH_STORAGE_KEY)
-    } catch {
-      void 0
-    }
   }
 
   if (!googleClientId) {
