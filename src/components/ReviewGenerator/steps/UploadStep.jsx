@@ -2,9 +2,8 @@ import { useEffect, useId, useRef, useState } from 'react'
 import { resizeAndConvertToBase64 } from '../utils/imageUtils'
 
 const MAX_FILE_SIZE_MB = 15
-const RATING_LABELS = ['', '매우 불만족', '불만족', '보통', '만족', '매우 만족']
 
-function StarRating({ value, onChange, disabled }) {
+function StarRating({ value, onChange, disabled, ratingLabels }) {
   const [hovered, setHovered] = useState(null)
   const display = hovered ?? value
 
@@ -30,13 +29,13 @@ function StarRating({ value, onChange, disabled }) {
         </button>
       ))}
       <span className="star-rating__label">
-        {value}점 · {RATING_LABELS[display]}
+        {value}점 · {ratingLabels[display]}
       </span>
     </div>
   )
 }
 
-export default function UploadStep({ onNext, isLoading }) {
+export default function UploadStep({ onNext, isLoading, ratingLabels }) {
   const inputId = useId()
   const [fileData, setFileData] = useState(null)
   const [previewUrl, setPreviewUrl] = useState('')
@@ -170,7 +169,12 @@ export default function UploadStep({ onNext, isLoading }) {
 
       <div className="field field--no-mb">
         <label className="field__label">별점</label>
-        <StarRating value={rating} onChange={setRating} disabled={busy} />
+        <StarRating
+          value={rating}
+          onChange={setRating}
+          disabled={busy}
+          ratingLabels={ratingLabels}
+        />
       </div>
 
       <div className="btn-row">

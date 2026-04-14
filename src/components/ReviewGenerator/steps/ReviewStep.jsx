@@ -1,6 +1,5 @@
 import { useState } from 'react'
 
-const RATING_LABELS = ['', '매우 불만족', '불만족', '보통', '만족', '매우 만족']
 const LENGTH_LABELS = { short: '짧게', medium: '보통', long: '길게' }
 const TONE_LABELS = {
   neutral: '기본',
@@ -16,12 +15,14 @@ export default function ReviewStep({
   onReset,
   onRegenerate,
   rating,
+  ratingLabels,
   selectedKeywords,
   reviewLength,
   reviewTone,
 }) {
   const [copied, setCopied] = useState(false)
   const [copyError, setCopyError] = useState(false)
+  const [showMoreActions, setShowMoreActions] = useState(false)
 
   const handleCopy = async () => {
     try {
@@ -67,7 +68,7 @@ export default function ReviewStep({
                   </span>
                 ))}
                 <span className="review-context__meta">
-                  {rating}점 · {RATING_LABELS[rating]}
+                  {rating}점 · {ratingLabels[rating]}
                 </span>
               </div>
             </div>
@@ -128,17 +129,7 @@ export default function ReviewStep({
         <p className="field__hint copy-hint">붙여넣기 해서 사용하세요.</p>
       )}
 
-      <div className="btn-row btn-row--split review-nav">
-        {typeof onRegenerate === 'function' && (
-          <button
-            type="button"
-            className="btn btn--secondary"
-            onClick={onRegenerate}
-            disabled={isStreaming}
-          >
-            리뷰 다시 생성
-          </button>
-        )}
+      <div className="btn-row review-nav">
         <button
           type="button"
           className="btn btn--secondary"
@@ -148,15 +139,39 @@ export default function ReviewStep({
           키워드 다시 선택
         </button>
       </div>
-
-      <button
-        type="button"
-        className="btn btn--ghost review-reset"
-        onClick={onReset}
-        disabled={isStreaming}
-      >
-        처음으로 돌아가기
-      </button>
+      <div className="review-more">
+        <button
+          type="button"
+          className="btn-link"
+          onClick={() => setShowMoreActions((prev) => !prev)}
+          disabled={isStreaming}
+          aria-expanded={showMoreActions}
+        >
+          {showMoreActions ? '다른 작업 숨기기' : '다른 작업 보기'}
+        </button>
+        {showMoreActions && (
+          <div className="btn-row review-more__actions">
+            {typeof onRegenerate === 'function' && (
+              <button
+                type="button"
+                className="btn btn--secondary"
+                onClick={onRegenerate}
+                disabled={isStreaming}
+              >
+                리뷰 다시 생성
+              </button>
+            )}
+            <button
+              type="button"
+              className="btn btn--ghost review-reset"
+              onClick={onReset}
+              disabled={isStreaming}
+            >
+              처음으로 돌아가기
+            </button>
+          </div>
+        )}
+      </div>
     </div>
   )
 }

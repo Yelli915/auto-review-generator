@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo, useState } from 'react'
+import { useId, useMemo, useState } from 'react'
 
 const SKELETON_WIDTHS = [80, 96, 68, 110, 76, 90]
 
@@ -18,10 +18,6 @@ export default function KeywordStep({
     () => (Array.isArray(keywords) ? keywords : []),
     [keywords],
   )
-
-  useEffect(() => {
-    setSelected([])
-  }, [keywords])
 
   const toggleKeyword = (keyword) => {
     setSelected((prev) =>
@@ -152,20 +148,21 @@ export default function KeywordStep({
       <div className="btn-row btn-row--tight btn-row--split">
         <button
           type="button"
-          className="btn btn--secondary"
-          onClick={onRefresh}
-          disabled={isLoading}
-        >
-          {isLoading ? '생성 중…' : '키워드 다시 생성'}
-        </button>
-
-        <button
-          type="button"
           className="btn btn--primary btn--lg"
           onClick={() => onNext(selected, reviewLength, reviewTone)}
           disabled={selected.length === 0 || isEmpty || isLoading}
         >
           리뷰 작성
+        </button>
+      </div>
+      <div className="btn-row btn-row--tight">
+        <button
+          type="button"
+          className="btn-link"
+          onClick={onRefresh}
+          disabled={isLoading}
+        >
+          {isLoading ? '생성 중…' : '키워드 다시 생성'}
         </button>
       </div>
     </div>

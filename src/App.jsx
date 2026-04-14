@@ -20,22 +20,19 @@ function getEnvGoogleClientId() {
 }
 
 function App() {
-  const [token, setToken] = useState('')
+  const [token, setToken] = useState(() => {
+    try {
+      return (window.sessionStorage.getItem(AUTH_STORAGE_KEY) || '').trim()
+    } catch {
+      return ''
+    }
+  })
   const [authError, setAuthError] = useState('')
-  const googleClientId = useMemo(getEnvGoogleClientId, [])
+  const googleClientId = useMemo(() => getEnvGoogleClientId(), [])
 
   useEffect(() => {
-    try {
-      const saved = window.sessionStorage.getItem(AUTH_STORAGE_KEY) || ''
-      const normalized = saved.trim()
-      if (normalized) {
-        setToken(normalized)
-        setGoogleIdToken(normalized)
-      }
-    } catch {
-      void 0
-    }
-  }, [])
+    setGoogleIdToken(token)
+  }, [token])
 
   useEffect(() => {
     setUnauthorizedHandler(() => {
@@ -83,44 +80,78 @@ function App() {
 
   if (!googleClientId) {
     return (
-      <main className="review-app">
-        <div className="banner banner--error" role="alert">
-          VITE_GOOGLE_CLIENT_ID가 설정되지 않았습니다.
-        </div>
-      </main>
+      <div className="app-shell">
+        <main className="auth-layout">
+          <section className="auth-card">
+            <h1 className="auth-card__title">Auto Review</h1>
+            <p className="auth-card__text">
+              실행 전 환경 변수 확인이 필요합니다.
+            </p>
+            <div className="banner banner--error" role="alert">
+              VITE_GOOGLE_CLIENT_ID가 설정되지 않았습니다.
+            </div>
+          </section>
+        </main>
+      </div>
     )
   }
 
   if (!token) {
     return (
-      <main className="review-app">
-        <header className="review-app__header">
-          <h1 className="review-app__title">Auto Review</h1>
-          <p className="review-app__tagline">Google 로그인 후 이용할 수 있습니다.</p>
-        </header>
-        {authError && (
-          <div className="banner banner--error" role="alert">
-            {authError}
-          </div>
-        )}
-        <GoogleLogin
-          onSuccess={handleLoginSuccess}
-          onError={() => setAuthError('Google 로그인에 실패했습니다.')}
-          useOneTap
-        />
-      </main>
+      <div className="app-shell">
+        <main className="auth-layout">
+          <section className="auth-intro">
+            <p className="auth-intro__eyebrow">리뷰 작성 자동화</p>
+            <h1 className="auth-intro__title">사진 한 장으로 리뷰 초안까지</h1>
+            <p className="auth-intro__text">
+              업로드부터 복사까지, 3단계로 빠르게 끝냅니다.
+            </p>
+            <details className="auth-intro__flow-wrap" open>
+              <summary>사용 흐름 보기</summary>
+              <ol className="auth-intro__flow">
+                <li>이미지와 별점 입력</li>
+                <li>키워드/길이/말투 선택</li>
+                <li>리뷰 생성 후 복사</li>
+              </ol>
+            </details>
+          </section>
+
+          <section className="auth-card">
+            <h2 className="auth-card__title">Google 로그인</h2>
+            <p className="auth-card__text">
+              로그인 후 리뷰 생성 기능을 사용할 수 있습니다.
+            </p>
+            {authError && (
+              <div className="banner banner--error" role="alert">
+                {authError}
+              </div>
+            )}
+            <div className="auth-card__login">
+              <GoogleLogin
+                onSuccess={handleLoginSuccess}
+                onError={() => setAuthError('Google 로그인에 실패했습니다.')}
+                useOneTap
+              />
+            </div>
+          </section>
+        </main>
+      </div>
     )
   }
 
   return (
-    <>
-      <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '12px 16px' }}>
-        <button type="button" onClick={handleLogout}>
+    <div className="app-shell">
+      <header className="app-topbar">
+        <div>
+          <p className="app-topbar__brand">Auto Review</p>
+          <p className="app-topbar__sub">입력부터 생성까지 한 번에</p>
+        </div>
+        <button type="button" className="btn btn--secondary app-topbar__logout" onClick={handleLogout}>
           로그아웃
         </button>
-      </div>
+      </header>
       <ReviewGenerator />
-    </>
+    </div>
   )
 }
 

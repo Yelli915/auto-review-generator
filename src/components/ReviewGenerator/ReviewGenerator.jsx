@@ -5,6 +5,7 @@ import ReviewStep from './steps/ReviewStep'
 import { generateKeywords, generateReview } from './api/geminiService'
 
 const STEPS = { UPLOAD: 'upload', KEYWORD: 'keyword', REVIEW: 'review' }
+const RATING_LABELS = ['', '매우 불만족', '불만족', '보통', '만족', '매우 만족']
 
 async function loadKeywordsFromImage(imagePayload) {
   const result = await generateKeywords({
@@ -121,6 +122,11 @@ export default function ReviewGenerator({ onReviewComplete }) {
     [STEPS.KEYWORD]: 1,
     [STEPS.REVIEW]: 2,
   }[step]
+  const stepMeta = [
+    { title: '사진 입력', desc: '이미지와 별점을 선택합니다.' },
+    { title: '옵션 선택', desc: '키워드, 길이, 말투를 정합니다.' },
+    { title: '결과 확인', desc: '생성된 리뷰를 확인하고 복사합니다.' },
+  ][stepIndex]
 
   const stepClass = (i) => {
     if (i < stepIndex) return 'stepper__item is-done'
@@ -131,10 +137,10 @@ export default function ReviewGenerator({ onReviewComplete }) {
   return (
     <div className="review-app">
       <header className="review-app__header">
-        <h1 className="review-app__title">Auto Review</h1>
+        <p className="review-app__eyebrow">STEP {stepIndex + 1} / 3</p>
+        <h1 className="review-app__title">{stepMeta.title}</h1>
         <p className="review-app__tagline">
-          사진·별점으로 키워드를 만든 뒤, 키워드·길이·말투에 맞춰 리뷰 초안을
-          만들어 드립니다.
+          {stepMeta.desc}
         </p>
       </header>
 
@@ -174,12 +180,24 @@ export default function ReviewGenerator({ onReviewComplete }) {
             {error}
           </div>
         )}
+        {isLoading && (
+          <div className="banner banner--info" role="status" aria-live="polite">
+            {step === STEPS.UPLOAD
+              ? '이미지를 분석해 키워드를 준비하고 있습니다.'
+              : '선택한 이미지로 키워드를 다시 생성하고 있습니다.'}
+          </div>
+        )}
 
         {step === STEPS.UPLOAD && (
-          <UploadStep onNext={handleUploadNext} isLoading={isLoading} />
+          <UploadStep
+            onNext={handleUploadNext}
+            isLoading={isLoading}
+            ratingLabels={RATING_LABELS}
+          />
         )}
         {step === STEPS.KEYWORD && (
           <KeywordStep
+            key={keywords.join('|')}
             keywords={keywords}
             onNext={handleKeywordNext}
             onRefresh={handleRefresh}
@@ -195,6 +213,7 @@ export default function ReviewGenerator({ onReviewComplete }) {
             onReset={handleBackToUpload}
             onRegenerate={handleRegenerate}
             rating={imageData?.rating}
+            ratingLabels={RATING_LABELS}
             selectedKeywords={lastUsedOptions?.keywords}
             reviewLength={lastUsedOptions?.length}
             reviewTone={lastUsedOptions?.tone}
