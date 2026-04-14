@@ -1,5 +1,6 @@
 /* global Buffer, process */
 import { OAuth2Client } from 'google-auth-library'
+import { createJsonHeaders, readJsonSafely } from '../shared/httpJson.js'
 
 const MODELS = ['gemini-2.5-flash']
 /** 429는 쿼터·RPM이라 즉시 반환(재시도 안 함). 나머지만 백오프 재시도 */
@@ -78,14 +79,37 @@ function normalizeIp(raw) {
   return raw.trim().replace(/^::ffff:/, '')
 }
 
-function getClientIp(req) {
-  const forwarded = req.headers?.['x-forwarded-for']
-  if (typeof forwarded === 'string' && forwarded.trim()) {
-    return normalizeIp(forwarded.split(',')[0])
+function isValidIp(ip) {
+  if (typeof ip !== 'string' || !ip) return false
+  // Basic IPv4 / IPv6 validation for rate-limit key usage.
+  if (/^\d{1,3}(?:\.\d{1,3}){3}$/.test(ip)) {
+    return ip.split('.').every((part) => {
+      const n = Number(part)
+      return Number.isInteger(n) && n >= 0 && n <= 255
+    })
   }
-  const realIp = req.headers?.['x-real-ip']
-  if (typeof realIp === 'string' && realIp.trim()) return normalizeIp(realIp)
-  return normalizeIp(req.socket?.remoteAddress || '')
+  return /^[a-fA-F0-9:]+$/.test(ip)
+}
+
+function shouldTrustProxyHeaders() {
+  return process.env.TRUST_PROXY_HEADERS === '1'
+}
+
+function getClientIp(req) {
+  if (shouldTrustProxyHeaders()) {
+    const forwarded = req.headers?.['x-forwarded-for']
+    if (typeof forwarded === 'string' && forwarded.trim()) {
+      const candidate = normalizeIp(forwarded.split(',')[0])
+      if (isValidIp(candidate)) return candidate
+    }
+    const realIp = req.headers?.['x-real-ip']
+    if (typeof realIp === 'string' && realIp.trim()) {
+      const candidate = normalizeIp(realIp)
+      if (isValidIp(candidate)) return candidate
+    }
+  }
+  const socketIp = normalizeIp(req.socket?.remoteAddress || '')
+  return isValidIp(socketIp) ? socketIp : ''
 }
 
 function applyRateLimit(identifier) {
@@ -572,19 +596,11 @@ async function requestGemini({ key, payload, maxRetries = MAX_RETRIES }) {
     try {
       const response = await fetch(makeUrl(model), {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-goog-api-key': key,
-        },
+        headers: createJsonHeaders({ 'x-goog-api-key': key }),
         body: JSON.stringify(payload),
       })
 
-      let data = {}
-      try {
-        data = await response.json()
-      } catch {
-        data = {}
-      }
+      const data = await readJsonSafely(response)
 
       if (response.ok) return { ok: true, data, model }
 
@@ -644,10 +660,7 @@ async function streamGeminiReview({ key, rating, keywords, length, tone, res }) 
 
   const response = await fetch(makeStreamUrl(STREAM_MODEL), {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-goog-api-key': key,
-    },
+    headers: createJsonHeaders({ 'x-goog-api-key': key }),
     body: JSON.stringify({
       contents: [{ parts: [{ text: prompt }] }],
       generationConfig: { temperature: 0.7, maxOutputTokens: MAX_OUTPUT_TOKENS[safeLength] ?? 280 },
@@ -655,12 +668,7 @@ async function streamGeminiReview({ key, rating, keywords, length, tone, res }) 
   })
 
   if (!response.ok) {
-    let data = {}
-    try {
-      data = await response.json()
-    } catch {
-      data = {}
-    }
+    const data = await readJsonSafely(response)
     const raw = data?.error?.message || '리뷰 생성 실패'
     throw new Error(humanizeGeminiApiError(response.status, raw))
   }
@@ -760,7 +768,7 @@ export default async function handler(req, res) {
   if (!auth.ok) {
     return json(res, auth.status, { ok: false, error: auth.error })
   }
-  const rateKey = auth.userId || getClientIp(req) || 'unknown'
+  const rateKey = auth.userId ? `user:${auth.userId}` : `ip:${getClientIp(req) || 'unknown'}`
   const rate = applyRateLimit(rateKey)
   if (!rate.ok) {
     res.setHeader('Retry-After', String(rate.retryAfterSec))

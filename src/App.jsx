@@ -85,29 +85,37 @@ function App() {
                   {authError}
                 </div>
               )}
-              <div className="auth-card__login">
+              <div className="auth-card__login auth-card__login--custom">
+                <span className="auth-card__login-overlay" aria-hidden="true">
+                  로그인
+                </span>
                 <GoogleLogin
                   onSuccess={handleLoginSuccess}
                   onError={() => setAuthError('Google 로그인에 실패했습니다.')}
                   auto_select={false}
                   shape="pill"
+                  width={160}
                 />
               </div>
             </div>
-            <details className="auth-intro__flow-wrap" open={isFlowOpen}>
-              <summary
+            <div className={`auth-intro__flow-wrap ${isFlowOpen ? 'is-open' : ''}`}>
+              <button
+                type="button"
+                className="auth-intro__flow-toggle"
+                aria-expanded={isFlowOpen}
                 onClick={(e) => {
                   e.preventDefault()
                   setIsFlowOpen((prev) => !prev)
                 }}
               >
                 사용 흐름 보기
-              </summary>
+              </button>
               <div
                 ref={(node) => {
                   flowContentRef.current = node
                 }}
                 className="auth-intro__flow-panel"
+                aria-hidden={!isFlowOpen}
                 style={{ maxHeight: flowMaxHeight }}
               >
                 <ol className="auth-intro__flow">
@@ -116,7 +124,7 @@ function App() {
                   <li>리뷰 생성 후 복사</li>
                 </ol>
               </div>
-            </details>
+            </div>
           </section>
         </main>
       </div>

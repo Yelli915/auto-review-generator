@@ -1,3 +1,8 @@
+import {
+  createJsonHeaders,
+  pickErrorMessage,
+  readJsonSafely,
+} from '../../../../shared/httpJson.js'
 const API_PATH = '/api/gemini'
 const KEYWORD_DEBOUNCE_MS = 900
 const DAILY_LIMIT = 20
@@ -74,18 +79,10 @@ async function callApi(payload) {
   try {
     const response = await fetch(API_PATH, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...buildAuthHeaders(),
-      },
+      headers: createJsonHeaders(buildAuthHeaders()),
       body: JSON.stringify(payload),
     })
-    let data = {}
-    try {
-      data = await response.json()
-    } catch {
-      data = {}
-    }
+    const data = await readJsonSafely(response)
 
     if (!response.ok) {
       if (response.status === 401 && onUnauthorized) {
@@ -93,7 +90,7 @@ async function callApi(payload) {
       }
       return {
         ok: false,
-        error: data?.error ?? `요청 실패 (HTTP ${response.status})`,
+        error: pickErrorMessage(data, `요청 실패 (HTTP ${response.status})`),
         status: response.status,
         details: data,
       }
@@ -167,10 +164,7 @@ export async function generateReview(
 
   const response = await fetch(API_PATH, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...buildAuthHeaders(),
-    },
+    headers: createJsonHeaders(buildAuthHeaders()),
     body: JSON.stringify({
       action: 'review',
       rating,
@@ -181,13 +175,8 @@ export async function generateReview(
   })
 
   if (!response.ok) {
-    let error = {}
-    try {
-      error = await response.json()
-    } catch {
-      error = {}
-    }
-    const msg = typeof error?.error === 'string' ? error.error : error?.error?.message
+    const error = await readJsonSafely(response)
+    const msg = pickErrorMessage(error, '리뷰 생성 실패')
     if (response.status === 401 && onUnauthorized) {
       onUnauthorized()
     }

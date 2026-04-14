@@ -291,6 +291,16 @@ Google OAuth Client ID는 Google Cloud Console에서 발급한 웹 클라이언�
 
 ---
 
+## 🔐 배포 보안 헤더(CSP) 설정
+
+- Vercel: `vercel.json`의 `headers` 사용
+- Netlify: `netlify.toml`의 `[[headers]]` 사용
+- Nginx: `deploy/nginx/security-headers.conf`를 서버 블록에 `include` 해서 사용
+
+`frame-ancestors`는 메타 태그에서 무시되므로, 반드시 서버 응답 헤더로 설정해야 합니다.
+
+---
+
 ## 📈 확장 로드맵
 
 **단기**
