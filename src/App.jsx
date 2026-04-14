@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { GoogleLogin, googleLogout } from '@react-oauth/google'
 import ReviewGenerator from './components/ReviewGenerator/ReviewGenerator'
 import {
@@ -28,11 +28,20 @@ function App() {
     }
   })
   const [authError, setAuthError] = useState('')
+  const [isFlowOpen, setIsFlowOpen] = useState(true)
+  const [flowMaxHeight, setFlowMaxHeight] = useState('0px')
   const googleClientId = useMemo(() => getEnvGoogleClientId(), [])
+  const flowContentRef = useRef(null)
 
   useEffect(() => {
     setGoogleIdToken(token)
   }, [token])
+
+  useEffect(() => {
+    const content = flowContentRef.current
+    if (!content) return
+    setFlowMaxHeight(isFlowOpen ? `${content.scrollHeight}px` : '0px')
+  }, [isFlowOpen, token])
 
   useEffect(() => {
     setUnauthorizedHandler(() => {
@@ -116,18 +125,33 @@ function App() {
                 <GoogleLogin
                   onSuccess={handleLoginSuccess}
                   onError={() => setAuthError('Google 로그인에 실패했습니다.')}
-                  useOneTap
+                  auto_select={false}
                   shape="pill"
                 />
               </div>
             </div>
-            <details className="auth-intro__flow-wrap" open>
-              <summary>사용 흐름 보기</summary>
-              <ol className="auth-intro__flow">
-                <li>이미지와 별점 입력</li>
-                <li>키워드/길이/말투 선택</li>
-                <li>리뷰 생성 후 복사</li>
-              </ol>
+            <details className="auth-intro__flow-wrap" open={isFlowOpen}>
+              <summary
+                onClick={(e) => {
+                  e.preventDefault()
+                  setIsFlowOpen((prev) => !prev)
+                }}
+              >
+                사용 흐름 보기
+              </summary>
+              <div
+                ref={(node) => {
+                  flowContentRef.current = node
+                }}
+                className="auth-intro__flow-panel"
+                style={{ maxHeight: flowMaxHeight }}
+              >
+                <ol className="auth-intro__flow">
+                  <li>이미지와 별점 입력</li>
+                  <li>키워드/길이/말투 선택</li>
+                  <li>리뷰 생성 후 복사</li>
+                </ol>
+              </div>
             </details>
           </section>
         </main>
@@ -136,16 +160,10 @@ function App() {
   }
 
   return (
-    <div className="app-shell">
-      <header className="app-topbar">
-        <div>
-          <p className="app-topbar__brand">Auto Review</p>
-          <p className="app-topbar__sub">입력부터 생성까지 한 번에</p>
-        </div>
-        <button type="button" className="btn btn--secondary app-topbar__logout" onClick={handleLogout}>
-          로그아웃
-        </button>
-      </header>
+    <div className="app-shell app-shell--authed">
+      <button type="button" className="btn btn--secondary app-logout-floating" onClick={handleLogout}>
+        로그아웃
+      </button>
       <ReviewGenerator />
     </div>
   )
