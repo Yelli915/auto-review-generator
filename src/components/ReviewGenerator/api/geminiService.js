@@ -21,6 +21,11 @@ const lengthMap = {
 }
 
 const validTones = new Set(['neutral', 'friendly', 'formal', 'casual'])
+const minReviewChars = {
+  short: 20,
+  medium: 45,
+  long: 80,
+}
 
 export function setGoogleIdToken(token) {
   googleIdToken = typeof token === 'string' ? token.trim() : ''
@@ -190,6 +195,9 @@ export async function generateReview(
   const reader = response.body.getReader()
   const decoder = new TextDecoder()
   let buffer = ''
+  let fullText = ''
+  let streamError = ''
+  let finishReason = null
 
   while (true) {
     const { done, value } = await reader.read()
@@ -205,7 +213,14 @@ export async function generateReview(
       try {
         const json = JSON.parse(payload)
         const text = json?.text
-        if (text) safeOnChunk(text)
+        if (typeof json?.error === 'string' && json.error.trim()) {
+          streamError = json.error.trim()
+          continue
+        }
+        if (text) fullText += text
+        if (json?.done) {
+          finishReason = json?.finishReason ?? finishReason
+        }
       } catch {
         // 불완전한 청크 무시
       }
@@ -216,11 +231,31 @@ export async function generateReview(
     try {
       const json = JSON.parse(buffer.trim())
       const text = json?.text
-      if (text) safeOnChunk(text)
+      if (typeof json?.error === 'string' && json.error.trim()) {
+        streamError = json.error.trim()
+      } else {
+        if (text) fullText += text
+        if (json?.done) {
+          finishReason = json?.finishReason ?? finishReason
+        }
+      }
     } catch {
       // 불완전한 청크 무시
     }
   }
+
+  const normalizedReview = fullText.replace(/\s+/g, ' ').trim()
+  if (streamError) {
+    throw new Error(streamError)
+  }
+  if (finishReason === 'MAX_TOKENS') {
+    throw new Error('응답이 중간에 잘렸습니다. 리뷰 다시 생성을 눌러 주세요.')
+  }
+  if (normalizedReview.length < (minReviewChars[safeLength] ?? 45)) {
+    throw new Error('리뷰가 너무 짧게 생성되었습니다. 다시 생성해 주세요.')
+  }
+
+  safeOnChunk(fullText)
 
   const quotaCommit = consumeDailyQuota('review', { commit: true })
   if (!quotaCommit.ok) {

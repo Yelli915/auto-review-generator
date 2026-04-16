@@ -26,9 +26,9 @@ const REVIEW_TONE_MAP = {
 }
 
 const MAX_OUTPUT_TOKENS = {
-  short: 150,
-  medium: 280,
-  long: 450,
+  short: 220,
+  medium: 360,
+  long: 520,
 }
 
 /** 키워드 칩·토큰 폴백 공통 길이 (한국어 짧은 구) */
@@ -47,6 +47,11 @@ const GOOGLE_OAUTH_CLIENT = new OAuth2Client()
 /** 서로 다른 키워드 개수(한글 필터 통과 후) */
 const KEYWORDS_MIN_COUNT = 3
 const KEYWORDS_MAX_COUNT = 8
+const REVIEW_MIN_CHARS = {
+  short: 20,
+  medium: 45,
+  long: 80,
+}
 
 function keywordSentimentGuide(rating) {
   if (rating <= 1) {
@@ -335,6 +340,24 @@ function stripEnglishJsonPreamble(str) {
   return s
 }
 
+function isLikelyKeywordPhrase(value) {
+  if (typeof value !== 'string') return false
+  const s = value.trim()
+  if (!s) return false
+  if (/[,:;!?]/.test(s)) return false
+  if (/["'`]/.test(s)) return false
+  if (/\s{2,}/.test(s)) return false
+  if (s.split(/\s+/).length > 4) return false
+  if (
+    /(합니다|해요|했어요|입니다|있어요|없어요|같아요|느껴져|느껴지|느껴|추천해요|바르는 순간)$/u.test(
+      s,
+    )
+  ) {
+    return false
+  }
+  return true
+}
+
 function sanitizeKeywordArray(arr) {
   if (!Array.isArray(arr)) return null
   const cleaned = arr
@@ -343,7 +366,8 @@ function sanitizeKeywordArray(arr) {
       (s) =>
         s.length >= KEYWORD_LEN_MIN &&
         s.length <= KEYWORD_LEN_MAX &&
-        hasHangul(s),
+        hasHangul(s) &&
+        isLikelyKeywordPhrase(s),
     )
   return cleaned.length ? Array.from(new Set(cleaned)) : null
 }
@@ -565,6 +589,10 @@ function summarizeKeywordDebug(data, rawText) {
   }
 }
 
+function normalizeReviewText(text) {
+  return typeof text === 'string' ? text.replace(/\s+/g, ' ').trim() : ''
+}
+
 /** 파싱 실패 시 사용자에게 줄 수 있는 API/안전 관련 설명 (텍스트 없음·차단 등) */
 function describeKeywordGeminiIssue(data, extractedText) {
   const blockReason = data?.promptFeedback?.blockReason
@@ -667,14 +695,18 @@ async function requestGemini({ key, payload, maxRetries = MAX_RETRIES }) {
 
 async function streamGeminiReview({ key, rating, keywords, length, tone, res }) {
   const safeKeywords = Array.isArray(keywords)
-    ? keywords.filter((v) => typeof v === 'string' && v.trim()).map((v) => v.trim())
+    ? keywords
+        .filter((v) => typeof v === 'string' && v.trim())
+        .map((v) => v.trim())
+        .filter((v) => isLikelyKeywordPhrase(v))
     : []
   const safeLength = REVIEW_LENGTH_MAP[length] ? length : 'medium'
   const safeTone = REVIEW_TONE_MAP[tone] ? tone : 'neutral'
+  const minReviewChars = REVIEW_MIN_CHARS[safeLength] ?? 45
 
   const prompt =
     `키워드: ${safeKeywords.join(', ')}\n별점: ${rating}점\n길이: ${REVIEW_LENGTH_MAP[safeLength]}\n말투: ${REVIEW_TONE_MAP[safeTone]}\n\n` +
-    '위 조건을 모두 지켜 리뷰 본문만 작성해. 제목·머리말·번호 목록 없이.'
+    `위 조건을 모두 지켜 리뷰 본문만 작성해. 제목·머리말·번호 목록 없이, 최소 ${minReviewChars}자 이상 완결된 문장으로 써 줘.`
 
   const response = await fetch(makeStreamUrl(STREAM_MODEL), {
     method: 'POST',
@@ -704,6 +736,8 @@ async function streamGeminiReview({ key, rating, keywords, length, tone, res }) 
   const reader = response.body.getReader()
   const decoder = new TextDecoder()
   let buffer = ''
+  let fullText = ''
+  let finishReason = null
 
   while (true) {
     const { done, value } = await reader.read()
@@ -719,8 +753,12 @@ async function streamGeminiReview({ key, rating, keywords, length, tone, res }) 
       if (!payload || payload === '[DONE]') continue
       try {
         const json = JSON.parse(payload)
+        finishReason = json?.candidates?.[0]?.finishReason ?? finishReason
         const text = json?.candidates?.[0]?.content?.parts?.[0]?.text
-        if (text) res.write(`${JSON.stringify({ text })}\n`)
+        if (text) {
+          fullText += text
+          res.write(`${JSON.stringify({ text })}\n`)
+        }
       } catch {
         void 0
       }
@@ -732,14 +770,33 @@ async function streamGeminiReview({ key, rating, keywords, length, tone, res }) 
     if (payload && payload !== '[DONE]') {
       try {
         const json = JSON.parse(payload)
+        finishReason = json?.candidates?.[0]?.finishReason ?? finishReason
         const text = json?.candidates?.[0]?.content?.parts?.[0]?.text
-        if (text) res.write(`${JSON.stringify({ text })}\n`)
+        if (text) {
+          fullText += text
+          res.write(`${JSON.stringify({ text })}\n`)
+        }
       } catch {
         void 0
       }
     }
   }
 
+  const normalizedReview = normalizeReviewText(fullText)
+  if (finishReason === 'MAX_TOKENS') {
+    res.write(
+      `${JSON.stringify({ error: '응답이 중간에 잘렸습니다. 리뷰 다시 생성을 눌러 주세요.' })}\n`,
+    )
+    return res.end()
+  }
+  if (normalizedReview.length < minReviewChars) {
+    res.write(
+      `${JSON.stringify({ error: '리뷰가 너무 짧게 생성되었습니다. 다시 생성해 주세요.' })}\n`,
+    )
+    return res.end()
+  }
+
+  res.write(`${JSON.stringify({ done: true, finishReason })}\n`)
   res.end()
 }
 
