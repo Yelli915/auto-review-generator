@@ -35,7 +35,7 @@ const MAX_OUTPUT_TOKENS = {
 const KEYWORD_LEN_MIN = 2
 const KEYWORD_LEN_MAX = 30
 
-const KEYWORDS_MAX_OUTPUT_TOKENS = 192
+const KEYWORDS_MAX_OUTPUT_TOKENS = 320
 const MAX_REQUEST_BODY_BYTES = 2 * 1024 * 1024
 const RATE_LIMIT_WINDOW_MS = 60 * 1000
 const RATE_LIMIT_MAX_REQUESTS = 20
@@ -581,6 +581,10 @@ function describeKeywordGeminiIssue(data, extractedText) {
     typeof extractedText === 'string' && extractedText.trim().length > 0
   const fr = cand.finishReason
 
+  if (fr === 'MAX_TOKENS') {
+    return '응답이 중간에 잘렸습니다. 키워드 다시 생성을 눌러 주세요.'
+  }
+
   if (!hasText) {
     if (
       fr === 'SAFETY' ||
@@ -592,9 +596,6 @@ function describeKeywordGeminiIssue(data, extractedText) {
     }
     if (fr === 'RECITATION') {
       return '저작권 정책으로 인해 응답을 생성할 수 없습니다.'
-    }
-    if (fr === 'MAX_TOKENS') {
-      return '응답이 중간에 잘렸습니다. 키워드 다시 생성을 눌러 주세요.'
     }
     if (fr && fr !== 'STOP') {
       return `모델이 텍스트 응답을 만들지 않았습니다. (${fr})`
@@ -839,11 +840,10 @@ export default async function handler(req, res) {
     }
 
     const prompt =
-      `이미지에 보이는 제품·상황에 맞고, 별점 ${rating}점의 감정 강도를 반영한 리뷰용 키워드를 한국어 짧은 구(명사구)로만 제안해. ` +
-      `별점 반영 기준: ${keywordSentimentGuide(rating)} ` +
-      `서로 다른 키워드를 최소 ${KEYWORDS_MIN_COUNT}개 이상, 많으면 ${KEYWORDS_MAX_COUNT}개까지 넣어(권장 4~8개). ` +
-      '각 값은 반드시 한글을 포함해야 해. 설명 문장·영어 안내(예: Here is the JSON)는 넣지 마. ' +
-      '출력은 이 JSON 형식만: {"keywords":["...","...","...","...","...","...","...","..."]}'
+      `이미지에 맞는 리뷰 키워드를 한국어 짧은 구로만 작성해. 별점 ${rating}점 기준 감정은 ${keywordSentimentGuide(rating)} ` +
+      `서로 다른 키워드를 ${KEYWORDS_MIN_COUNT}~${KEYWORDS_MAX_COUNT}개 작성하고, 모든 값은 한글을 포함해야 해. ` +
+      '설명, 서문, 코드블록, 영어 문장 없이 JSON만 출력해. ' +
+      '형식: {"keywords":["...","...","..."]}'
     const result = await requestGemini({
       key,
       payload: {
