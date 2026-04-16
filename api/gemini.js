@@ -26,9 +26,9 @@ const REVIEW_TONE_MAP = {
 }
 
 const MAX_OUTPUT_TOKENS = {
-  short: 220,
-  medium: 360,
-  long: 520,
+  short: 320,
+  medium: 520,
+  long: 760,
 }
 
 /** 키워드 칩·토큰 폴백 공통 길이 (한국어 짧은 구) */
@@ -708,23 +708,99 @@ async function streamGeminiReview({ key, rating, keywords, length, tone, res }) 
     `키워드: ${safeKeywords.join(', ')}\n별점: ${rating}점\n길이: ${REVIEW_LENGTH_MAP[safeLength]}\n말투: ${REVIEW_TONE_MAP[safeTone]}\n\n` +
     `위 조건을 모두 지켜 리뷰 본문만 작성해. 제목·머리말·번호 목록 없이, 최소 ${minReviewChars}자 이상 완결된 문장으로 써 줘.`
 
-  const response = await fetch(makeStreamUrl(STREAM_MODEL), {
-    method: 'POST',
-    headers: createJsonHeaders({ 'x-goog-api-key': key }),
-    body: JSON.stringify({
-      contents: [{ parts: [{ text: prompt }] }],
-      generationConfig: { temperature: 0.7, maxOutputTokens: MAX_OUTPUT_TOKENS[safeLength] ?? 280 },
-    }),
-  })
+  const requestOnce = async (maxOutputTokens) => {
+    const response = await fetch(makeStreamUrl(STREAM_MODEL), {
+      method: 'POST',
+      headers: createJsonHeaders({ 'x-goog-api-key': key }),
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: { temperature: 0.6, maxOutputTokens },
+      }),
+    })
 
-  if (!response.ok) {
-    const data = await readJsonSafely(response)
-    const raw = data?.error?.message || '리뷰 생성 실패'
-    throw new Error(humanizeGeminiApiError(response.status, raw))
+    if (!response.ok) {
+      const data = await readJsonSafely(response)
+      const raw = data?.error?.message || '리뷰 생성 실패'
+      throw new Error(humanizeGeminiApiError(response.status, raw))
+    }
+    if (!response.body) {
+      throw new Error('스트리밍 응답 본문이 없습니다.')
+    }
+
+    const reader = response.body.getReader()
+    const decoder = new TextDecoder()
+    let buffer = ''
+    let fullText = ''
+    let finishReason = null
+
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+
+      buffer += decoder.decode(value, { stream: true })
+      const lines = buffer.split('\n')
+      buffer = lines.pop() || ''
+
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue
+        const payload = line.slice(6).trim()
+        if (!payload || payload === '[DONE]') continue
+        try {
+          const json = JSON.parse(payload)
+          finishReason = json?.candidates?.[0]?.finishReason ?? finishReason
+          const text = json?.candidates?.[0]?.content?.parts?.[0]?.text
+          if (text) fullText += text
+        } catch {
+          void 0
+        }
+      }
+    }
+
+    if (buffer.startsWith('data: ')) {
+      const payload = buffer.slice(6).trim()
+      if (payload && payload !== '[DONE]') {
+        try {
+          const json = JSON.parse(payload)
+          finishReason = json?.candidates?.[0]?.finishReason ?? finishReason
+          const text = json?.candidates?.[0]?.content?.parts?.[0]?.text
+          if (text) fullText += text
+        } catch {
+          void 0
+        }
+      }
+    }
+
+    return { fullText, finishReason }
   }
 
-  if (!response.body) {
-    throw new Error('스트리밍 응답 본문이 없습니다.')
+  const baseTokens = MAX_OUTPUT_TOKENS[safeLength] ?? 520
+  let reviewResult = await requestOnce(baseTokens)
+  if (reviewResult.finishReason === 'MAX_TOKENS') {
+    reviewResult = await requestOnce(Math.min(1200, baseTokens + 280))
+  }
+
+  const normalizedReview = normalizeReviewText(reviewResult.fullText)
+  if (reviewResult.finishReason === 'MAX_TOKENS') {
+    res.statusCode = 200
+    setCommonSecurityHeaders(res)
+    res.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8')
+    res.setHeader('Cache-Control', 'no-cache, no-transform')
+    res.setHeader('X-Accel-Buffering', 'no')
+    res.write(
+      `${JSON.stringify({ error: '응답이 중간에 잘렸습니다. 리뷰 다시 생성을 눌러 주세요.' })}\n`,
+    )
+    return res.end()
+  }
+  if (normalizedReview.length < minReviewChars) {
+    res.statusCode = 200
+    setCommonSecurityHeaders(res)
+    res.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8')
+    res.setHeader('Cache-Control', 'no-cache, no-transform')
+    res.setHeader('X-Accel-Buffering', 'no')
+    res.write(
+      `${JSON.stringify({ error: '리뷰가 너무 짧게 생성되었습니다. 다시 생성해 주세요.' })}\n`,
+    )
+    return res.end()
   }
 
   res.statusCode = 200
@@ -732,71 +808,10 @@ async function streamGeminiReview({ key, rating, keywords, length, tone, res }) 
   res.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8')
   res.setHeader('Cache-Control', 'no-cache, no-transform')
   res.setHeader('X-Accel-Buffering', 'no')
-
-  const reader = response.body.getReader()
-  const decoder = new TextDecoder()
-  let buffer = ''
-  let fullText = ''
-  let finishReason = null
-
-  while (true) {
-    const { done, value } = await reader.read()
-    if (done) break
-
-    buffer += decoder.decode(value, { stream: true })
-    const lines = buffer.split('\n')
-    buffer = lines.pop() || ''
-
-    for (const line of lines) {
-      if (!line.startsWith('data: ')) continue
-      const payload = line.slice(6).trim()
-      if (!payload || payload === '[DONE]') continue
-      try {
-        const json = JSON.parse(payload)
-        finishReason = json?.candidates?.[0]?.finishReason ?? finishReason
-        const text = json?.candidates?.[0]?.content?.parts?.[0]?.text
-        if (text) {
-          fullText += text
-          res.write(`${JSON.stringify({ text })}\n`)
-        }
-      } catch {
-        void 0
-      }
-    }
-  }
-
-  if (buffer.startsWith('data: ')) {
-    const payload = buffer.slice(6).trim()
-    if (payload && payload !== '[DONE]') {
-      try {
-        const json = JSON.parse(payload)
-        finishReason = json?.candidates?.[0]?.finishReason ?? finishReason
-        const text = json?.candidates?.[0]?.content?.parts?.[0]?.text
-        if (text) {
-          fullText += text
-          res.write(`${JSON.stringify({ text })}\n`)
-        }
-      } catch {
-        void 0
-      }
-    }
-  }
-
-  const normalizedReview = normalizeReviewText(fullText)
-  if (finishReason === 'MAX_TOKENS') {
-    res.write(
-      `${JSON.stringify({ error: '응답이 중간에 잘렸습니다. 리뷰 다시 생성을 눌러 주세요.' })}\n`,
-    )
-    return res.end()
-  }
-  if (normalizedReview.length < minReviewChars) {
-    res.write(
-      `${JSON.stringify({ error: '리뷰가 너무 짧게 생성되었습니다. 다시 생성해 주세요.' })}\n`,
-    )
-    return res.end()
-  }
-
-  res.write(`${JSON.stringify({ done: true, finishReason })}\n`)
+  res.write(`${JSON.stringify({ text: reviewResult.fullText })}\n`)
+  res.write(
+    `${JSON.stringify({ done: true, finishReason: reviewResult.finishReason })}\n`,
+  )
   res.end()
 }
 
@@ -901,41 +916,53 @@ export default async function handler(req, res) {
       `서로 다른 키워드를 ${KEYWORDS_MIN_COUNT}~${KEYWORDS_MAX_COUNT}개 작성하고, 모든 값은 한글을 포함해야 해. ` +
       '설명, 서문, 코드블록, 영어 문장 없이 JSON만 출력해. ' +
       '형식: {"keywords":["...","...","..."]}'
-    const result = await requestGemini({
-      key,
-      payload: {
-        contents: [
-          {
-            parts: [
-              {
-                inline_data: {
-                  mime_type: mimeType,
-                  data: imageBase64,
-                },
-              },
-              { text: prompt },
-            ],
-          },
-        ],
-        generationConfig: {
-          temperature: 0.1,
-          maxOutputTokens: KEYWORDS_MAX_OUTPUT_TOKENS,
-          responseMimeType: 'application/json',
-          responseJsonSchema: {
-            type: 'object',
-            properties: {
-              keywords: {
-                type: 'array',
-                items: { type: 'string' },
-                minItems: KEYWORDS_MIN_COUNT,
-                maxItems: KEYWORDS_MAX_COUNT,
+    const buildKeywordPayload = (maxOutputTokens) => ({
+      contents: [
+        {
+          parts: [
+            {
+              inline_data: {
+                mime_type: mimeType,
+                data: imageBase64,
               },
             },
-            required: ['keywords'],
+            { text: prompt },
+          ],
+        },
+      ],
+      generationConfig: {
+        temperature: 0.1,
+        maxOutputTokens,
+        responseMimeType: 'application/json',
+        responseJsonSchema: {
+          type: 'object',
+          properties: {
+            keywords: {
+              type: 'array',
+              items: { type: 'string' },
+              minItems: KEYWORDS_MIN_COUNT,
+              maxItems: KEYWORDS_MAX_COUNT,
+            },
           },
+          required: ['keywords'],
         },
       },
     })
+
+    let result = await requestGemini({
+      key,
+      payload: buildKeywordPayload(KEYWORDS_MAX_OUTPUT_TOKENS),
+    })
+
+    if (
+      result.ok &&
+      result.data?.candidates?.[0]?.finishReason === 'MAX_TOKENS'
+    ) {
+      result = await requestGemini({
+        key,
+        payload: buildKeywordPayload(KEYWORDS_MAX_OUTPUT_TOKENS + 220),
+      })
+    }
 
     if (!result.ok) {
       return json(res, toClientErrorStatus(result.status), result)
