@@ -248,9 +248,6 @@ export async function generateReview(
   if (streamError) {
     throw new Error(streamError)
   }
-  if (finishReason === 'MAX_TOKENS') {
-    throw new Error('응답이 중간에 잘렸습니다. 리뷰 다시 생성을 눌러 주세요.')
-  }
   if (normalizedReview.length < (minReviewChars[safeLength] ?? 45)) {
     throw new Error('리뷰가 너무 짧게 생성되었습니다. 다시 생성해 주세요.')
   }

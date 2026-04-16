@@ -203,8 +203,10 @@ export default function ReviewGenerator({ onReviewComplete }) {
         )}
         {step === STEPS.KEYWORD && (
           <KeywordStep
-            key={keywords.join('|')}
             keywords={keywords}
+            initialSelectedKeywords={lastUsedOptions?.keywords}
+            initialLength={lastUsedOptions?.length ?? 'medium'}
+            initialTone={lastUsedOptions?.tone ?? 'neutral'}
             onNext={handleKeywordNext}
             onRefresh={handleRefresh}
             onBackToUpload={handleBackToUpload}

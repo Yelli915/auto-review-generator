@@ -774,13 +774,22 @@ async function streamGeminiReview({ key, rating, keywords, length, tone, res }) 
   }
 
   const baseTokens = MAX_OUTPUT_TOKENS[safeLength] ?? 520
-  let reviewResult = await requestOnce(baseTokens)
-  if (reviewResult.finishReason === 'MAX_TOKENS') {
-    reviewResult = await requestOnce(Math.min(1200, baseTokens + 280))
+  const tokenPlan = [
+    baseTokens,
+    Math.min(1400, baseTokens + 320),
+    Math.min(1800, baseTokens + 640),
+  ]
+  let reviewResult = { fullText: '', finishReason: null }
+  for (const maxTokens of tokenPlan) {
+    reviewResult = await requestOnce(maxTokens)
+    if (reviewResult.finishReason !== 'MAX_TOKENS') break
   }
 
   const normalizedReview = normalizeReviewText(reviewResult.fullText)
-  if (reviewResult.finishReason === 'MAX_TOKENS') {
+  if (
+    reviewResult.finishReason === 'MAX_TOKENS' &&
+    normalizedReview.length < minReviewChars
+  ) {
     res.statusCode = 200
     setCommonSecurityHeaders(res)
     res.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8')

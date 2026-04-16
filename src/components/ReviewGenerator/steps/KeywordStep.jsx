@@ -1,9 +1,12 @@
-import { useId, useMemo, useState } from 'react'
+import { useEffect, useId, useMemo, useState } from 'react'
 
 const SKELETON_WIDTHS = [80, 96, 68, 110, 76, 90]
 
 export default function KeywordStep({
   keywords,
+  initialSelectedKeywords,
+  initialLength = 'medium',
+  initialTone = 'neutral',
   onNext,
   onRefresh,
   onBackToUpload,
@@ -11,13 +14,30 @@ export default function KeywordStep({
 }) {
   const lengthId = useId()
   const toneId = useId()
-  const [reviewLength, setReviewLength] = useState('medium')
-  const [reviewTone, setReviewTone] = useState('neutral')
+  const [reviewLength, setReviewLength] = useState(initialLength)
+  const [reviewTone, setReviewTone] = useState(initialTone)
   const [selected, setSelected] = useState([])
   const list = useMemo(
     () => (Array.isArray(keywords) ? keywords : []),
     [keywords],
   )
+
+  useEffect(() => {
+    setReviewLength(initialLength)
+  }, [initialLength])
+
+  useEffect(() => {
+    setReviewTone(initialTone)
+  }, [initialTone])
+
+  useEffect(() => {
+    if (!Array.isArray(initialSelectedKeywords) || initialSelectedKeywords.length === 0) {
+      setSelected([])
+      return
+    }
+    const next = initialSelectedKeywords.filter((kw) => list.includes(kw))
+    setSelected(Array.from(new Set(next)))
+  }, [initialSelectedKeywords, list])
 
   const toggleKeyword = (keyword) => {
     setSelected((prev) =>
