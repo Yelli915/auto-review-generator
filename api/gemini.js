@@ -548,6 +548,23 @@ function parseKeywordsFromAny(data) {
   return { keywords: null, rawText: text }
 }
 
+function summarizeKeywordDebug(data, rawText) {
+  const candidates = Array.isArray(data?.candidates) ? data.candidates : []
+  const first = candidates[0]
+  const preview =
+    typeof rawText === 'string' && rawText.trim()
+      ? rawText.trim().slice(0, 1500)
+      : ''
+
+  return {
+    candidateCount: candidates.length,
+    finishReason: first?.finishReason ?? null,
+    blockReason: data?.promptFeedback?.blockReason ?? null,
+    promptFeedback: data?.promptFeedback ?? null,
+    preview,
+  }
+}
+
 /** 파싱 실패 시 사용자에게 줄 수 있는 API/안전 관련 설명 (텍스트 없음·차단 등) */
 function describeKeywordGeminiIssue(data, extractedText) {
   const blockReason = data?.promptFeedback?.blockReason
@@ -881,8 +898,12 @@ export default async function handler(req, res) {
 
     if (firstParsed.tooFew) {
       const n = firstParsed.partial?.length ?? 0
-      if (DEBUG_LOGS && firstParsed.rawText) {
-        console.warn('[gemini keywords] too few after filter:', n)
+      if (DEBUG_LOGS) {
+        console.warn('[gemini keywords] too few after filter', {
+          count: n,
+          partial: firstParsed.partial ?? [],
+          ...summarizeKeywordDebug(result.data, firstParsed.rawText),
+        })
       }
       return json(res, 502, {
         ok: false,
@@ -894,8 +915,11 @@ export default async function handler(req, res) {
       result.data,
       firstParsed.rawText,
     )
-    if (DEBUG_LOGS && firstParsed.rawText) {
-      console.warn('[gemini keywords] parse failed')
+    if (DEBUG_LOGS) {
+      console.warn('[gemini keywords] parse failed', {
+        apiIssue,
+        ...summarizeKeywordDebug(result.data, firstParsed.rawText),
+      })
     }
 
     return json(res, 502, {
