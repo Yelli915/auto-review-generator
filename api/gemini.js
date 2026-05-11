@@ -2,11 +2,22 @@
 import { OAuth2Client } from 'google-auth-library'
 import { createJsonHeaders, readJsonSafely } from '../shared/httpJson.js'
 
-const MODELS = ['gemini-2.5-flash']
-/** 429는 쿼터·RPM이라 즉시 반환(재시도 안 함). 나머지만 백오프 재시도 */
+const MODEL = 'gemini-2.5-flash'
 const RETRYABLE_STATUS = new Set([500, 502, 503, 504])
 const MAX_RETRIES = 2
-const STREAM_MODEL = 'gemini-2.5-flash'
+const MAX_REQUEST_BODY_BYTES = 2 * 1024 * 1024
+const RATE_LIMIT_WINDOW_MS = 60 * 1000
+const RATE_LIMIT_MAX_REQUESTS = 20
+const RATE_LIMIT_STORE = new Map()
+const GOOGLE_OAUTH_CLIENT = new OAuth2Client()
+const DEBUG_LOGS =
+  process.env.NODE_ENV !== 'production' || process.env.GEMINI_DEBUG_LOGS === '1'
+
+const KEYWORDS_MIN_COUNT = 3
+const KEYWORDS_MAX_COUNT = 8
+const KEYWORD_LEN_MIN = 2
+const KEYWORD_LEN_MAX = 30
+const KEYWORDS_MAX_OUTPUT_TOKENS = 320
 
 const REVIEW_LENGTH_MAP = {
   short: '2~3문장 이내로 간결하게',
@@ -25,58 +36,23 @@ const REVIEW_TONE_MAP = {
     '편한 일상 반말(~했어, ~야 느낌). 공격적·무례한 표현은 금지.',
 }
 
-const MAX_OUTPUT_TOKENS = {
-  short: 320,
-  medium: 520,
-  long: 760,
-}
-
-/** 키워드 칩·토큰 폴백 공통 길이 (한국어 짧은 구) */
-const KEYWORD_LEN_MIN = 2
-const KEYWORD_LEN_MAX = 30
-
-const KEYWORDS_MAX_OUTPUT_TOKENS = 320
-const MAX_REQUEST_BODY_BYTES = 2 * 1024 * 1024
-const RATE_LIMIT_WINDOW_MS = 60 * 1000
-const RATE_LIMIT_MAX_REQUESTS = 20
-const RATE_LIMIT_STORE = new Map()
-const DEBUG_LOGS =
-  process.env.NODE_ENV !== 'production' || process.env.GEMINI_DEBUG_LOGS === '1'
-const GOOGLE_OAUTH_CLIENT = new OAuth2Client()
-
-/** 서로 다른 키워드 개수(한글 필터 통과 후) */
-const KEYWORDS_MIN_COUNT = 3
-const KEYWORDS_MAX_COUNT = 8
 const REVIEW_MIN_CHARS = {
   short: 20,
   medium: 45,
   long: 80,
 }
 
-function keywordSentimentGuide(rating) {
-  if (rating <= 1) {
-    return '전반적으로 매우 불만족 톤. 부정 키워드 위주로 제안.'
-  }
-  if (rating <= 2) {
-    return '불만족 톤. 부정 키워드를 중심으로 하되 사실 기반으로 제안.'
-  }
-  if (rating < 4) {
-    return '보통 톤. 장단점이 섞인 중립 키워드 위주로 제안.'
-  }
-  if (rating < 5) {
-    return '만족 톤. 긍정 키워드를 중심으로 제안.'
-  }
-  return '매우 만족 톤. 강한 긍정 키워드를 중심으로 제안.'
-}
-
-function wait(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms))
-}
-
 function setCommonSecurityHeaders(res) {
   res.setHeader('X-Content-Type-Options', 'nosniff')
   res.setHeader('Referrer-Policy', 'same-origin')
   res.setHeader('X-Frame-Options', 'DENY')
+}
+
+function json(res, code, body) {
+  res.statusCode = code
+  setCommonSecurityHeaders(res)
+  res.setHeader('Content-Type', 'application/json; charset=utf-8')
+  res.end(JSON.stringify(body))
 }
 
 function normalizeIp(raw) {
@@ -86,7 +62,6 @@ function normalizeIp(raw) {
 
 function isValidIp(ip) {
   if (typeof ip !== 'string' || !ip) return false
-  // Basic IPv4 / IPv6 validation for rate-limit key usage.
   if (/^\d{1,3}(?:\.\d{1,3}){3}$/.test(ip)) {
     return ip.split('.').every((part) => {
       const n = Number(part)
@@ -148,11 +123,16 @@ function parseAllowOrigins() {
   return list.length ? new Set(list) : null
 }
 
+function hasConfiguredAllowOrigins() {
+  return parseAllowOrigins() !== null
+}
+
 function isTrustedOrigin(req) {
   const origin = req.headers?.origin
   if (typeof origin !== 'string' || !origin.trim()) return false
   const allowSet = parseAllowOrigins()
   if (allowSet) return allowSet.has(origin)
+  if (process.env.NODE_ENV === 'production') return false
   const host = req.headers?.host
   if (typeof host !== 'string' || !host.trim()) return false
   try {
@@ -161,17 +141,6 @@ function isTrustedOrigin(req) {
   } catch {
     return false
   }
-}
-
-function hasValidAppToken(req) {
-  const secret =
-    typeof process.env.API_AUTH_TOKEN === 'string'
-      ? process.env.API_AUTH_TOKEN.trim()
-      : ''
-  if (!secret) return true
-  const headerToken = req.headers?.['x-api-auth-token']
-  if (typeof headerToken !== 'string') return false
-  return headerToken.trim() === secret
 }
 
 function getGoogleClientId() {
@@ -184,8 +153,17 @@ function getBearerToken(req) {
   const auth = req.headers?.authorization
   if (typeof auth !== 'string') return ''
   const m = auth.match(/^Bearer\s+(.+)$/i)
-  if (!m) return ''
-  return m[1].trim()
+  return m ? m[1].trim() : ''
+}
+
+function hasValidAppToken(req) {
+  const secret =
+    typeof process.env.API_AUTH_TOKEN === 'string'
+      ? process.env.API_AUTH_TOKEN.trim()
+      : ''
+  if (!secret) return true
+  const headerToken = req.headers?.['x-api-auth-token']
+  return typeof headerToken === 'string' && headerToken.trim() === secret
 }
 
 async function verifyGoogleToken(idToken) {
@@ -214,13 +192,23 @@ async function verifyGoogleToken(idToken) {
 
 async function authorizeRequest(req) {
   const googleClientId = getGoogleClientId()
-  if (process.env.NODE_ENV === 'production' && !googleClientId) {
-    return {
-      ok: false,
-      status: 500,
-      error: '서버 설정 오류: 운영 환경에는 GOOGLE_CLIENT_ID가 필요합니다.',
+  if (process.env.NODE_ENV === 'production') {
+    if (!googleClientId) {
+      return {
+        ok: false,
+        status: 500,
+        error: '서버 설정 오류: 운영 환경에는 GOOGLE_CLIENT_ID가 필요합니다.',
+      }
+    }
+    if (!hasConfiguredAllowOrigins()) {
+      return {
+        ok: false,
+        status: 500,
+        error: '서버 설정 오류: 운영 환경에는 ALLOWED_ORIGINS가 필요합니다.',
+      }
     }
   }
+
   if (googleClientId) {
     const bearer = getBearerToken(req)
     if (!bearer) {
@@ -237,12 +225,22 @@ async function authorizeRequest(req) {
   if (!hasValidAppToken(req)) {
     return { ok: false, status: 401, error: '인증되지 않은 요청입니다.' }
   }
-  if (process.env.NODE_ENV === 'production') {
-    if (!isTrustedOrigin(req)) {
-      return { ok: false, status: 403, error: '허용되지 않은 출처(origin)입니다.' }
-    }
+  if (process.env.NODE_ENV === 'production' && !isTrustedOrigin(req)) {
+    return { ok: false, status: 403, error: '허용되지 않은 출처(origin)입니다.' }
   }
   return { ok: true, userId: null }
+}
+
+function wait(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+function makeUrl(model) {
+  return `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`
+}
+
+function makeStreamUrl(model) {
+  return `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?alt=sse`
 }
 
 function parseGeminiRetryAfterSeconds(message) {
@@ -260,11 +258,10 @@ function isTemporaryHighDemandMessage(message) {
   )
 }
 
-/** 무료 한도·RPM 등 쿼터 관련 응답을 사용자용 한국어로 */
 function humanizeGeminiApiError(status, rawMessage) {
   const msg = typeof rawMessage === 'string' ? rawMessage : ''
   if (isTemporaryHighDemandMessage(msg)) {
-    return '현재 모델 요청이 몰려 일시적으로 처리 지연 중입니다. 잠시 후 자동/수동으로 다시 시도해 주세요.'
+    return '현재 모델 요청이 몰려 일시적으로 처리 지연 중입니다. 잠시 후 다시 시도해 주세요.'
   }
   const quotaLike =
     status === 429 ||
@@ -278,21 +275,100 @@ function humanizeGeminiApiError(status, rawMessage) {
   const waitHint =
     waitSec != null ? ` 약 ${waitSec}초 뒤에 다시 시도해 보세요.` : ''
   return (
-    `Gemini API 호출 한도에 걸렸습니다. 메시지에 따르면 아직 무료 등급(free tier) 요청 한도로 집계되고 있습니다.${waitHint} ` +
-    `Google AI Studio에서 이 API 키의 결제·플랜을 연결했는지, 프로젝트가 맞는지 확인하세요. ` +
+    `Gemini API 호출 한도에 걸렸습니다.${waitHint} ` +
+    `Google AI Studio에서 API 키의 결제/플랜 연결 상태와 프로젝트 설정을 확인하세요. ` +
     `https://ai.google.dev/gemini-api/docs/rate-limits · https://ai.dev/rate-limit`
   )
 }
 
-function makeUrl(model) {
-  return `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`
+function keywordSentimentGuide(rating) {
+  if (rating <= 1) {
+    return '전반적으로 매우 불만족 톤. 부정 키워드 위주로 제안.'
+  }
+  if (rating <= 2) {
+    return '불만족 톤. 부정 키워드를 중심으로 하되 사실 기반으로 제안.'
+  }
+  if (rating < 4) {
+    return '보통 톤. 장단점이 섞인 중립 키워드 위주로 제안.'
+  }
+  if (rating < 5) {
+    return '만족 톤. 긍정 키워드를 중심으로 제안.'
+  }
+  return '매우 만족 톤. 강한 긍정 키워드를 중심으로 제안.'
 }
 
-function makeStreamUrl(model) {
-  return `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?alt=sse`
+function hasHangul(s) {
+  return /[\uAC00-\uD7A3]/.test(s)
 }
 
-/** 첫 번째 균형 잡힌 `{…}` 또는 `[…]` 구간 (문자열 안의 괄호는 무시) */
+function isLikelyKeywordPhrase(value) {
+  if (typeof value !== 'string') return false
+  const s = value.trim()
+  if (!s) return false
+  if (/[,:;!?]/.test(s)) return false
+  if (/['"`]/.test(s)) return false
+  if (/\s{2,}/.test(s)) return false
+  if (s.split(/\s+/).length > 4) return false
+  if (/(습니다|해요|했어요|입니다|있어요|없어요|같아요|괜찮|추천해요|빠르게|시간)$/u.test(s)) {
+    return false
+  }
+  return true
+}
+
+function sanitizeKeywordArray(arr) {
+  if (!Array.isArray(arr)) return null
+  const cleaned = arr
+    .map((v) => (typeof v === 'string' ? v.trim() : ''))
+    .filter(
+      (s) =>
+        s.length >= KEYWORD_LEN_MIN &&
+        s.length <= KEYWORD_LEN_MAX &&
+        hasHangul(s) &&
+        isLikelyKeywordPhrase(s),
+    )
+  return cleaned.length ? Array.from(new Set(cleaned)) : null
+}
+
+function sanitizeKeywordsField(keywords) {
+  if (Array.isArray(keywords)) return sanitizeKeywordArray(keywords)
+  if (typeof keywords === 'string') {
+    const parts = keywords
+      .split(/[,、，\n|/]+/g)
+      .map((s) => s.trim())
+      .filter(Boolean)
+    return sanitizeKeywordArray(parts)
+  }
+  return null
+}
+
+function stripEnglishJsonPreamble(str) {
+  let s = str.trimStart()
+  for (let i = 0; i < 3; i += 1) {
+    const next = s
+      .replace(
+        /^(?:here\s+is\s+the\s+json\s+requested\s*\.?\s*[:：]?\s*|here\s+is\s+the\s+json\s*[:：]?\s*|below\s+is\s+the\s+json\s*[:：]?\s*|the\s+following\s+is\s+(?:the\s+)?json\s*[:：]?\s*|json\s+(?:output|response)\s*[:：]?\s*)/i,
+        '',
+      )
+      .trimStart()
+    if (next === s) break
+    s = next
+  }
+  return s
+}
+
+function loosenJsonCommas(s) {
+  return s.replace(/,\s*([\]}])/g, '$1')
+}
+
+function trimToJsonStart(s) {
+  const a = s.indexOf('{')
+  const b = s.indexOf('[')
+  let i = -1
+  if (a >= 0 && b >= 0) i = Math.min(a, b)
+  else i = a >= 0 ? a : b
+  return i > 0 ? s.slice(i) : s
+}
+
 function sliceBalancedSegment(str, openCh, closeCh) {
   const start = str.indexOf(openCh)
   if (start < 0) return null
@@ -320,81 +396,12 @@ function sliceBalancedSegment(str, openCh, closeCh) {
   return null
 }
 
-function hasHangul(s) {
-  return /[\uAC00-\uD7A3]/.test(s)
-}
-
-/** 모델이 붙이는 영어 안내 줄을 제거해 JSON 파싱이 되도록 함 */
-function stripEnglishJsonPreamble(str) {
-  let s = str.trimStart()
-  for (let i = 0; i < 3; i += 1) {
-    const next = s
-      .replace(
-        /^(?:here\s+is\s+the\s+json\s+requested\s*\.?\s*[:：]?\s*|here\s+is\s+the\s+json\s*[:：]\s*|below\s+is\s+the\s+json\s*[:：]?\s*|the\s+following\s+is\s+(?:the\s+)?json\s*[:：]?\s*|json\s+(?:output|response)\s*[:：]?\s*)/i,
-        '',
-      )
-      .trimStart()
-    if (next === s) break
-    s = next
-  }
-  return s
-}
-
-function isLikelyKeywordPhrase(value) {
-  if (typeof value !== 'string') return false
-  const s = value.trim()
-  if (!s) return false
-  if (/[,:;!?]/.test(s)) return false
-  if (/["'`]/.test(s)) return false
-  if (/\s{2,}/.test(s)) return false
-  if (s.split(/\s+/).length > 4) return false
-  if (
-    /(합니다|해요|했어요|입니다|있어요|없어요|같아요|느껴져|느껴지|느껴|추천해요|바르는 순간)$/u.test(
-      s,
-    )
-  ) {
-    return false
-  }
-  return true
-}
-
-function sanitizeKeywordArray(arr) {
-  if (!Array.isArray(arr)) return null
-  const cleaned = arr
-    .map((v) => (typeof v === 'string' ? v.trim() : ''))
-    .filter(
-      (s) =>
-        s.length >= KEYWORD_LEN_MIN &&
-        s.length <= KEYWORD_LEN_MAX &&
-        hasHangul(s) &&
-        isLikelyKeywordPhrase(s),
-    )
-  return cleaned.length ? Array.from(new Set(cleaned)) : null
-}
-
-/** keywords 필드가 배열이 아니라 "a, b, c" 한 줄일 때 */
-function sanitizeKeywordsField(keywords) {
-  if (Array.isArray(keywords)) return sanitizeKeywordArray(keywords)
-  if (typeof keywords === 'string') {
-    const parts = keywords
-      .split(/[,，、\n|/]+/g)
-      .map((s) => s.trim())
-      .filter(Boolean)
-    return sanitizeKeywordArray(parts)
-  }
-  return null
-}
-
-/** JSON 이외·깨진 JSON에서 큰따옴표 문자열 중 한글 구만 모음 */
 function extractQuotedHangulKeywords(text) {
   const re = /"((?:[^"\\]|\\.)*)"/g
   const out = []
   let m
   while ((m = re.exec(text)) !== null) {
-    const s = m[1]
-      .replace(/\\"/g, '"')
-      .replace(/\\\\/g, '\\')
-      .trim()
+    const s = m[1].replace(/\\"/g, '"').replace(/\\\\/g, '\\').trim()
     if (
       s.length >= KEYWORD_LEN_MIN &&
       s.length <= KEYWORD_LEN_MAX &&
@@ -411,10 +418,7 @@ function extractSingleQuotedHangulKeywords(text) {
   const out = []
   let m
   while ((m = re.exec(text)) !== null) {
-    const s = m[1]
-      .replace(/\\'/g, "'")
-      .replace(/\\\\/g, '\\')
-      .trim()
+    const s = m[1].replace(/\\'/g, "'").replace(/\\\\/g, '\\').trim()
     if (
       s.length >= KEYWORD_LEN_MIN &&
       s.length <= KEYWORD_LEN_MAX &&
@@ -432,15 +436,6 @@ function mergeUniqueKeywordLists(...lists) {
   return Array.from(new Set(flat))
 }
 
-function trimToJsonStart(s) {
-  const a = s.indexOf('{')
-  const b = s.indexOf('[')
-  let i = -1
-  if (a >= 0 && b >= 0) i = Math.min(a, b)
-  else i = a >= 0 ? a : b
-  return i > 0 ? s.slice(i) : s
-}
-
 function gatherKeywordResponseText(data) {
   const chunks = []
   for (const cand of data?.candidates ?? []) {
@@ -453,13 +448,8 @@ function gatherKeywordResponseText(data) {
   return chunks.join('\n')
 }
 
-function loosenJsonCommas(s) {
-  return s.replace(/,\s*([\]}])/g, '$1')
-}
-
 function parseKeywordsFromText(text) {
   if (typeof text !== 'string' || !text.trim()) return null
-
   const raw = text.trim()
   let normalized = raw
     .replace(/^```json\s*/i, '')
@@ -490,40 +480,24 @@ function parseKeywordsFromText(text) {
   const objSlice = sliceBalancedSegment(normalized, '{', '}')
   if (objSlice) {
     const parsed = tryParse(loosenJsonCommas(objSlice))
-    if (parsed) {
-      const fromObject = sanitizeKeywordsField(parsed?.keywords)
-      if (fromObject) return fromObject
-    }
+    const fromObject = parsed ? sanitizeKeywordsField(parsed?.keywords) : null
+    if (fromObject) return fromObject
   }
 
   const arraySlice = sliceBalancedSegment(normalized, '[', ']')
   if (arraySlice) {
     const parsed = tryParse(loosenJsonCommas(arraySlice))
-    if (parsed) {
-      const fromArray = sanitizeKeywordArray(parsed)
-      if (fromArray) return fromArray
-    }
+    const fromArray = parsed ? sanitizeKeywordArray(parsed) : null
+    if (fromArray) return fromArray
   }
 
-  const lines = normalized
-    .split('\n')
-    .map((line) => line.replace(/^[\s\-*0-9.]+/, '').trim())
-    .filter(Boolean)
-  const fromLines = sanitizeKeywordArray(lines)
+  const fromLines = sanitizeKeywordArray(
+    normalized
+      .split('\n')
+      .map((line) => line.replace(/^[\s\-*0-9.()]+/, '').trim())
+      .filter(Boolean),
+  )
   if (fromLines) return fromLines
-
-  const keywordArrayHint = normalized.match(/"keywords"\s*:\s*\[([\s\S]*)$/i)
-  if (keywordArrayHint) {
-    const quoted = new RegExp(
-      `"([^"\\n]{${KEYWORD_LEN_MIN},${KEYWORD_LEN_MAX}})"`,
-      'g',
-    )
-    const candidates = Array.from(
-      keywordArrayHint[1].matchAll(quoted),
-    ).map((m) => m[1])
-    const fromHint = sanitizeKeywordArray(candidates)
-    if (fromHint) return fromHint
-  }
 
   const fromAnyQuotes = mergeUniqueKeywordLists(
     extractQuotedHangulKeywords(normalized),
@@ -536,21 +510,17 @@ function parseKeywordsFromText(text) {
 
 function parseKeywordsFromAny(data) {
   const text = gatherKeywordResponseText(data)
-
   const direct = parseKeywordsFromText(text)
   if (direct && direct.length >= 1) {
     if (direct.length < KEYWORDS_MIN_COUNT) {
       return { keywords: null, rawText: text, tooFew: true, partial: direct }
     }
-    return {
-      keywords: direct.slice(0, KEYWORDS_MAX_COUNT),
-      rawText: text,
-    }
+    return { keywords: direct.slice(0, KEYWORDS_MAX_COUNT), rawText: text }
   }
 
   const tokenized = text
-    .replace(/^키워드\s*[:：]\s*/i, '')
-    .split(/[,，、·•\n|/]+/g)
+    .replace(/^키워드\s*[:：]?\s*/i, '')
+    .split(/[,、，\n|/]+/g)
     .map((v) => v.replace(/^[\s\-*0-9.()]+/, '').trim())
     .filter(Boolean)
   const cleaned = Array.from(new Set(tokenized)).filter(
@@ -560,59 +530,39 @@ function parseKeywordsFromAny(data) {
       hasHangul(v),
   )
   if (cleaned.length >= KEYWORDS_MIN_COUNT) {
-    return {
-      keywords: cleaned.slice(0, KEYWORDS_MAX_COUNT),
-      rawText: text,
-    }
+    return { keywords: cleaned.slice(0, KEYWORDS_MAX_COUNT), rawText: text }
   }
   if (cleaned.length >= 1) {
     return { keywords: null, rawText: text, tooFew: true, partial: cleaned }
   }
-
   return { keywords: null, rawText: text }
 }
 
-function summarizeKeywordDebug(data, rawText) {
+function summarizeKeywordDebug(data) {
   const candidates = Array.isArray(data?.candidates) ? data.candidates : []
   const first = candidates[0]
-  const preview =
-    typeof rawText === 'string' && rawText.trim()
-      ? rawText.trim().slice(0, 1500)
-      : ''
-
   return {
     candidateCount: candidates.length,
     finishReason: first?.finishReason ?? null,
     blockReason: data?.promptFeedback?.blockReason ?? null,
-    promptFeedback: data?.promptFeedback ?? null,
-    preview,
   }
 }
 
-function normalizeReviewText(text) {
-  return typeof text === 'string' ? text.replace(/\s+/g, ' ').trim() : ''
-}
-
-/** 파싱 실패 시 사용자에게 줄 수 있는 API/안전 관련 설명 (텍스트 없음·차단 등) */
 function describeKeywordGeminiIssue(data, extractedText) {
   const blockReason = data?.promptFeedback?.blockReason
   if (blockReason) {
     return '입력이 정책에 의해 차단되었습니다. 다른 이미지로 시도해 주세요.'
   }
-
   const cand = data?.candidates?.[0]
   if (!cand) {
     return '모델이 응답 후보를 반환하지 않았습니다. 잠시 후 다시 시도해 주세요.'
   }
-
   const hasText =
     typeof extractedText === 'string' && extractedText.trim().length > 0
   const fr = cand.finishReason
-
   if (fr === 'MAX_TOKENS') {
     return '응답이 중간에 잘렸습니다. 키워드 다시 생성을 눌러 주세요.'
   }
-
   if (!hasText) {
     if (
       fr === 'SAFETY' ||
@@ -626,34 +576,32 @@ function describeKeywordGeminiIssue(data, extractedText) {
       return '저작권 정책으로 인해 응답을 생성할 수 없습니다.'
     }
     if (fr && fr !== 'STOP') {
-      return `모델이 텍스트 응답을 만들지 않았습니다. (${fr})`
+      return `모델이 텍스트 응답을 만들지 못했습니다. (${fr})`
     }
     return '모델이 빈 응답을 반환했습니다. 다시 시도해 주세요.'
   }
-
   return null
 }
 
-async function requestGemini({ key, payload, maxRetries = MAX_RETRIES }) {
-  const model = MODELS[0]
-  let lastError = null
+function normalizeReviewText(text) {
+  return typeof text === 'string' ? text.replace(/\s+/g, ' ').trim() : ''
+}
 
+async function requestGemini({ key, payload, maxRetries = MAX_RETRIES }) {
+  let lastError = null
   for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
     try {
-      const response = await fetch(makeUrl(model), {
+      const response = await fetch(makeUrl(MODEL), {
         method: 'POST',
         headers: createJsonHeaders({ 'x-goog-api-key': key }),
         body: JSON.stringify(payload),
       })
-
       const data = await readJsonSafely(response)
-
-      if (response.ok) return { ok: true, data, model }
+      if (response.ok) return { ok: true, data, model: MODEL }
 
       const rawMessage =
         data?.error?.message ?? `요청 실패 (HTTP ${response.status})`
       const message = humanizeGeminiApiError(response.status, rawMessage)
-
       if (response.status === 429) {
         const highDemand = isTemporaryHighDemandMessage(rawMessage)
         if (highDemand && attempt < maxRetries) {
@@ -661,23 +609,11 @@ async function requestGemini({ key, payload, maxRetries = MAX_RETRIES }) {
           await wait(Math.min(6000, retryAfterSec * 1000))
           continue
         }
-        return {
-          ok: false,
-          error: message,
-          status: response.status,
-          details: data,
-        }
+        return { ok: false, error: message, status: response.status, details: data }
       }
-
       if (!RETRYABLE_STATUS.has(response.status) || attempt === maxRetries) {
-        return {
-          ok: false,
-          error: message,
-          status: response.status,
-          details: data,
-        }
+        return { ok: false, error: message, status: response.status, details: data }
       }
-
       await wait(700 * 2 ** attempt)
     } catch (err) {
       lastError = err
@@ -685,11 +621,8 @@ async function requestGemini({ key, payload, maxRetries = MAX_RETRIES }) {
       await wait(700 * 2 ** attempt)
     }
   }
-
   const message =
-    lastError instanceof Error
-      ? lastError.message
-      : '네트워크 또는 알 수 없는 오류'
+    lastError instanceof Error ? lastError.message : '네트워크 또는 알 수 없는 오류'
   return { ok: false, error: message }
 }
 
@@ -703,132 +636,73 @@ async function streamGeminiReview({ key, rating, keywords, length, tone, res }) 
   const safeLength = REVIEW_LENGTH_MAP[length] ? length : 'medium'
   const safeTone = REVIEW_TONE_MAP[tone] ? tone : 'neutral'
   const minReviewChars = REVIEW_MIN_CHARS[safeLength] ?? 45
-
   const prompt =
     `키워드: ${safeKeywords.join(', ')}\n별점: ${rating}점\n길이: ${REVIEW_LENGTH_MAP[safeLength]}\n말투: ${REVIEW_TONE_MAP[safeTone]}\n\n` +
-    `위 조건을 모두 지켜 리뷰 본문만 작성해. 제목·머리말·번호 목록 없이, 최소 ${minReviewChars}자 이상 완결된 문장으로 써 줘.`
+    `아래 조건을 모두 지켜 리뷰 본문만 작성해. 제목, 머리말, 번호, 목록 없이 최소 ${minReviewChars}자 이상의 자연스러운 문장으로 써 줘.`
 
-  const requestOnce = async (maxOutputTokens) => {
-    const response = await fetch(makeStreamUrl(STREAM_MODEL), {
-      method: 'POST',
-      headers: createJsonHeaders({ 'x-goog-api-key': key }),
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { temperature: 0.6, maxOutputTokens },
-      }),
-    })
+  const response = await fetch(makeStreamUrl(MODEL), {
+    method: 'POST',
+    headers: createJsonHeaders({ 'x-goog-api-key': key }),
+    body: JSON.stringify({
+      contents: [{ parts: [{ text: prompt }] }],
+      generationConfig: {
+        temperature: 0.6,
+        maxOutputTokens: REVIEW_LENGTH_MAP[safeLength] === 'long' ? 760 : 520,
+      },
+    }),
+  })
 
-    if (!response.ok) {
-      const data = await readJsonSafely(response)
-      const raw = data?.error?.message || '리뷰 생성 실패'
-      throw new Error(humanizeGeminiApiError(response.status, raw))
-    }
-    if (!response.body) {
-      throw new Error('스트리밍 응답 본문이 없습니다.')
-    }
+  if (!response.ok) {
+    const data = await readJsonSafely(response)
+    const raw = data?.error?.message || '리뷰 생성 실패'
+    throw new Error(humanizeGeminiApiError(response.status, raw))
+  }
+  if (!response.body) {
+    throw new Error('스트리밍 응답 본문이 없습니다.')
+  }
 
-    const reader = response.body.getReader()
-    const decoder = new TextDecoder()
-    let buffer = ''
-    let fullText = ''
-    let finishReason = null
+  const reader = response.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+  let fullText = ''
+  let finishReason = null
 
-    while (true) {
-      const { done, value } = await reader.read()
-      if (done) break
-
-      buffer += decoder.decode(value, { stream: true })
-      const lines = buffer.split('\n')
-      buffer = lines.pop() || ''
-
-      for (const line of lines) {
-        if (!line.startsWith('data: ')) continue
-        const payload = line.slice(6).trim()
-        if (!payload || payload === '[DONE]') continue
-        try {
-          const json = JSON.parse(payload)
-          finishReason = json?.candidates?.[0]?.finishReason ?? finishReason
-          const text = json?.candidates?.[0]?.content?.parts?.[0]?.text
-          if (text) fullText += text
-        } catch {
-          void 0
-        }
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+    buffer += decoder.decode(value, { stream: true })
+    const lines = buffer.split('\n')
+    buffer = lines.pop() || ''
+    for (const line of lines) {
+      if (!line.startsWith('data: ')) continue
+      const payload = line.slice(6).trim()
+      if (!payload || payload === '[DONE]') continue
+      try {
+        const jsonData = JSON.parse(payload)
+        finishReason = jsonData?.candidates?.[0]?.finishReason ?? finishReason
+        const text = jsonData?.candidates?.[0]?.content?.parts?.[0]?.text
+        if (text) fullText += text
+      } catch {
+        void 0
       }
     }
-
-    if (buffer.startsWith('data: ')) {
-      const payload = buffer.slice(6).trim()
-      if (payload && payload !== '[DONE]') {
-        try {
-          const json = JSON.parse(payload)
-          finishReason = json?.candidates?.[0]?.finishReason ?? finishReason
-          const text = json?.candidates?.[0]?.content?.parts?.[0]?.text
-          if (text) fullText += text
-        } catch {
-          void 0
-        }
-      }
-    }
-
-    return { fullText, finishReason }
   }
 
-  const baseTokens = MAX_OUTPUT_TOKENS[safeLength] ?? 520
-  const tokenPlan = [
-    baseTokens,
-    Math.min(1400, baseTokens + 320),
-    Math.min(1800, baseTokens + 640),
-  ]
-  let reviewResult = { fullText: '', finishReason: null }
-  for (const maxTokens of tokenPlan) {
-    reviewResult = await requestOnce(maxTokens)
-    if (reviewResult.finishReason !== 'MAX_TOKENS') break
-  }
-
-  const normalizedReview = normalizeReviewText(reviewResult.fullText)
-  if (
-    reviewResult.finishReason === 'MAX_TOKENS' &&
-    normalizedReview.length < minReviewChars
-  ) {
-    res.statusCode = 200
-    setCommonSecurityHeaders(res)
-    res.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8')
-    res.setHeader('Cache-Control', 'no-cache, no-transform')
-    res.setHeader('X-Accel-Buffering', 'no')
-    res.write(
-      `${JSON.stringify({ error: '응답이 중간에 잘렸습니다. 리뷰 다시 생성을 눌러 주세요.' })}\n`,
-    )
-    return res.end()
-  }
-  if (normalizedReview.length < minReviewChars) {
-    res.statusCode = 200
-    setCommonSecurityHeaders(res)
-    res.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8')
-    res.setHeader('Cache-Control', 'no-cache, no-transform')
-    res.setHeader('X-Accel-Buffering', 'no')
-    res.write(
-      `${JSON.stringify({ error: '리뷰가 너무 짧게 생성되었습니다. 다시 생성해 주세요.' })}\n`,
-    )
-    return res.end()
-  }
-
+  const normalizedReview = normalizeReviewText(fullText)
   res.statusCode = 200
   setCommonSecurityHeaders(res)
   res.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8')
   res.setHeader('Cache-Control', 'no-cache, no-transform')
   res.setHeader('X-Accel-Buffering', 'no')
-  res.write(`${JSON.stringify({ text: reviewResult.fullText })}\n`)
-  res.write(
-    `${JSON.stringify({ done: true, finishReason: reviewResult.finishReason })}\n`,
-  )
+  if (normalizedReview.length < minReviewChars) {
+    res.write(
+      `${JSON.stringify({ error: '리뷰가 너무 짧게 생성되었습니다. 다시 생성해 주세요.' })}\n`,
+    )
+    return res.end()
+  }
+  res.write(`${JSON.stringify({ text: fullText })}\n`)
+  res.write(`${JSON.stringify({ done: true, finishReason })}\n`)
   res.end()
-}
-
-function json(res, code, body) {
-  res.statusCode = code
-  setCommonSecurityHeaders(res)
-  res.setHeader('Content-Type', 'application/json; charset=utf-8')
-  res.end(JSON.stringify(body))
 }
 
 function toClientErrorStatus(status) {
@@ -863,11 +737,15 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return json(res, 405, { ok: false, error: 'Method Not Allowed' })
   }
+
   const auth = await authorizeRequest(req)
   if (!auth.ok) {
     return json(res, auth.status, { ok: false, error: auth.error })
   }
-  const rateKey = auth.userId ? `user:${auth.userId}` : `ip:${getClientIp(req) || 'unknown'}`
+
+  const rateKey = auth.userId
+    ? `user:${auth.userId}`
+    : `ip:${getClientIp(req) || 'unknown'}`
   const rate = applyRateLimit(rateKey)
   if (!rate.ok) {
     res.setHeader('Retry-After', String(rate.retryAfterSec))
@@ -925,23 +803,18 @@ export default async function handler(req, res) {
       `서로 다른 키워드를 ${KEYWORDS_MIN_COUNT}~${KEYWORDS_MAX_COUNT}개 작성하고, 모든 값은 한글을 포함해야 해. ` +
       '설명, 서문, 코드블록, 영어 문장 없이 JSON만 출력해. ' +
       '형식: {"keywords":["...","...","..."]}'
-    const buildKeywordPayload = (maxOutputTokens) => ({
+    const payload = {
       contents: [
         {
           parts: [
-            {
-              inline_data: {
-                mime_type: mimeType,
-                data: imageBase64,
-              },
-            },
+            { inline_data: { mime_type: mimeType, data: imageBase64 } },
             { text: prompt },
           ],
         },
       ],
       generationConfig: {
         temperature: 0.1,
-        maxOutputTokens,
+        maxOutputTokens: KEYWORDS_MAX_OUTPUT_TOKENS,
         responseMimeType: 'application/json',
         responseJsonSchema: {
           type: 'object',
@@ -956,46 +829,28 @@ export default async function handler(req, res) {
           required: ['keywords'],
         },
       },
-    })
-
-    let result = await requestGemini({
-      key,
-      payload: buildKeywordPayload(KEYWORDS_MAX_OUTPUT_TOKENS),
-    })
-
-    if (
-      result.ok &&
-      result.data?.candidates?.[0]?.finishReason === 'MAX_TOKENS'
-    ) {
-      result = await requestGemini({
-        key,
-        payload: buildKeywordPayload(KEYWORDS_MAX_OUTPUT_TOKENS + 220),
-      })
     }
 
+    const result = await requestGemini({ key, payload })
     if (!result.ok) {
       return json(res, toClientErrorStatus(result.status), result)
     }
 
-    const firstParsed = parseKeywordsFromAny(result.data)
-    if (
-      firstParsed.keywords &&
-      firstParsed.keywords.length >= KEYWORDS_MIN_COUNT
-    ) {
+    const parsed = parseKeywordsFromAny(result.data)
+    if (parsed.keywords && parsed.keywords.length >= KEYWORDS_MIN_COUNT) {
       return json(res, 200, {
         ok: true,
-        keywords: firstParsed.keywords,
+        keywords: parsed.keywords,
         model: result.model,
       })
     }
 
-    if (firstParsed.tooFew) {
-      const n = firstParsed.partial?.length ?? 0
+    if (parsed.tooFew) {
+      const n = parsed.partial?.length ?? 0
       if (DEBUG_LOGS) {
         console.warn('[gemini keywords] too few after filter', {
           count: n,
-          partial: firstParsed.partial ?? [],
-          ...summarizeKeywordDebug(result.data, firstParsed.rawText),
+          ...summarizeKeywordDebug(result.data),
         })
       }
       return json(res, 502, {
@@ -1004,17 +859,13 @@ export default async function handler(req, res) {
       })
     }
 
-    const apiIssue = describeKeywordGeminiIssue(
-      result.data,
-      firstParsed.rawText,
-    )
+    const apiIssue = describeKeywordGeminiIssue(result.data, parsed.rawText)
     if (DEBUG_LOGS) {
       console.warn('[gemini keywords] parse failed', {
         apiIssue,
-        ...summarizeKeywordDebug(result.data, firstParsed.rawText),
+        ...summarizeKeywordDebug(result.data),
       })
     }
-
     return json(res, 502, {
       ok: false,
       error:
@@ -1025,19 +876,16 @@ export default async function handler(req, res) {
 
   if (body.action === 'review') {
     const rating = Number.isFinite(Number(body.rating)) ? Number(body.rating) : 5
-    const keywords = body.keywords
-    const length = body.length
     const tone =
       typeof body.tone === 'string' && REVIEW_TONE_MAP[body.tone]
         ? body.tone
         : 'neutral'
-
     try {
       await streamGeminiReview({
         key,
         rating,
-        keywords,
-        length,
+        keywords: body.keywords,
+        length: body.length,
         tone,
         res,
       })

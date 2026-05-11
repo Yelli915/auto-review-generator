@@ -144,44 +144,44 @@ export default function UploadStep({ onNext, isLoading, ratingLabels }) {
 
       <div className="upload-row">
         <div className="field upload-row__drop">
-        <span className="field__label" id={`${inputId}-label`}>
-          이미지
-        </span>
-        <label
-          className={dropClass}
-          htmlFor={inputId}
-          onDragOver={handleDragOver}
-          onDragLeave={handleDragLeave}
-          onDrop={handleDrop}
-        >
-          <input
-            id={inputId}
-            ref={inputRef}
-            type="file"
-            accept="image/*"
-            onChange={handleFileChange}
-            aria-labelledby={`${inputId}-label`}
-          />
-          {isDragging ? (
-            <p className="file-drop__text file-drop__text--drag">여기에 놓으세요</p>
-          ) : (
-            <>
-              <p className="file-drop__text">
-                탭하거나 파일을 끌어다 놓으세요
-              </p>
-              <p className="file-drop__sub">
-                JPG · PNG · WEBP 등 · 최대 {MAX_FILE_SIZE_MB}MB
-              </p>
-            </>
-          )}
-        </label>
-        {status.text && (
-          <p
-            className={`field__hint ${status.isError ? 'field__hint--error' : 'field__hint--file'}`}
+          <span className="field__label" id={`${inputId}-label`}>
+            이미지
+          </span>
+          <label
+            className={dropClass}
+            htmlFor={inputId}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
           >
-            {status.text}
-          </p>
-        )}
+            <input
+              id={inputId}
+              ref={inputRef}
+              type="file"
+              accept="image/*"
+              onChange={handleFileChange}
+              aria-labelledby={`${inputId}-label`}
+            />
+            {isDragging ? (
+              <p className="file-drop__text file-drop__text--drag">여기에 놓으세요</p>
+            ) : (
+              <>
+                <p className="file-drop__text">
+                  탭하거나 파일을 끌어다 놓으세요
+                </p>
+                <p className="file-drop__sub">
+                  JPG · PNG · WEBP 등 · 최대 {MAX_FILE_SIZE_MB}MB
+                </p>
+              </>
+            )}
+          </label>
+          {status.text && (
+            <p
+              className={`field__hint ${status.isError ? 'field__hint--error' : 'field__hint--file'}`}
+            >
+              {status.text}
+            </p>
+          )}
         </div>
 
         {previewUrl && (

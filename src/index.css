@@ -1038,7 +1038,6 @@ code {
   background: var(--code-bg);
 }
 
-/* ── Step enter animation ───────────────────────────────────────────── */
 
 @keyframes step-enter {
   from {
@@ -1072,7 +1071,6 @@ code {
   color: var(--error-text);
 }
 
-/* ── File drop drag state ───────────────────────────────────────────── */
 
 .file-drop--drag {
   border-style: solid;
@@ -1085,7 +1083,6 @@ code {
   font-weight: 600;
 }
 
-/* ── Star rating input ──────────────────────────────────────────────── */
 
 .star-rating {
   display: flex;
@@ -1129,7 +1126,6 @@ code {
   min-width: 9em;
 }
 
-/* ── Small stars (review context) ──────────────────────────────────── */
 
 .star-sm {
   font-size: 0.9rem;
@@ -1141,7 +1137,6 @@ code {
   color: #f59e0b;
 }
 
-/* ── Keyword header row ─────────────────────────────────────────────── */
 
 .keyword-header {
   display: flex;
@@ -1154,7 +1149,6 @@ code {
   margin-bottom: 0;
 }
 
-/* ── Inline link-style button ───────────────────────────────────────── */
 
 .btn-link {
   background: none;
@@ -1186,7 +1180,6 @@ code {
   outline-offset: 2px;
 }
 
-/* ── Chip skeleton loading ──────────────────────────────────────────── */
 
 .chip-skeleton-group {
   display: flex;
@@ -1225,7 +1218,6 @@ code {
   }
 }
 
-/* ── Review context summary card ────────────────────────────────────── */
 
 .review-context {
   display: flex;
@@ -1290,7 +1282,6 @@ code {
   line-height: 1.6;
 }
 
-/* ── Review character count ─────────────────────────────────────────── */
 
 .review-meta {
   text-align: right;
@@ -1299,7 +1290,6 @@ code {
   margin: -6px 0 14px;
 }
 
-/* ── Review bottom navigation ───────────────────────────────────────── */
 
 .review-nav {
   margin-top: 12px;
@@ -1327,7 +1317,6 @@ code {
   margin-top: 8px;
 }
 
-/* ── Mobile fine tuning (390 / 360) ─────────────────────────────────── */
 
 @media (max-width: 390px) {
   .review-app {
@@ -1436,7 +1425,6 @@ code {
   }
 }
 
-/* ── Footer ─────────────────────────────────────────────────────────── */
 
 .review-app__footer {
   margin-top: 14px;
@@ -1481,4 +1469,3 @@ code {
   margin: 0;
   letter-spacing: 0.02em;
 }
-
