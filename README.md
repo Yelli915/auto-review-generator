@@ -1,376 +1,293 @@
-# 🧾 Auto Review Generator v1.0
+# Auto Review Generator
 
-> v1.0 정식 배포: 사진 한 장과 별점만으로 리뷰 초안을 빠르게 생성하는 AI 웹앱
+이 문서는 Auto Review Generator의 ver1 현재 구현과 ver2 확장 범위를 구분해 정리한 기준 문서입니다. ver1은 사진 1장과 별점 기반 리뷰 생성을 다루며, ver2는 리뷰 맥락과 이미지 입력 품질 개선을 확장 범위로 정의합니다.
 
 ![React](https://img.shields.io/badge/React-19-61DAFB?style=flat-square&logo=react)
 ![JavaScript](https://img.shields.io/badge/JavaScript-ES2022-F7DF1E?style=flat-square&logo=javascript)
-![Gemini](https://img.shields.io/badge/Gemini_Flash-Free_Tier-4285F4?style=flat-square&logo=google)
+![Gemini](https://img.shields.io/badge/Gemini_2.5_Flash-4285F4?style=flat-square&logo=google)
 
----
+## Version Overview
 
-## 📢 배포 공지 (v1.0)
+### ver1: MVP 기능 완성
 
-Auto Review Generator v1.0이 배포되었습니다.  
-이제 사용자는 사진 업로드와 별점 선택만으로 리뷰 키워드와 본문을 자동 생성할 수 있습니다.
+ver1은 리뷰 생성 기능 자체를 검증하기 위한 첫 버전입니다.
 
-### 이번 배포에서 제공되는 핵심 기능
-
-- 사진 + 별점 기반 키워드 자동 생성
-- 키워드 선택 후 리뷰 자동 작성
+- 사진 1장 업로드
+- 별점 선택
+- 이미지 기반 키워드 자동 생성
+- 키워드 선택 후 리뷰 생성
 - 리뷰 길이/말투 옵션 선택
-- 스트리밍 출력 + 클립보드 복사
-- 외부 서비스 삽입 가능한 컴포넌트 구조
+- 스트리밍 출력
+- 클립보드 복사
+- `ReviewGenerator` 컴포넌트 단위 분리
 
----
+### ver2: 리뷰 유형 세분화와 이미지 입력 품질 개선
 
-## 📌 서비스 소개
+ver2는 리뷰 유형, 다중 이미지 입력, 파일 선택 후 API 전송 전 이미지 조정 단계를 추가해 리뷰 생성 품질을 높이는 버전입니다. 세부 구현 범위는 `ver2 Scope`에서 관리합니다.
 
-사용자가 사진을 업로드하고 별점을 입력하면, AI가 이미지를 분석하여 맥락에 맞는 키워드를 제시하고 자동으로 리뷰 문장을 생성합니다.
+## Current Status
 
-음식, 숙박, 상품 등 **범용 카테고리**를 지원하며, 추후 외부 플랫폼(배달앱, 예약앱 등)에 **컴포넌트 단위로 삽입** 가능하도록 모듈화 구조로 설계되었습니다.
+현재 README는 ver1 구현 상태와 ver2 확장 범위를 함께 관리하는 기준 문서입니다. 저장소의 현재 구현은 ver1 기능과 공개 배포를 위한 안정화 항목을 포함합니다. 예정 기능의 세부 범위는 아래 `ver2 Scope`에만 정리합니다.
 
-### 핵심 목표
+구현 현황:
 
-- 리뷰 작성에 어려움을 겪는 사용자의 진입 장벽을 낮춤
-- 이미지 컨텍스트 기반의 개인화된 키워드 제공
-- 별점에 따라 자동으로 긍정 / 부정 톤 조절
-- 페르소나 · 문체 · 구조 다양화로 획일적 리뷰 방지
-- API 비용 최소화 (Google Gemini Flash 무료티어 활용)
+- 구현됨: 이미지 1장 업로드, 별점 선택, 키워드 생성, 리뷰 생성, 스트리밍 출력, 클립보드 복사
+- 구현됨: Google 로그인 기반 API 보호, Origin allowlist, 서버리스 API 인증/제한 로직, 보안 헤더 설정
+- ver2 구현 범위: 리뷰 유형 세분화와 이미지 입력 개선. 세부 항목은 `ver2 Scope` 참고
 
----
+검증 시점:
 
-## 🛠 기술 스택
+- 2026-05-11 (KST)
 
-| 분류 | 기술 | 선택 이유 |
-|------|------|-----------|
-| 프론트엔드 | React 19 | 컴포넌트 기반 구조로 외부 삽입 용이 |
-| 언어 | JavaScript ES2022+ | 표준 비동기 처리, ReadableStream 지원 |
-| 스타일 | CSS Variables | 라이트 / 다크 모드 자동 대응 |
-| AI API | Google Gemini 2.5 Flash | 무료티어 제공, 멀티모달 단일 호출 지원 |
+검증 기준:
 
-### Gemini Flash를 선택한 이유
+- 빌드 검증: `npm run build`가 오류 없이 완료되어야 합니다.
+- 린트 검증: `npm run lint`가 오류 없이 완료되어야 합니다.
+- 의존성 보안 감사: `npm audit --audit-level=moderate` 결과가 `found 0 vulnerabilities`여야 합니다.
+- 비밀값 검색: 저장소 전체에서 API 키, OAuth secret, bearer token, private key, refresh token 패턴이 발견되지 않아야 합니다.
+- 위험 코드 검색: 저장소 전체에서 `dangerouslySetInnerHTML`, `innerHTML`, `eval`, `new Function`, `document.write`가 발견되지 않아야 합니다.
+- Git 추적 파일 확인: `.env`, `node_modules`, `dist`, `.vercel`이 Git 추적 대상에 포함되지 않아야 합니다.
+- 깨진 문자열 확인: README, API, UI 코드에서 깨진 한글 패턴이 발견되지 않아야 합니다.
 
-Claude Sonnet, GPT-4o 등 상용 API 대비 **무료 한도가 넓고**, 이미지 + 텍스트 처리를 단일 호출로 지원하여 파이프라인을 단순하게 유지할 수 있습니다. 초기 트래픽 규모에서 비용 없이 전체 기능을 검증할 수 있다는 점이 MVP 단계에 적합합니다.
+참고 결과:
 
-| 무료티어 한도 | 수치 |
-|---|---|
-| 분당 요청 | 15회 |
-| 일일 요청 | 1,500회 |
-| 분당 토큰 | 1,000,000 tokens |
-| 일일 가용 사용자 (추정) | 약 500~750명 |
+아래 항목은 검증 로그와 기준 커밋이 문서에 함께 기록되어 있지 않으므로, 최신 상태를 보장하는 결과가 아니라 문서 정리 시점의 참고용 상태입니다.
+검증 로그와 기준 커밋이 추가되기 전까지는 아래 결과를 배포 판단 근거로 사용하지 않습니다.
 
-> 무료티어 수치는 변동될 수 있어, 배포 전 [공식 문서](https://ai.google.dev/gemini-api/docs/rate-limits) 기준으로 재확인하는 것을 권장합니다.
+- 빌드: 통과한 것으로 기록됨
+- 린트: 통과한 것으로 기록됨
+- 의존성 보안 감사: `found 0 vulnerabilities`로 기록됨
+- 비밀값 커밋 여부: 실제 키/토큰 없음으로 기록됨
+- 위험 DOM 실행 패턴: 없음으로 기록됨
+- `.env`: Git 추적 제외로 기록됨
+- `.env.example`: 빈 예시 값만 포함된 것으로 기록됨
 
----
+## Features
 
-## 🔄 서비스 플로우
+현재 구현된 기능:
 
+- 사진 1장 업로드
+- 별점 기반 리뷰 맥락 반영
+- 이미지 기반 리뷰 키워드 자동 생성
+- 키워드 선택형 리뷰 초안 생성
+- 리뷰 길이와 말투 옵션 제공
+- 스트리밍 방식의 리뷰 출력
+- 클립보드 복사 지원
+
+## Login UX
+
+- `VITE_GOOGLE_CLIENT_ID`가 없으면 앱 본문 대신 환경 변수 설정 오류를 표시합니다.
+- 로그인 전에는 리뷰 생성 플로우를 열지 않고 Google 로그인 버튼과 사용 흐름 안내만 표시합니다.
+- 로그인 성공 후에만 이미지 1장 업로드, 키워드 생성, 리뷰 생성 플로우에 진입할 수 있습니다.
+- API가 401 응답을 반환하면 저장된 로그인 토큰을 지우고 재로그인 안내를 표시합니다.
+- 로그인 후 화면에는 플로우 진행 중에도 접근 가능한 로그아웃 버튼을 제공합니다.
+
+## ver2 Scope
+
+ver2에서는 다음 기능 개선에 집중합니다.
+
+### Review Category
+
+- 리뷰 분야를 맛집 리뷰, 상품 리뷰, 장소 리뷰, 서비스 리뷰로 구분
+- 사용자가 리뷰 분야를 직접 선택
+- 선택한 분야에 따라 키워드 생성 기준과 리뷰 문체 조정
+
+### Multi Image Upload
+
+- ver2에서는 한 리뷰에 이미지를 최대 3장까지 첨부 가능
+- 첨부된 1~3장의 이미지를 종합해 키워드 생성
+- 여러 이미지는 같은 리뷰 대상을 설명하는 보조 정보로 사용됨
+
+### Image Editing
+
+- 파일 선택 후 각 이미지 미리보기 제공
+- API 전송 전에 각 이미지별 자르기/회전 조정 가능
+- 리뷰 대상이 중앙에 잘 보이도록 불필요한 영역을 제거한 뒤 키워드 생성 요청
+- 불필요한 배경 정보를 줄여 이미지 기반 키워드 생성 품질 개선
+
+## Service Flow (ver2 Target)
+
+```text
+1. 리뷰 분야 선택
+   ↓
+2. 사진 업로드
+   - 1~3장
+   - 각 이미지 미리보기
+   - API 전송 전 자르기/회전 조정
+   ↓
+3. 별점 선택
+   ↓
+4. 전체 이미지 종합 분석 + 키워드 생성
+   ↓
+5. 키워드, 길이, 말투 선택
+   ↓
+6. 리뷰 자동 작성
+   ↓
+7. 클립보드 복사
 ```
-[1단계] 사진 업로드 + 별점 선택 + 리뷰 길이 선택
-           │
-           ▼  ── API 호출 1회 ──
-[2~3단계] 이미지 분석 + 키워드 8개 생성
-         (별점 기반 긍정도 자동 조절 / 새로고침으로 재생성 가능)
-           │
-           ▼
-[4단계]  키워드 토글 선택 (복수 선택 가능)
-           │
-           ▼  ── API 호출 1회 ──
-[5단계]  리뷰 자동 작성 (스트리밍 실시간 출력 + 클립보드 복사)
-```
 
-> 세션당 최소 **API 2회 호출**로 전체 플로우 완성. 키워드 새로고침 시 1회 추가.
+ver2 목표 플로우에서는 Gemini API 호출을 키워드 생성 1회, 리뷰 생성 1회로 설계할 예정입니다. 키워드 재생성 기능을 유지하면 재생성할 때마다 API 호출이 1회 추가될 수 있습니다.
 
----
+## Tech Stack
 
-## 📂 컴포넌트 구조
+| 분류 | 기술 |
+| --- | --- |
+| Frontend | React 19 |
+| Build Tool | Vite |
+| Language | JavaScript ES2022+, ESM |
+| Styling | CSS Variables |
+| Serverless/API | Vercel Serverless Function 호환 Node.js API (`api/gemini.js`) |
+| API Runtime | Node.js 20.x |
+| AI API | Google Gemini 2.5 Flash |
+| 인증 | Google OAuth ID Token 검증 (`google-auth-library`) |
+| 배포 | Vercel 정적 배포 + 서버리스 API, Netlify 정적 배포/보안 헤더 설정 |
+| 보안 헤더 | Vercel Headers, Netlify Headers, Nginx 예시 설정 |
 
-UI와 API 로직을 완전히 분리하여 외부 앱 삽입 시 `ReviewGenerator.jsx` 하나만 import하면 됩니다.
+## Project Structure
 
-```
-ReviewGenerator/
-├── ReviewGenerator.jsx       # 최상위 컴포넌트 (상태 관리 + 단계 전환)
-├── steps/
-│   ├── UploadStep.jsx        # 이미지 업로드 + 별점 + 길이 선택
-│   ├── KeywordStep.jsx       # 키워드 표시 + 토글 선택 + 새로고침
-│   └── ReviewStep.jsx        # 생성된 리뷰 표시 + 복사 버튼
+```text
+auto-review-generator/
 ├── api/
-│   └── geminiService.js      # API 호출 전담 (UI 완전 분리)
-└── utils/
-    └── imageUtils.js         # base64 변환, 이미지 리사이징
+│   └── gemini.js
+│       서버리스 API 엔드포인트입니다. `/api/gemini` 요청을 처리하고,
+│       Google ID Token 검증, Origin allowlist, rate limit,
+│       Gemini API 호출을 담당합니다.
+├── src/
+│   ├── App.jsx
+│   ├── main.jsx
+│   ├── index.css
+│   ├── utils/
+│   │   └── env.js
+│   └── components/
+│       └── ReviewGenerator/
+│           ├── ReviewGenerator.jsx
+│           ├── api/
+│           │   └── geminiService.js
+│           │       프론트엔드 API 클라이언트입니다. 서버리스 엔드포인트
+│           │       `/api/gemini`로 이미지, 별점, 키워드 요청을 보냅니다.
+│           ├── steps/
+│           │   ├── UploadStep.jsx
+│           │   ├── KeywordStep.jsx
+│           │   └── ReviewStep.jsx
+│           └── utils/
+│               └── imageUtils.js
+├── deploy/
+│   └── nginx/
+│       └── security-headers.conf
+│           자체 호스팅 시 참고할 보안 헤더 예시입니다.
+├── vercel.json
+│   Vercel 정적 빌드 및 보안 헤더 설정입니다.
+├── netlify.toml
+│   Netlify 정적 빌드 및 보안 헤더 설정입니다. 현재 Netlify Functions와
+│   `/api/gemini` 리다이렉트는 포함되어 있지 않습니다.
+├── package.json
+└── README.md
 ```
 
-### 외부 앱 삽입 예시
+ver2 구현 시 추가될 수 있는 구조:
+
+```text
+src/components/ReviewGenerator/
+├── steps/
+│   ├── CategoryStep.jsx
+│   ├── ImageEditStep.jsx
+│   └── ...
+└── utils/
+    ├── imageUtils.js
+    └── reviewCategories.js
+```
+
+위 파일은 ver2 기능 구현 범위에 포함되는 예정 구조입니다. 실제 파일명이 달라지면 README도 구현 결과에 맞춰 갱신해야 합니다.
+
+외부 앱 삽입 예시:
 
 ```jsx
-import ReviewGenerator from './ReviewGenerator';
+// 호출 파일의 위치에 따라 상대 경로는 조정해야 합니다.
+import ReviewGenerator from './components/ReviewGenerator/ReviewGenerator'
 
-// 다른 앱에서 한 줄로 삽입
-<ReviewGenerator onReviewComplete={(review) => console.log(review)} />
-```
-
-`onReviewComplete` 콜백으로 완성된 리뷰를 상위 앱에 전달하여 외부 서비스의 리뷰 입력창에 자동 삽입하는 방식으로 확장할 수 있습니다.
-
----
-
-## ⚙️ 단계별 구현 상세
-
-### 1단계 — 사진 업로드 + 별점 입력
-
-```js
-const handleImageUpload = (e) => {
-  const file = e.target.files[0];
-  const reader = new FileReader();
-  reader.onload = () => setBase64Image(reader.result.split(',')[1]);
-  reader.readAsDataURL(file);
-};
-```
-
-- `FileReader API`로 이미지를 base64 변환하여 메모리에 보관
-- `URL.createObjectURL()`로 미리보기 즉시 렌더링
-- 업로드 파일 크기 제한: 최대 15MB
-- 클라이언트 리사이징: `maxEdge: 512`, `JPEG quality: 0.75`
-
-### 2~3단계 — 이미지 분석 + 키워드 생성 (단일 API 호출)
-
-```js
-// POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={API_KEY}
-{
-  "contents": [{
-    "parts": [
-      { "inline_data": { "mime_type": "image/jpeg", "data": "{base64Image}" } },
-      { "text": "별점 {rating}점 기준 한국어 키워드 3~8개를 JSON으로만 반환해줘. {\"keywords\": [...]}" }
-    ]
-  }],
-  "generationConfig": {
-    "temperature": 0.1,
-    "maxOutputTokens": 320,
-    "responseMimeType": "application/json",
-    "responseJsonSchema": { "type": "object", "required": ["keywords"] }
-  }
+function handleReviewComplete(review) {
+  // 완성된 리뷰를 상위 앱의 리뷰 입력창 등에 전달합니다.
 }
+
+<ReviewGenerator onReviewComplete={handleReviewComplete} />
 ```
 
-- 이미지 분석과 키워드 생성을 **단일 호출로 묶어** 비용·레이턴시 최소화
-- `temperature: 0.1`로 응답 형식 안정성 우선
-- `responseJsonSchema`로 키워드 배열 형식을 강제
-- 파싱 실패 시 보정 로직(균형 괄호 추출, 라인/quoted 토큰 추출)으로 복구 시도
+## Environment Variables
 
-### 4단계 — 키워드 선택
-
-- `selectedKeywords: string[]` 상태로 토글 관리
-- 선택 순서 유지 → 리뷰 문장의 자연스러운 흐름 확보
-- 1개 이상 선택 시 "리뷰 작성" 버튼 활성화
-
-### 5단계 — 리뷰 자동 작성 (스트리밍)
-
-```js
-const lengthMap = {
-  short:  '2~3문장 이내로 간결하게',
-  medium: '4~5문장 분량으로',
-  long:   '7~8문장의 상세한 내용으로',
-};
+```env
+GEMINI_API_KEY=
+ALLOWED_ORIGINS=
+GOOGLE_CLIENT_ID=
+VITE_GOOGLE_CLIENT_ID=
 ```
 
-- `streamGenerateContent` 엔드포인트로 SSE 스트리밍 적용
-- `ReadableStream + TextDecoder`로 청크 단위 수신 → 타이핑 효과 구현
-- 완성 후 클립보드 복사 버튼 제공
+- `GEMINI_API_KEY`: Google AI Studio에서 발급한 Gemini API 키입니다. 서버 환경변수로만 설정하고 Git에 커밋하지 마세요.
+- `ALLOWED_ORIGINS`: 운영 환경에서 허용할 프론트 도메인 목록입니다. 예: `https://example.com,https://www.example.com`
+- `GOOGLE_CLIENT_ID`: 서버에서 Google ID Token 검증에 사용하는 OAuth 웹 클라이언트 ID입니다.
+- `VITE_GOOGLE_CLIENT_ID`: 프론트 Google 로그인 버튼에 사용하는 OAuth 웹 클라이언트 ID입니다. 브라우저에 노출되는 공개 식별자이며 비밀값이 아닙니다.
 
----
+운영 환경에서는 `GOOGLE_CLIENT_ID`와 `ALLOWED_ORIGINS`가 필수입니다. 누락되면 API가 500으로 차단됩니다.
 
-## 🎭 리뷰 생성 전략 (v1.0)
+Google Cloud Console의 OAuth 웹 클라이언트 설정에서도 승인된 JavaScript 원본과 리디렉션 도메인을 실제 배포 도메인으로 제한해야 합니다.
 
-v1.0에서는 안정적인 결과를 우선하고, 일부 다양성 기능은 다음 버전 후보로 유지합니다.
+## Security Checklist
 
-### 1. 문체 / 어조 파라미터 (적용됨)
+- Gemini API 키는 서버리스 함수에서만 사용합니다.
+- 클라이언트는 Google ID Token을 `Authorization: Bearer` 헤더로 서버에 전달합니다.
+- 서버는 Google ID Token audience를 `GOOGLE_CLIENT_ID`로 검증합니다.
+- 운영 환경에서는 `ALLOWED_ORIGINS`에 포함된 Origin만 API를 호출할 수 있습니다.
+- 서버 API의 JSON 요청 본문은 2MB로 제한합니다. 프론트 업로드 파일 제한 15MB와는 별개이며, 이미지는 전송 전에 리사이즈/압축됩니다.
+- 사용자별/IP별 레이트리밋을 적용합니다.
+- CSP, `X-Frame-Options`, `X-Content-Type-Options`, `Referrer-Policy`, `Permissions-Policy`, HSTS를 설정합니다.
+- `.env`, `node_modules`, `dist`, `.vercel`은 Git 추적에서 제외합니다.
+- README 예시에서 사용자 리뷰를 콘솔에 남기는 패턴을 제거했습니다.
 
-| 파라미터 | 옵션 |
-|---|---|
-| 말투 | 구어체 / 문어체 / 반말 / 존댓말 |
-| 감정 강도 | 담담하게 / 보통 / 열정적으로 |
-| 표현 방식 | 사실 나열형 / 스토리텔링형 / 비교형 |
-| 문장 길이 | 단문 위주 / 복문 혼합 |
-
-### 2. 별점 세분화 — 단순 긍/부정 탈피 (적용됨)
-
-```js
-const ratingContext = {
-  1: { tone: '매우 실망',  focus: '결정적 단점 1~2가지를 명확히' },
-  2: { tone: '아쉬움',     focus: '기대에 못 미친 부분, 재방문 의사 없음' },
-  3: { tone: '무난함',     focus: '특별하지 않지만 나쁘지 않은, 조건부 추천' },
-  4: { tone: '만족',       focus: '좋았던 점 위주, 작은 아쉬움 한 가지 곁들이기' },
-  5: { tone: '강력 추천',  focus: '구체적 감동 포인트, 재방문·주변 추천 의사' },
-};
-```
-
-4점과 5점 리뷰가 같은 톤으로 나오는 것을 방지합니다.
-
-### 3. 리뷰 구조 템플릿 랜덤화 (다음 버전 후보)
-
-API 호출마다 구조 패턴을 랜덤 선택하여 형식적 다양성을 확보합니다.
-
-```
-패턴 A  결론 먼저형    한 줄 평가 → 이유 2~3가지 → 마무리 추천
-패턴 B  스토리형       방문 맥락 → 첫인상 → 음식/서비스 → 총평
-패턴 C  비교형         기대했던 것 → 실제로 느낀 것 → 차이에 대한 평가
-패턴 D  장단점 병렬형  좋았던 점 → 아쉬운 점 → 재방문 의향
-```
-
-### 4. 이미지 심층 분석 (다음 버전 후보)
-
-단순 태그 추출을 넘어 맥락까지 분석하면 키워드 자체의 차별성이 높아집니다.
-
-```
-기본 분석  →  "파스타, 실내, 밝음"
-
-심층 분석  →  면 굵기·토핑·플레이팅 스타일 / 조명 색온도·좌석 간격
-              분위기 (데이트 vs 친구 모임) / 음식의 신선도·온도감
-```
-
-### 5. 네거티브 프롬프트 — 클리셰 방지 (다음 버전 후보)
-
-LLM이 자주 쓰는 뻔한 표현을 명시적으로 금지합니다.
-
-```
-다음 표현은 절대 사용하지 말 것:
-"강추합니다", "맛있었어요", "또 오고 싶어요", "직원이 친절했어요",
-"가성비 최고", "분위기가 좋아요", "실망하지 않을 거예요"
-```
-
-### 구현 우선순위
-
-| 순위 | 요소 | 효과 | 난이도 |
-|---|---|---|---|
-| 1 | 네거티브 프롬프트 | 즉각적 품질 향상 | 매우 쉬움 (프롬프트만 수정) |
-| 2 | 별점 세분화 | 별점별 차별성 확보 | 쉬움 |
-| 3 | 구조 템플릿 랜덤화 | 형식적 다양성 | 쉬움 |
-| 4 | 페르소나 선택 | 가장 체감 효과 큼 | 보통 |
-| 5 | 이미지 심층 분석 | 키워드 품질 향상 | 보통 |
-| 6 | Temperature 튜닝 | 미세 조정 | 쉬움 (효과는 작음) |
-
-> v1.0에서는 길이/말투/별점 기반 생성이 반영되어 있고, 나머지 다양성 기능은 다음 버전 후보입니다.
-
----
-
-## 🚧 기술적 도전 과제
-
-| 문제 | 원인 | 해결 방법 |
-|------|------|-----------|
-| JSON 파싱 불안정 | LLM이 형식 외 텍스트를 반환하거나 일부만 반환 | `responseJsonSchema` 적용 + 다단계 파싱/보정 로직으로 복구 |
-| 이미지 토큰 과다 | 고해상도 이미지의 높은 토큰 소모 | 클라이언트 리사이징 (`maxEdge: 512`, JPEG `0.75`) |
-| 요청 과다 | 짧은 시간 내 연속 요청으로 실패율 증가 | 프론트 디바운스(`900ms`) + 일일 사용량 제한(`20회`) + 서버 레이트리밋 |
-| 스트리밍 파싱 복잡 | SSE 청크 누락/분할 가능성 | `ReadableStream + TextDecoder` 기반 누적 버퍼 파싱 |
-
----
-
-## 🚀 설치 및 실행 가이드
+## Install and Run
 
 ```bash
-# 저장소 클론
-git clone https://github.com/Yelli915/auto-review-generator.git
-cd auto-review-generator
-
-# 의존성 설치
 npm install
-
-# 환경변수 설정
 cp .env.example .env
-# .env 파일에 GEMINI_API_KEY 등 필수값 입력
-
-# 개발 서버 실행(프론트)
 npm run dev
-# 또는 Vercel 서버리스까지 함께 테스트
-npm run dev:vercel
 ```
 
-### 실행 환경
-
-- Node.js 20 이상 권장
-- npm 10 이상 권장
-- 브라우저 최신 버전(Chrome/Edge/Safari)
-
-### OS별 `.env` 준비
-
-```bash
-# macOS / Linux
-cp .env.example .env
-```
+Windows PowerShell에서는 다음 명령으로 `.env`를 준비합니다.
 
 ```powershell
-# Windows PowerShell
 Copy-Item .env.example .env
 ```
 
-### 환경변수
+Vercel 서버리스 함수까지 함께 테스트하려면 다음 명령을 사용합니다.
 
-```
-GEMINI_API_KEY=your_google_gemini_api_key
-ALLOWED_ORIGINS=http://localhost:5173,https://your-domain.com
-GOOGLE_CLIENT_ID=your_google_oauth_client_id
-VITE_GOOGLE_CLIENT_ID=your_google_oauth_client_id
+```bash
+npm run dev:vercel
 ```
 
-Gemini API 키는 [Google AI Studio](https://aistudio.google.com/)에서 무료로 발급받을 수 있습니다.
-Google OAuth Client ID는 Google Cloud Console에서 발급한 웹 클라이언트 ID를 사용합니다.
-운영 환경에서는 `ALLOWED_ORIGINS`를 반드시 설정해 허용 도메인만 호출 가능하게 제한하세요.
-운영 환경에서는 `GOOGLE_CLIENT_ID`가 없으면 API가 500으로 차단되도록 설정되어 있습니다.
+`npm run dev:vercel`은 Vercel CLI가 필요합니다. 전역 설치 또는 `npx vercel dev` 사용을 전제로 합니다.
 
-### 빠른 사용 방법
+## Validation Commands
 
-1. 앱 접속 후 사진 업로드
-2. 별점(1~5점)과 리뷰 길이 선택
-3. 생성된 키워드 중 원하는 항목 선택
-4. 리뷰 생성 후 복사 버튼으로 사용
+```bash
+npm run build
+npm run lint
+npm audit --audit-level=moderate
+```
 
-### 문제 해결(자주 발생하는 경우)
+## Deployment
 
-- `429` 응답: 서버 레이트리밋 또는 Gemini 한도 상태이므로 잠시 후 재시도
-- CORS 오류: `ALLOWED_ORIGINS`에 현재 프론트 도메인 추가
-- OAuth 관련 오류: `GOOGLE_CLIENT_ID`, `VITE_GOOGLE_CLIENT_ID` 동일 값 확인
-- 일일 한도 초과: 브라우저 기준 1일 20회 제한, 다음 날 재시도
-- 이미지 업로드 실패: 파일 크기/형식 확인(`jpg`, `jpeg`, `png`, `webp` 권장)
+이 프로젝트는 Vercel 배포 설정과 Netlify 정적 배포 설정을 함께 포함합니다. 현재 서버리스 API는 Vercel의 루트 `api/gemini.js` 구조만 기준으로 합니다.
 
-### 운영 참고
+- Vercel: `vercel.json`, 정적 빌드와 `/api/gemini` 서버리스 API를 함께 배포합니다.
+- Netlify: `netlify.toml`, 정적 빌드와 보안 헤더만 설정합니다. 현재 상태로는 `/api/gemini`가 Netlify Functions로 연결되지 않으므로, Netlify 단독 배포에서는 리뷰 생성 API가 동작하지 않습니다. Netlify에서 API까지 운영하려면 Netlify Functions용 엔드포인트와 `/api/gemini` redirect 설정을 별도로 추가해야 합니다.
+- Nginx 보안 헤더 예시: `deploy/nginx/security-headers.conf`
 
-- 프론트 단 일일 요청 제한: 20회
-- 키워드 요청 디바운스: 900ms
-- 서버 레이트리밋 적용(과도한 요청 자동 제한)
+## Troubleshooting
 
----
+- `429` 응답: 서버 레이트리밋 또는 Gemini 요청 한도입니다. 잠시 후 다시 시도하세요.
+- CORS/Origin 오류: `ALLOWED_ORIGINS`에 현재 프론트 도메인을 추가하세요.
+- OAuth 오류: `GOOGLE_CLIENT_ID`와 `VITE_GOOGLE_CLIENT_ID`가 같은 웹 클라이언트 ID인지 확인하세요.
+- 이미지 업로드 실패: 원본 파일 형식과 15MB 이하 크기를 확인하세요. 업로드 후 리사이즈/압축된 API 요청 본문이 2MB를 넘는 경우에도 서버에서 거부될 수 있습니다.
+- 리뷰가 너무 짧음: 키워드를 더 선택하거나 다시 생성하세요.
 
-## 🔐 배포 보안 헤더(CSP) 설정
+## License
 
-- Vercel: `vercel.json`의 `headers` 사용
-- Netlify: `netlify.toml`의 `[[headers]]` 사용
-- Nginx: `deploy/nginx/security-headers.conf`를 서버 블록에 `include` 해서 사용
-
-`frame-ancestors`는 메타 태그에서 무시되므로, 반드시 서버 응답 헤더로 설정해야 합니다.
-
----
-
-## ✅ 릴리즈 노트 (v1.0)
-
-### 이번 1.0에서 제공되는 기능
-
-- 사진 + 별점 기반 리뷰 생성 플로우 완성
-- 키워드 생성/선택 후 리뷰 자동 작성
-- 스트리밍 출력 및 클립보드 복사 지원
-- 이미지 리사이징, JSON 파싱 복구, 재시도 등 안정화 로직 적용
-- 컴포넌트 분리 구조로 외부 서비스 임베드 가능
-
-### 배포 안내 문구
-
-Auto Review Generator v1.0은 리뷰 작성 진입 장벽을 낮추기 위한 첫 정식 배포 버전입니다.  
-사용자는 짧은 입력만으로 리뷰를 완성하고, 운영자는 기존 서비스에 모듈 형태로 쉽게 연동할 수 있습니다.
-
-### 다음 버전 후보(요약)
-
-- 카테고리별 프롬프트 세분화
-- 페르소나/문체 선택 UI
-- 생성 이력 저장 및 재활용
-
----
-
-## 📄 라이선스
-
-MIT License
+MIT

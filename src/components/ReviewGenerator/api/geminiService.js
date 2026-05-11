@@ -222,7 +222,7 @@ export async function generateReview(
           finishReason = json?.finishReason ?? finishReason
         }
       } catch {
-        // 불완전한 청크 무시
+        void 0
       }
     }
   }
@@ -240,7 +240,7 @@ export async function generateReview(
         }
       }
     } catch {
-      // 불완전한 청크 무시
+      void 0
     }
   }
 

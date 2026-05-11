@@ -108,7 +108,7 @@ export default function ReviewStep({
         {showWait ? '리뷰를 작성하는 중입니다…' : review}
         {isStreaming && trimmed ? (
           <span className="review-cursor" aria-hidden="true">
-            ▌
+            |
           </span>
         ) : null}
       </div>

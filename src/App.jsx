@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { GoogleLogin, googleLogout } from '@react-oauth/google'
 import ReviewGenerator from './components/ReviewGenerator/ReviewGenerator'
 import {
@@ -11,19 +11,11 @@ function App() {
   const [token, setToken] = useState('')
   const [authError, setAuthError] = useState('')
   const [isFlowOpen, setIsFlowOpen] = useState(true)
-  const [flowMaxHeight, setFlowMaxHeight] = useState('0px')
   const googleClientId = useMemo(() => getGoogleClientId(), [])
-  const flowContentRef = useRef(null)
 
   useEffect(() => {
     setGoogleIdToken(token)
   }, [token])
-
-  useEffect(() => {
-    const content = flowContentRef.current
-    if (!content) return
-    setFlowMaxHeight(isFlowOpen ? `${content.scrollHeight}px` : '0px')
-  }, [isFlowOpen])
 
   useEffect(() => {
     setUnauthorizedHandler(() => {
@@ -111,12 +103,9 @@ function App() {
                 사용 흐름 보기
               </button>
               <div
-                ref={(node) => {
-                  flowContentRef.current = node
-                }}
                 className="auth-intro__flow-panel"
                 aria-hidden={!isFlowOpen}
-                style={{ maxHeight: flowMaxHeight }}
+                style={{ maxHeight: isFlowOpen ? '180px' : '0px' }}
               >
                 <ol className="auth-intro__flow">
                   <li>이미지와 별점 입력</li>
