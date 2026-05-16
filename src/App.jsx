@@ -77,16 +77,13 @@ function App() {
                   {authError}
                 </div>
               )}
-              <div className="auth-card__login auth-card__login--custom">
-                <span className="auth-card__login-overlay" aria-hidden="true">
-                  로그인
-                </span>
+              <div className="auth-card__login">
                 <GoogleLogin
                   onSuccess={handleLoginSuccess}
                   onError={() => setAuthError('Google 로그인에 실패했습니다.')}
                   auto_select={false}
                   shape="pill"
-                  width={160}
+                  width={220}
                 />
               </div>
             </div>

@@ -5,8 +5,6 @@ import {
 } from '../../../../shared/httpJson.js'
 const API_PATH = '/api/gemini'
 const KEYWORD_DEBOUNCE_MS = 900
-const DAILY_LIMIT = 20
-const DAILY_USAGE_KEY = 'autoReviewGeminiDailyUsage'
 let googleIdToken = ''
 let onUnauthorized = null
 
@@ -14,12 +12,7 @@ let inFlightKeywordKey = null
 let inFlightKeywordPromise = null
 let lastKeywordAt = 0
 
-const lengthMap = {
-  short: '2~3문장 이내로 간결하게',
-  medium: '4~5문장 분량으로',
-  long: '7~8문장의 상세한 내용으로',
-}
-
+const validLengths = new Set(['short', 'medium', 'long'])
 const validTones = new Set(['neutral', 'friendly', 'formal', 'casual'])
 const minReviewChars = {
   short: 20,
@@ -39,48 +32,7 @@ function buildAuthHeaders() {
   return googleIdToken ? { Authorization: `Bearer ${googleIdToken}` } : {}
 }
 
-function getLocalDayKey() {
-  const d = new Date()
-  const y = d.getFullYear()
-  const m = String(d.getMonth() + 1).padStart(2, '0')
-  const day = String(d.getDate()).padStart(2, '0')
-  return `${y}-${m}-${day}`
-}
-
-function consumeDailyQuota(action, { commit = false } = {}) {
-  if (action === 'ping' || typeof window === 'undefined') {
-    return { ok: true }
-  }
-  try {
-    const today = getLocalDayKey()
-    const raw = window.localStorage.getItem(DAILY_USAGE_KEY)
-    const parsed = raw ? JSON.parse(raw) : null
-    const base =
-      parsed && typeof parsed === 'object'
-        ? parsed
-        : { dayKey: today, count: 0 }
-    const count = base.dayKey === today ? Number(base.count) || 0 : 0
-    if (count >= DAILY_LIMIT) {
-      return {
-        ok: false,
-        error: `일일 요청 한도(${DAILY_LIMIT}회)를 초과했습니다. 내일 다시 시도해 주세요.`,
-      }
-    }
-    if (commit) {
-      window.localStorage.setItem(
-        DAILY_USAGE_KEY,
-        JSON.stringify({ dayKey: today, count: count + 1 }),
-      )
-    }
-    return { ok: true }
-  } catch {
-    return { ok: true }
-  }
-}
-
 async function callApi(payload) {
-  const quota = consumeDailyQuota(payload?.action)
-  if (!quota.ok) return quota
   try {
     const response = await fetch(API_PATH, {
       method: 'POST',
@@ -100,8 +52,6 @@ async function callApi(payload) {
         details: data,
       }
     }
-    const quotaCommit = consumeDailyQuota(payload?.action, { commit: true })
-    if (!quotaCommit.ok) return quotaCommit
     return data
   } catch (err) {
     return {
@@ -159,11 +109,8 @@ export async function generateReview(
   tone,
   onChunk,
 ) {
-  const quota = consumeDailyQuota('review')
-  if (!quota.ok) throw new Error(quota.error)
-
   const safeKeywords = Array.isArray(keywords) ? keywords : []
-  const safeLength = lengthMap[length] ? length : 'medium'
+  const safeLength = validLengths.has(length) ? length : 'medium'
   const safeTone = validTones.has(tone) ? tone : 'neutral'
   const safeOnChunk = typeof onChunk === 'function' ? onChunk : () => {}
 
@@ -197,7 +144,25 @@ export async function generateReview(
   let buffer = ''
   let fullText = ''
   let streamError = ''
-  let finishReason = null
+
+  const handleJsonLine = (line) => {
+    const payload = line.trim()
+    if (!payload) return
+    try {
+      const json = JSON.parse(payload)
+      const text = json?.text
+      if (typeof json?.error === 'string' && json.error.trim()) {
+        streamError = json.error.trim()
+        return
+      }
+      if (text) {
+        fullText += text
+        safeOnChunk(fullText)
+      }
+    } catch {
+      void 0
+    }
+  }
 
   while (true) {
     const { done, value } = await reader.read()
@@ -208,40 +173,12 @@ export async function generateReview(
     buffer = lines.pop() || ''
 
     for (const line of lines) {
-      const payload = line.trim()
-      if (!payload) continue
-      try {
-        const json = JSON.parse(payload)
-        const text = json?.text
-        if (typeof json?.error === 'string' && json.error.trim()) {
-          streamError = json.error.trim()
-          continue
-        }
-        if (text) fullText += text
-        if (json?.done) {
-          finishReason = json?.finishReason ?? finishReason
-        }
-      } catch {
-        void 0
-      }
+      handleJsonLine(line)
     }
   }
 
   if (buffer.trim()) {
-    try {
-      const json = JSON.parse(buffer.trim())
-      const text = json?.text
-      if (typeof json?.error === 'string' && json.error.trim()) {
-        streamError = json.error.trim()
-      } else {
-        if (text) fullText += text
-        if (json?.done) {
-          finishReason = json?.finishReason ?? finishReason
-        }
-      }
-    } catch {
-      void 0
-    }
+    handleJsonLine(buffer)
   }
 
   const normalizedReview = fullText.replace(/\s+/g, ' ').trim()
@@ -250,12 +187,5 @@ export async function generateReview(
   }
   if (normalizedReview.length < (minReviewChars[safeLength] ?? 45)) {
     throw new Error('리뷰가 너무 짧게 생성되었습니다. 다시 생성해 주세요.')
-  }
-
-  safeOnChunk(fullText)
-
-  const quotaCommit = consumeDailyQuota('review', { commit: true })
-  if (!quotaCommit.ok) {
-    throw new Error(quotaCommit.error)
   }
 }
