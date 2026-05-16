@@ -6,9 +6,14 @@ const MODEL = 'gemini-2.5-flash'
 const RETRYABLE_STATUS = new Set([500, 502, 503, 504])
 const MAX_RETRIES = 2
 const MAX_REQUEST_BODY_BYTES = 2 * 1024 * 1024
+const MAX_IMAGE_BYTES = 1536 * 1024
+const ALLOWED_IMAGE_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp'])
 const RATE_LIMIT_WINDOW_MS = 60 * 1000
 const RATE_LIMIT_MAX_REQUESTS = 20
 const RATE_LIMIT_STORE = new Map()
+const DAILY_USAGE_MAX_REQUESTS = 20
+const DAILY_USAGE_ACTIONS = new Set(['keywords', 'review'])
+const DAILY_USAGE_STORE = new Map()
 const GOOGLE_OAUTH_CLIENT = new OAuth2Client()
 const DEBUG_LOGS =
   process.env.NODE_ENV !== 'production' || process.env.GEMINI_DEBUG_LOGS === '1'
@@ -111,6 +116,134 @@ function applyRateLimit(identifier) {
     }
   }
   return { ok: true }
+}
+
+function getLocalDayKey(date = new Date()) {
+  const y = date.getFullYear()
+  const m = String(date.getMonth() + 1).padStart(2, '0')
+  const d = String(date.getDate()).padStart(2, '0')
+  return `${y}-${m}-${d}`
+}
+
+function secondsUntilNextLocalDay(date = new Date()) {
+  const nextDay = new Date(date)
+  nextDay.setHours(24, 0, 0, 0)
+  return Math.max(1, Math.ceil((nextDay.getTime() - date.getTime()) / 1000))
+}
+
+export function applyDailyUsageLimit(identifier, action) {
+  if (!DAILY_USAGE_ACTIONS.has(action)) return { ok: true }
+
+  const now = new Date()
+  const today = getLocalDayKey(now)
+  const key = typeof identifier === 'string' && identifier ? identifier : 'unknown'
+  const prev = DAILY_USAGE_STORE.get(key)
+  const count = prev?.dayKey === today ? Number(prev.count) || 0 : 0
+
+  if (count >= DAILY_USAGE_MAX_REQUESTS) {
+    return {
+      ok: false,
+      retryAfterSec: secondsUntilNextLocalDay(now),
+      limit: DAILY_USAGE_MAX_REQUESTS,
+    }
+  }
+
+  DAILY_USAGE_STORE.set(key, {
+    dayKey: today,
+    count: count + 1,
+    updatedAt: now.getTime(),
+  })
+
+  if (DAILY_USAGE_STORE.size > 2000) {
+    for (const [storeKey, value] of DAILY_USAGE_STORE.entries()) {
+      if (!value || value.dayKey !== today) DAILY_USAGE_STORE.delete(storeKey)
+    }
+  }
+
+  return { ok: true }
+}
+
+function normalizeImageMimeType(value) {
+  if (typeof value !== 'string' || !value.trim()) return 'image/jpeg'
+  return value.trim().toLowerCase()
+}
+
+function hasExpectedImageSignature(buffer, mimeType) {
+  if (!Buffer.isBuffer(buffer) || buffer.length < 12) return false
+  if (mimeType === 'image/jpeg') {
+    return buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff
+  }
+  if (mimeType === 'image/png') {
+    return (
+      buffer[0] === 0x89 &&
+      buffer[1] === 0x50 &&
+      buffer[2] === 0x4e &&
+      buffer[3] === 0x47 &&
+      buffer[4] === 0x0d &&
+      buffer[5] === 0x0a &&
+      buffer[6] === 0x1a &&
+      buffer[7] === 0x0a
+    )
+  }
+  if (mimeType === 'image/webp') {
+    return (
+      buffer.toString('ascii', 0, 4) === 'RIFF' &&
+      buffer.toString('ascii', 8, 12) === 'WEBP'
+    )
+  }
+  return false
+}
+
+export function validateImageInput(imageBase64, rawMimeType) {
+  const mimeType = normalizeImageMimeType(rawMimeType)
+  if (!ALLOWED_IMAGE_MIME_TYPES.has(mimeType)) {
+    return {
+      ok: false,
+      status: 415,
+      error: '지원하지 않는 이미지 형식입니다. JPG, PNG, WEBP만 업로드해 주세요.',
+    }
+  }
+  if (typeof imageBase64 !== 'string' || !imageBase64.trim()) {
+    return { ok: false, status: 400, error: 'imageBase64가 필요합니다.' }
+  }
+
+  const data = imageBase64.trim().replace(/\s+/g, '')
+  if (
+    data.length % 4 !== 0 ||
+    !/^[A-Za-z0-9+/]+={0,2}$/.test(data) ||
+    /=[^=]/.test(data)
+  ) {
+    return {
+      ok: false,
+      status: 400,
+      error: '이미지 데이터가 올바른 base64 형식이 아닙니다.',
+    }
+  }
+
+  const decoded = Buffer.from(data, 'base64')
+  if (!decoded.length) {
+    return {
+      ok: false,
+      status: 400,
+      error: '이미지 데이터를 읽을 수 없습니다.',
+    }
+  }
+  if (decoded.length > MAX_IMAGE_BYTES) {
+    return {
+      ok: false,
+      status: 413,
+      error: '이미지 크기가 너무 큽니다. 더 작은 이미지로 다시 시도해 주세요.',
+    }
+  }
+  if (!hasExpectedImageSignature(decoded, mimeType)) {
+    return {
+      ok: false,
+      status: 400,
+      error: '이미지 형식과 실제 파일 내용이 일치하지 않습니다.',
+    }
+  }
+
+  return { ok: true, imageBase64: data, mimeType }
 }
 
 function parseAllowOrigins() {
@@ -258,7 +391,7 @@ function isTemporaryHighDemandMessage(message) {
   )
 }
 
-function humanizeGeminiApiError(status, rawMessage) {
+export function humanizeGeminiApiError(status, rawMessage) {
   const msg = typeof rawMessage === 'string' ? rawMessage : ''
   if (isTemporaryHighDemandMessage(msg)) {
     return '현재 모델 요청이 몰려 일시적으로 처리 지연 중입니다. 잠시 후 다시 시도해 주세요.'
@@ -315,7 +448,7 @@ function isLikelyKeywordPhrase(value) {
   return true
 }
 
-function sanitizeKeywordArray(arr) {
+export function sanitizeKeywordArray(arr) {
   if (!Array.isArray(arr)) return null
   const cleaned = arr
     .map((v) => (typeof v === 'string' ? v.trim() : ''))
@@ -448,7 +581,7 @@ function gatherKeywordResponseText(data) {
   return chunks.join('\n')
 }
 
-function parseKeywordsFromText(text) {
+export function parseKeywordsFromText(text) {
   if (typeof text !== 'string' || !text.trim()) return null
   const raw = text.trim()
   let normalized = raw
@@ -647,7 +780,7 @@ async function streamGeminiReview({ key, rating, keywords, length, tone, res }) 
       contents: [{ parts: [{ text: prompt }] }],
       generationConfig: {
         temperature: 0.6,
-        maxOutputTokens: REVIEW_LENGTH_MAP[safeLength] === 'long' ? 760 : 520,
+        maxOutputTokens: safeLength === 'long' ? 760 : 520,
       },
     }),
   })
@@ -661,47 +794,68 @@ async function streamGeminiReview({ key, rating, keywords, length, tone, res }) 
     throw new Error('스트리밍 응답 본문이 없습니다.')
   }
 
-  const reader = response.body.getReader()
-  const decoder = new TextDecoder()
-  let buffer = ''
-  let fullText = ''
-  let finishReason = null
-
-  while (true) {
-    const { done, value } = await reader.read()
-    if (done) break
-    buffer += decoder.decode(value, { stream: true })
-    const lines = buffer.split('\n')
-    buffer = lines.pop() || ''
-    for (const line of lines) {
-      if (!line.startsWith('data: ')) continue
-      const payload = line.slice(6).trim()
-      if (!payload || payload === '[DONE]') continue
-      try {
-        const jsonData = JSON.parse(payload)
-        finishReason = jsonData?.candidates?.[0]?.finishReason ?? finishReason
-        const text = jsonData?.candidates?.[0]?.content?.parts?.[0]?.text
-        if (text) fullText += text
-      } catch {
-        void 0
-      }
-    }
-  }
-
-  const normalizedReview = normalizeReviewText(fullText)
   res.statusCode = 200
   setCommonSecurityHeaders(res)
   res.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8')
   res.setHeader('Cache-Control', 'no-cache, no-transform')
   res.setHeader('X-Accel-Buffering', 'no')
-  if (normalizedReview.length < minReviewChars) {
-    res.write(
-      `${JSON.stringify({ error: '리뷰가 너무 짧게 생성되었습니다. 다시 생성해 주세요.' })}\n`,
-    )
+
+  const reader = response.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+  let fullText = ''
+  let finishReason = null
+  const writeJsonLine = (payload) => {
+    res.write(`${JSON.stringify(payload)}\n`)
+  }
+
+  const handleSsePayload = (payload) => {
+    if (!payload || payload === '[DONE]') return
+    try {
+      const jsonData = JSON.parse(payload)
+      finishReason = jsonData?.candidates?.[0]?.finishReason ?? finishReason
+      const text = jsonData?.candidates?.[0]?.content?.parts?.[0]?.text
+      if (text) {
+        fullText += text
+        writeJsonLine({ text })
+      }
+    } catch {
+      void 0
+    }
+  }
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      buffer += decoder.decode(value, { stream: true })
+      const lines = buffer.split('\n')
+      buffer = lines.pop() || ''
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue
+        handleSsePayload(line.slice(6).trim())
+      }
+    }
+
+    if (buffer.trim()) {
+      for (const line of buffer.split('\n')) {
+        if (!line.startsWith('data: ')) continue
+        handleSsePayload(line.slice(6).trim())
+      }
+    }
+  } catch (err) {
+    writeJsonLine({
+      error: err instanceof Error ? err.message : '스트리밍 응답을 읽지 못했습니다.',
+    })
     return res.end()
   }
-  res.write(`${JSON.stringify({ text: fullText })}\n`)
-  res.write(`${JSON.stringify({ done: true, finishReason })}\n`)
+
+  const normalizedReview = normalizeReviewText(fullText)
+  if (normalizedReview.length < minReviewChars) {
+    writeJsonLine({ error: '리뷰가 너무 짧게 생성되었습니다. 다시 생성해 주세요.' })
+    return res.end()
+  }
+  writeJsonLine({ done: true, finishReason })
   res.end()
 }
 
@@ -731,6 +885,18 @@ async function readJsonBody(req) {
   } catch {
     return null
   }
+}
+
+function rejectDailyUsageLimit(res, identifier, action) {
+  const dailyUsage = applyDailyUsageLimit(identifier, action)
+  if (dailyUsage.ok) return false
+
+  res.setHeader('Retry-After', String(dailyUsage.retryAfterSec))
+  json(res, 429, {
+    ok: false,
+    error: `일일 요청 한도(${dailyUsage.limit}회)를 초과했습니다. 내일 다시 시도해 주세요.`,
+  })
+  return true
 }
 
 export default async function handler(req, res) {
@@ -786,17 +952,18 @@ export default async function handler(req, res) {
   }
 
   if (body.action === 'keywords') {
-    const imageBase64 = body.imageBase64
     const rawRating = Number.isFinite(Number(body.rating)) ? Number(body.rating) : 5
     const rating = Math.max(1, Math.min(5, rawRating))
-    const mimeType =
-      typeof body.mimeType === 'string' && body.mimeType
-        ? body.mimeType
-        : 'image/jpeg'
+    const imageInput = validateImageInput(body.imageBase64, body.mimeType)
 
-    if (!imageBase64 || typeof imageBase64 !== 'string') {
-      return json(res, 400, { ok: false, error: 'imageBase64가 필요합니다.' })
+    if (!imageInput.ok) {
+      return json(res, imageInput.status, {
+        ok: false,
+        error: imageInput.error,
+      })
     }
+
+    if (rejectDailyUsageLimit(res, rateKey, body.action)) return
 
     const prompt =
       `이미지에 맞는 리뷰 키워드를 한국어 짧은 구로만 작성해. 별점 ${rating}점 기준 감정은 ${keywordSentimentGuide(rating)} ` +
@@ -807,7 +974,12 @@ export default async function handler(req, res) {
       contents: [
         {
           parts: [
-            { inline_data: { mime_type: mimeType, data: imageBase64 } },
+            {
+              inline_data: {
+                mime_type: imageInput.mimeType,
+                data: imageInput.imageBase64,
+              },
+            },
             { text: prompt },
           ],
         },
@@ -880,6 +1052,7 @@ export default async function handler(req, res) {
       typeof body.tone === 'string' && REVIEW_TONE_MAP[body.tone]
         ? body.tone
         : 'neutral'
+    if (rejectDailyUsageLimit(res, rateKey, body.action)) return
     try {
       await streamGeminiReview({
         key,

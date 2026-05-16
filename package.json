@@ -12,6 +12,7 @@
     "dev:vercel": "vercel dev",
     "build": "vite build",
     "lint": "eslint .",
+    "test": "node --test",
     "preview": "vite preview"
   },
   "repository": {

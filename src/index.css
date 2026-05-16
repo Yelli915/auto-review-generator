@@ -304,34 +304,6 @@ body {
   justify-content: center;
 }
 
-.auth-card__login--custom {
-  position: relative;
-  width: 160px;
-  height: 40px;
-  margin-top: 0;
-}
-
-.auth-card__login--custom > div {
-  width: 100%;
-  height: 100%;
-  opacity: 0;
-}
-
-.auth-card__login-overlay {
-  position: absolute;
-  inset: 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 999px;
-  border: 1px solid var(--border);
-  background: var(--surface);
-  color: var(--text-h);
-  font-size: 0.9rem;
-  font-weight: 600;
-  pointer-events: none;
-}
-
 @media (max-width: 880px) {
   .auth-layout {
     grid-template-columns: 1fr;
