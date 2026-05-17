@@ -3,11 +3,14 @@ import { Buffer } from 'node:buffer'
 import test from 'node:test'
 import {
   applyDailyUsageLimit,
+  buildImageParts,
   humanizeGeminiApiError,
   parseKeywordsFromText,
   sanitizeKeywordArray,
   validateImageInput,
+  validateImagesInput,
 } from './gemini.js'
+import { normalizeReviewCategory } from '../shared/reviewCategories.js'
 
 const png1x1Base64 =
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII='
@@ -51,6 +54,51 @@ test('validateImageInput rejects decoded images above the server limit', () => {
 
   assert.equal(result.ok, false)
   assert.equal(result.status, 413)
+})
+
+test('validateImagesInput accepts one to three images', () => {
+  const result = validateImagesInput([
+    { imageBase64: png1x1Base64, mimeType: 'image/png' },
+    { imageBase64: png1x1Base64, mimeType: 'image/png' },
+    { imageBase64: png1x1Base64, mimeType: 'image/png' },
+  ])
+
+  assert.equal(result.ok, true)
+  assert.equal(result.images.length, 3)
+  assert.equal(result.images[0].mimeType, 'image/png')
+})
+
+test('validateImagesInput rejects empty and too many image arrays', () => {
+  assert.equal(validateImagesInput([]).ok, false)
+
+  const tooMany = validateImagesInput([
+    { imageBase64: png1x1Base64, mimeType: 'image/png' },
+    { imageBase64: png1x1Base64, mimeType: 'image/png' },
+    { imageBase64: png1x1Base64, mimeType: 'image/png' },
+    { imageBase64: png1x1Base64, mimeType: 'image/png' },
+  ])
+  assert.equal(tooMany.ok, false)
+  assert.equal(tooMany.status, 400)
+})
+
+test('validateImagesInput keeps legacy single-image request compatibility', () => {
+  const result = validateImagesInput(undefined, png1x1Base64, 'image/png')
+
+  assert.equal(result.ok, true)
+  assert.equal(result.images.length, 1)
+})
+
+test('buildImageParts maps validated images to Gemini inline data parts', () => {
+  assert.deepEqual(
+    buildImageParts([
+      { imageBase64: 'abc', mimeType: 'image/jpeg' },
+      { imageBase64: 'def', mimeType: 'image/png' },
+    ]),
+    [
+      { inline_data: { mime_type: 'image/jpeg', data: 'abc' } },
+      { inline_data: { mime_type: 'image/png', data: 'def' } },
+    ],
+  )
 })
 
 test('applyDailyUsageLimit allows only counted actions up to the daily limit', () => {
@@ -105,4 +153,10 @@ test('humanizeGeminiApiError returns rate-limit guidance for quota errors', () =
 
   assert.match(message, /Gemini API/)
   assert.match(message, /ai\.google\.dev/)
+})
+
+test('normalizeReviewCategory accepts known categories and falls back safely', () => {
+  assert.equal(normalizeReviewCategory('product'), 'product')
+  assert.equal(normalizeReviewCategory('unknown'), 'restaurant')
+  assert.equal(normalizeReviewCategory(undefined), 'restaurant')
 })

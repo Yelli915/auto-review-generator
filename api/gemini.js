@@ -1,6 +1,13 @@
 /* global Buffer, process */
 import { OAuth2Client } from 'google-auth-library'
 import { createJsonHeaders, readJsonSafely } from '../shared/httpJson.js'
+import { MAX_REVIEW_IMAGE_COUNT } from '../shared/reviewCategories.js'
+import { normalizeReviewTone } from '../shared/reviewOptions.js'
+import { hasHangul, isLikelyKeywordPhrase } from './keywordUtils.js'
+import {
+  buildKeywordPrompt,
+  buildReviewPrompt,
+} from './prompts.js'
 
 const MODEL = 'gemini-2.5-flash'
 const RETRYABLE_STATUS = new Set([500, 502, 503, 504])
@@ -23,29 +30,6 @@ const KEYWORDS_MAX_COUNT = 8
 const KEYWORD_LEN_MIN = 2
 const KEYWORD_LEN_MAX = 30
 const KEYWORDS_MAX_OUTPUT_TOKENS = 320
-
-const REVIEW_LENGTH_MAP = {
-  short: '2~3문장 이내로 간결하게',
-  medium: '4~5문장 분량으로',
-  long: '7~8문장의 상세한 내용으로',
-}
-
-const REVIEW_TONE_MAP = {
-  neutral:
-    '1인칭 구매자 입장의 자연스러운 온라인 쇼핑몰 리뷰 말투. 과장하지 말 것.',
-  friendly:
-    '친근하고 부드러운 말투. 이모티콘·느낌표 남발은 피할 것.',
-  formal:
-    '정중한 존댓말(~습니다·해요체)로 격식 있게. 무례하지 않게.',
-  casual:
-    '편한 일상 반말(~했어, ~야 느낌). 공격적·무례한 표현은 금지.',
-}
-
-const REVIEW_MIN_CHARS = {
-  short: 20,
-  medium: 45,
-  long: 80,
-}
 
 function setCommonSecurityHeaders(res) {
   res.setHeader('X-Content-Type-Options', 'nosniff')
@@ -246,6 +230,42 @@ export function validateImageInput(imageBase64, rawMimeType) {
   return { ok: true, imageBase64: data, mimeType }
 }
 
+export function validateImagesInput(images, fallbackImageBase64, fallbackMimeType) {
+  const list = Array.isArray(images)
+    ? images
+    : [{ imageBase64: fallbackImageBase64, mimeType: fallbackMimeType }]
+  if (list.length < 1) {
+    return { ok: false, status: 400, error: '이미지를 1장 이상 선택해 주세요.' }
+  }
+  if (list.length > MAX_REVIEW_IMAGE_COUNT) {
+    return {
+      ok: false,
+      status: 400,
+      error: `이미지는 최대 ${MAX_REVIEW_IMAGE_COUNT}장까지 업로드할 수 있습니다.`,
+    }
+  }
+
+  const validImages = []
+  for (const image of list) {
+    const result = validateImageInput(image?.imageBase64, image?.mimeType)
+    if (!result.ok) return result
+    validImages.push({
+      imageBase64: result.imageBase64,
+      mimeType: result.mimeType,
+    })
+  }
+  return { ok: true, images: validImages }
+}
+
+export function buildImageParts(images) {
+  return images.map((image) => ({
+    inline_data: {
+      mime_type: image.mimeType,
+      data: image.imageBase64,
+    },
+  }))
+}
+
 function parseAllowOrigins() {
   const raw = process.env.ALLOWED_ORIGINS
   if (typeof raw !== 'string' || !raw.trim()) return null
@@ -412,40 +432,6 @@ export function humanizeGeminiApiError(status, rawMessage) {
     `Google AI Studio에서 API 키의 결제/플랜 연결 상태와 프로젝트 설정을 확인하세요. ` +
     `https://ai.google.dev/gemini-api/docs/rate-limits · https://ai.dev/rate-limit`
   )
-}
-
-function keywordSentimentGuide(rating) {
-  if (rating <= 1) {
-    return '전반적으로 매우 불만족 톤. 부정 키워드 위주로 제안.'
-  }
-  if (rating <= 2) {
-    return '불만족 톤. 부정 키워드를 중심으로 하되 사실 기반으로 제안.'
-  }
-  if (rating < 4) {
-    return '보통 톤. 장단점이 섞인 중립 키워드 위주로 제안.'
-  }
-  if (rating < 5) {
-    return '만족 톤. 긍정 키워드를 중심으로 제안.'
-  }
-  return '매우 만족 톤. 강한 긍정 키워드를 중심으로 제안.'
-}
-
-function hasHangul(s) {
-  return /[\uAC00-\uD7A3]/.test(s)
-}
-
-function isLikelyKeywordPhrase(value) {
-  if (typeof value !== 'string') return false
-  const s = value.trim()
-  if (!s) return false
-  if (/[,:;!?]/.test(s)) return false
-  if (/['"`]/.test(s)) return false
-  if (/\s{2,}/.test(s)) return false
-  if (s.split(/\s+/).length > 4) return false
-  if (/(습니다|해요|했어요|입니다|있어요|없어요|같아요|괜찮|추천해요|빠르게|시간)$/u.test(s)) {
-    return false
-  }
-  return true
 }
 
 export function sanitizeKeywordArray(arr) {
@@ -759,19 +745,22 @@ async function requestGemini({ key, payload, maxRetries = MAX_RETRIES }) {
   return { ok: false, error: message }
 }
 
-async function streamGeminiReview({ key, rating, keywords, length, tone, res }) {
-  const safeKeywords = Array.isArray(keywords)
-    ? keywords
-        .filter((v) => typeof v === 'string' && v.trim())
-        .map((v) => v.trim())
-        .filter((v) => isLikelyKeywordPhrase(v))
-    : []
-  const safeLength = REVIEW_LENGTH_MAP[length] ? length : 'medium'
-  const safeTone = REVIEW_TONE_MAP[tone] ? tone : 'neutral'
-  const minReviewChars = REVIEW_MIN_CHARS[safeLength] ?? 45
-  const prompt =
-    `키워드: ${safeKeywords.join(', ')}\n별점: ${rating}점\n길이: ${REVIEW_LENGTH_MAP[safeLength]}\n말투: ${REVIEW_TONE_MAP[safeTone]}\n\n` +
-    `아래 조건을 모두 지켜 리뷰 본문만 작성해. 제목, 머리말, 번호, 목록 없이 최소 ${minReviewChars}자 이상의 자연스러운 문장으로 써 줘.`
+async function streamGeminiReview({
+  key,
+  rating,
+  keywords,
+  length,
+  tone,
+  category,
+  res,
+}) {
+  const { prompt, safeLength, minReviewChars } = buildReviewPrompt({
+    rating,
+    keywords,
+    length,
+    tone,
+    category,
+  })
 
   const response = await fetch(makeStreamUrl(MODEL), {
     method: 'POST',
@@ -954,7 +943,11 @@ export default async function handler(req, res) {
   if (body.action === 'keywords') {
     const rawRating = Number.isFinite(Number(body.rating)) ? Number(body.rating) : 5
     const rating = Math.max(1, Math.min(5, rawRating))
-    const imageInput = validateImageInput(body.imageBase64, body.mimeType)
+    const imageInput = validateImagesInput(
+      body.images,
+      body.imageBase64,
+      body.mimeType,
+    )
 
     if (!imageInput.ok) {
       return json(res, imageInput.status, {
@@ -965,21 +958,19 @@ export default async function handler(req, res) {
 
     if (rejectDailyUsageLimit(res, rateKey, body.action)) return
 
-    const prompt =
-      `이미지에 맞는 리뷰 키워드를 한국어 짧은 구로만 작성해. 별점 ${rating}점 기준 감정은 ${keywordSentimentGuide(rating)} ` +
-      `서로 다른 키워드를 ${KEYWORDS_MIN_COUNT}~${KEYWORDS_MAX_COUNT}개 작성하고, 모든 값은 한글을 포함해야 해. ` +
-      '설명, 서문, 코드블록, 영어 문장 없이 JSON만 출력해. ' +
-      '형식: {"keywords":["...","...","..."]}'
+    const prompt = buildKeywordPrompt({
+      rating,
+      category: body.category,
+      imageCount: imageInput.images.length,
+      minKeywordCount: KEYWORDS_MIN_COUNT,
+      maxKeywordCount: KEYWORDS_MAX_COUNT,
+    })
+    const imageParts = buildImageParts(imageInput.images)
     const payload = {
       contents: [
         {
           parts: [
-            {
-              inline_data: {
-                mime_type: imageInput.mimeType,
-                data: imageInput.imageBase64,
-              },
-            },
+            ...imageParts,
             { text: prompt },
           ],
         },
@@ -1048,10 +1039,7 @@ export default async function handler(req, res) {
 
   if (body.action === 'review') {
     const rating = Number.isFinite(Number(body.rating)) ? Number(body.rating) : 5
-    const tone =
-      typeof body.tone === 'string' && REVIEW_TONE_MAP[body.tone]
-        ? body.tone
-        : 'neutral'
+    const tone = normalizeReviewTone(body.tone)
     if (rejectDailyUsageLimit(res, rateKey, body.action)) return
     try {
       await streamGeminiReview({
@@ -1060,6 +1048,7 @@ export default async function handler(req, res) {
         keywords: body.keywords,
         length: body.length,
         tone,
+        category: body.category,
         res,
       })
       return

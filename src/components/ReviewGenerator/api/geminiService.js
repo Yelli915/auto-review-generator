@@ -3,6 +3,11 @@ import {
   pickErrorMessage,
   readJsonSafely,
 } from '../../../../shared/httpJson.js'
+import {
+  REVIEW_MIN_CHARS,
+  normalizeReviewLength,
+  normalizeReviewTone,
+} from '../../../../shared/reviewOptions.js'
 const API_PATH = '/api/gemini'
 const KEYWORD_DEBOUNCE_MS = 900
 let googleIdToken = ''
@@ -11,14 +16,6 @@ let onUnauthorized = null
 let inFlightKeywordKey = null
 let inFlightKeywordPromise = null
 let lastKeywordAt = 0
-
-const validLengths = new Set(['short', 'medium', 'long'])
-const validTones = new Set(['neutral', 'friendly', 'formal', 'casual'])
-const minReviewChars = {
-  short: 20,
-  medium: 45,
-  long: 80,
-}
 
 export function setGoogleIdToken(token) {
   googleIdToken = typeof token === 'string' ? token.trim() : ''
@@ -66,18 +63,26 @@ export async function pingGemini() {
 }
 
 export async function generateKeywords({
-  imageBase64,
+  images,
   rating,
-  mimeType = 'image/jpeg',
+  category,
 }) {
-  if (!imageBase64 || typeof imageBase64 !== 'string') {
-    return { ok: false, error: 'imageBase64가 필요합니다.' }
+  const safeImages = Array.isArray(images)
+    ? images
+        .filter((image) => image?.base64Image)
+        .map((image) => ({
+          imageBase64: image.base64Image,
+          mimeType: image.mimeType || 'image/jpeg',
+        }))
+    : []
+  if (!safeImages.length) {
+    return { ok: false, error: '이미지를 1장 이상 선택해 주세요.' }
   }
   const payload = {
     action: 'keywords',
-    imageBase64,
+    images: safeImages,
     rating,
-    mimeType,
+    category,
   }
   const requestKey = JSON.stringify(payload)
   const now = Date.now()
@@ -102,16 +107,17 @@ export async function generateKeywords({
   return inFlightKeywordPromise
 }
 
-export async function generateReview(
+export async function generateReview({
   rating,
   keywords,
   length,
   tone,
+  category,
   onChunk,
-) {
+}) {
   const safeKeywords = Array.isArray(keywords) ? keywords : []
-  const safeLength = validLengths.has(length) ? length : 'medium'
-  const safeTone = validTones.has(tone) ? tone : 'neutral'
+  const safeLength = normalizeReviewLength(length)
+  const safeTone = normalizeReviewTone(tone)
   const safeOnChunk = typeof onChunk === 'function' ? onChunk : () => {}
 
   const response = await fetch(API_PATH, {
@@ -123,6 +129,7 @@ export async function generateReview(
       keywords: safeKeywords,
       length: safeLength,
       tone: safeTone,
+      category,
     }),
   })
 
@@ -185,7 +192,7 @@ export async function generateReview(
   if (streamError) {
     throw new Error(streamError)
   }
-  if (normalizedReview.length < (minReviewChars[safeLength] ?? 45)) {
+  if (normalizedReview.length < REVIEW_MIN_CHARS[safeLength]) {
     throw new Error('리뷰가 너무 짧게 생성되었습니다. 다시 생성해 주세요.')
   }
 }
