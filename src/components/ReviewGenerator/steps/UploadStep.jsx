@@ -1,7 +1,43 @@
 import { useEffect, useId, useRef, useState } from 'react'
-import { resizeAndConvertToBase64 } from '../utils/imageUtils'
+import ImageEditPanel from './ImageEditPanel'
+import ImagePreviewGrid from './ImagePreviewGrid'
+import {
+  DEFAULT_IMAGE_EDIT,
+  transformImageFile,
+} from '../utils/imageUtils'
+import {
+  DEFAULT_REVIEW_CATEGORY,
+  MAX_REVIEW_IMAGE_COUNT,
+  REVIEW_CATEGORY_OPTIONS,
+} from '../../../../shared/reviewCategories'
 
 const MAX_FILE_SIZE_MB = 15
+const IMAGE_RESIZE_OPTIONS = { maxEdge: 448, quality: 0.68 }
+
+function revokeObjectUrls(urls) {
+  urls.forEach((url) => URL.revokeObjectURL(url))
+}
+
+function getImageObjectUrls(images) {
+  return images.flatMap((image) =>
+    [image.previewUrl, image.editedPreviewUrl].filter(Boolean),
+  )
+}
+
+function getImageFileNames(images) {
+  return images.map((image) => image.file.name).join(', ')
+}
+
+async function createReviewImage(file, previewUrl) {
+  const { base64 } = await transformImageFile(file, IMAGE_RESIZE_OPTIONS)
+  return {
+    file,
+    previewUrl,
+    base64Image: base64,
+    mimeType: 'image/jpeg',
+    ...DEFAULT_IMAGE_EDIT,
+  }
+}
 
 function StarRating({ value, onChange, disabled, ratingLabels }) {
   const [hovered, setHovered] = useState(null)
@@ -37,50 +73,77 @@ function StarRating({ value, onChange, disabled, ratingLabels }) {
 
 export default function UploadStep({ onNext, isLoading, ratingLabels }) {
   const inputId = useId()
+  const categoryId = useId()
   const inputRef = useRef(null)
-  const [fileData, setFileData] = useState(null)
-  const [previewUrl, setPreviewUrl] = useState('')
+  const [images, setImages] = useState([])
+  const [reviewCategory, setReviewCategory] = useState(DEFAULT_REVIEW_CATEGORY)
   const [rating, setRating] = useState(5)
   const [status, setStatus] = useState({ text: '', isError: false })
   const [isDragging, setIsDragging] = useState(false)
   const [isProcessing, setIsProcessing] = useState(false)
-  const previewUrlRef = useRef('')
+  const [editingIndex, setEditingIndex] = useState(null)
+  const objectUrlsRef = useRef([])
   const processTokenRef = useRef(0)
 
   useEffect(() => {
     return () => {
-      if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current)
+      revokeObjectUrls(objectUrlsRef.current)
     }
   }, [])
 
-  function processFile(file) {
+  function replaceImages(nextImages) {
+    revokeObjectUrls(objectUrlsRef.current)
+    objectUrlsRef.current = getImageObjectUrls(nextImages)
+    setImages(nextImages)
+  }
+
+  function validateSelectedFiles(files) {
+    if (!files.length) return '이미지를 1장 이상 선택해 주세요.'
+    if (files.length > MAX_REVIEW_IMAGE_COUNT) {
+      return `이미지는 최대 ${MAX_REVIEW_IMAGE_COUNT}장까지 업로드할 수 있습니다.`
+    }
+    const invalidType = files.find((file) => !file.type.startsWith('image/'))
+    if (invalidType) return '이미지 파일(JPG, PNG 등)만 업로드할 수 있습니다.'
+    const oversized = files.find((file) => file.size > MAX_FILE_SIZE_MB * 1024 * 1024)
+    if (oversized) return `파일 크기는 각 ${MAX_FILE_SIZE_MB}MB 이하여야 합니다.`
+    return ''
+  }
+
+  function processFiles(fileList) {
     const token = processTokenRef.current + 1
     processTokenRef.current = token
-    if (!file.type.startsWith('image/')) {
-      setStatus({ text: '이미지 파일(JPG, PNG 등)만 업로드할 수 있습니다.', isError: true })
-      return
-    }
-    if (file.size > MAX_FILE_SIZE_MB * 1024 * 1024) {
-      setStatus({ text: `파일 크기는 ${MAX_FILE_SIZE_MB}MB 이하여야 합니다.`, isError: true })
+    const files = Array.from(fileList || [])
+    const validationError = validateSelectedFiles(files)
+    if (validationError) {
+      setIsProcessing(false)
+      setStatus({ text: validationError, isError: true })
       return
     }
 
-    if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current)
-    const objectUrl = URL.createObjectURL(file)
-    previewUrlRef.current = objectUrl
-    setPreviewUrl(objectUrl)
-    setFileData(null)
+    const nextPreviewUrls = files.map((file) => URL.createObjectURL(file))
+    replaceImages([])
+    objectUrlsRef.current = nextPreviewUrls
+    setEditingIndex(null)
     setIsProcessing(true)
     setStatus({ text: '', isError: false })
 
-    resizeAndConvertToBase64(file, { maxEdge: 512, quality: 0.75 })
-      .then((base64Image) => {
+    Promise.all(
+      files.map((file, index) =>
+        createReviewImage(file, nextPreviewUrls[index]),
+      ),
+    )
+      .then((nextImages) => {
         if (processTokenRef.current !== token) return
-        setFileData({ file, previewUrl: objectUrl, base64Image, mimeType: 'image/jpeg' })
-        setStatus({ text: file.name, isError: false })
+        objectUrlsRef.current = getImageObjectUrls(nextImages)
+        setImages(nextImages)
+        setStatus({
+          text: getImageFileNames(nextImages),
+          isError: false,
+        })
       })
       .catch(() => {
         if (processTokenRef.current !== token) return
+        replaceImages([])
         setStatus({ text: '이미지 변환에 실패했습니다.', isError: true })
       })
       .finally(() => {
@@ -90,8 +153,8 @@ export default function UploadStep({ onNext, isLoading, ratingLabels }) {
   }
 
   function handleFileChange(e) {
-    const file = e.target.files?.[0]
-    if (file) processFile(file)
+    processFiles(e.target.files)
+    e.target.value = ''
   }
 
   function handleDragOver(e) {
@@ -106,18 +169,71 @@ export default function UploadStep({ onNext, isLoading, ratingLabels }) {
   function handleDrop(e) {
     e.preventDefault()
     setIsDragging(false)
-    const file = e.dataTransfer.files?.[0]
-    if (file) processFile(file)
+    processFiles(e.dataTransfer.files)
+  }
+
+  function handleRemoveImage(index) {
+    if (busy) return
+    const nextImages = images.filter((_, i) => i !== index)
+    revokeObjectUrls(getImageObjectUrls([images[index]]))
+    objectUrlsRef.current = getImageObjectUrls(nextImages)
+    setImages(nextImages)
+    setEditingIndex((prev) => {
+      if (prev == null) return null
+      if (prev === index) return null
+      return prev > index ? prev - 1 : prev
+    })
+    setStatus({
+      text: nextImages.length ? getImageFileNames(nextImages) : '',
+      isError: false,
+    })
+  }
+
+  async function handleApplyImageEdit(editState) {
+    if (editingIndex == null || !images[editingIndex] || busy) return
+    const index = editingIndex
+    const image = images[index]
+    setIsProcessing(true)
+    setStatus({ text: '이미지 편집을 적용하는 중입니다.', isError: false })
+    try {
+      const result = await transformImageFile(image.file, {
+        ...IMAGE_RESIZE_OPTIONS,
+        ...editState,
+        createPreviewUrl: true,
+      })
+      if (image.editedPreviewUrl) URL.revokeObjectURL(image.editedPreviewUrl)
+      const nextImages = images.map((item, i) =>
+        i === index
+          ? {
+              ...item,
+              ...editState,
+              base64Image: result.base64,
+              editedPreviewUrl: result.previewUrl || '',
+            }
+          : item,
+      )
+      objectUrlsRef.current = getImageObjectUrls(nextImages)
+      setImages(nextImages)
+      setStatus({ text: `${index + 1}번째 이미지 편집을 적용했습니다.`, isError: false })
+    } catch {
+      setStatus({ text: '이미지 편집 적용에 실패했습니다.', isError: true })
+    } finally {
+      setIsProcessing(false)
+    }
   }
 
   function handleNext() {
-    if (!fileData || typeof onNext !== 'function') return
-    onNext({ ...fileData, rating: Number(rating) })
+    if (!images.length || typeof onNext !== 'function') return
+    onNext({
+      images,
+      rating: Number(rating),
+      category: reviewCategory,
+    })
   }
 
   const dropClass = [
     'file-drop',
-    fileData ? 'file-drop--ready' : '',
+    images.length ? 'file-drop--ready' : '',
     isDragging ? 'file-drop--drag' : '',
   ]
     .filter(Boolean)
@@ -129,8 +245,27 @@ export default function UploadStep({ onNext, isLoading, ratingLabels }) {
     <section className="step-card step-card--enter">
       <h2 className="step-card__title">사진 업로드</h2>
       <p className="step-card__lede">
-        제품 사진과 별점을 선택하면 그에 맞는 키워드를 자동으로 추출합니다.
+        리뷰 분야와 사진, 별점을 선택하면 그에 맞는 키워드를 자동으로 추출합니다.
       </p>
+
+      <div className="field">
+        <label className="field__label" htmlFor={categoryId}>
+          리뷰 분야
+        </label>
+        <select
+          id={categoryId}
+          className="select-input"
+          value={reviewCategory}
+          onChange={(e) => setReviewCategory(e.target.value)}
+          disabled={busy}
+        >
+          {REVIEW_CATEGORY_OPTIONS.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+      </div>
 
       <div className="field">
         <label className="field__label">별점</label>
@@ -159,6 +294,8 @@ export default function UploadStep({ onNext, isLoading, ratingLabels }) {
               ref={inputRef}
               type="file"
               accept="image/*"
+              multiple
+              disabled={busy}
               onChange={handleFileChange}
               aria-labelledby={`${inputId}-label`}
             />
@@ -170,7 +307,7 @@ export default function UploadStep({ onNext, isLoading, ratingLabels }) {
                   탭하거나 파일을 끌어다 놓으세요
                 </p>
                 <p className="file-drop__sub">
-                  JPG · PNG · WEBP 등 · 최대 {MAX_FILE_SIZE_MB}MB
+                  JPG · PNG · WEBP 등 · 최대 {MAX_REVIEW_IMAGE_COUNT}장 · 각 {MAX_FILE_SIZE_MB}MB
                 </p>
               </>
             )}
@@ -184,25 +321,30 @@ export default function UploadStep({ onNext, isLoading, ratingLabels }) {
           )}
         </div>
 
-        {previewUrl && (
-          <button
-            type="button"
-            className="preview-frame preview-frame--replace upload-row__preview"
-            onClick={() => inputRef.current?.click()}
-            disabled={busy}
-            aria-label="업로드된 이미지를 다른 사진으로 교체"
-          >
-            <img src={previewUrl} alt="선택한 이미지 미리보기" />
-          </button>
-        )}
+        <ImagePreviewGrid
+          images={images}
+          isBusy={busy}
+          onAdd={() => inputRef.current?.click()}
+          onEdit={setEditingIndex}
+          onRemove={handleRemoveImage}
+        />
       </div>
+
+      <ImageEditPanel
+        key={editingIndex == null ? 'empty' : images[editingIndex]?.previewUrl}
+        image={editingIndex == null ? null : images[editingIndex]}
+        imageNumber={editingIndex == null ? 0 : editingIndex + 1}
+        isBusy={busy}
+        onApply={handleApplyImageEdit}
+        onClose={() => setEditingIndex(null)}
+      />
 
       <div className="btn-row">
         <button
           type="button"
           className="btn btn--primary btn--lg"
           onClick={handleNext}
-          disabled={!fileData || busy}
+          disabled={images.length === 0 || busy}
         >
           {isLoading
             ? '키워드 생성 중…'

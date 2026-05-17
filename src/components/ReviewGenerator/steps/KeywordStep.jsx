@@ -1,12 +1,18 @@
 import { useEffect, useId, useMemo, useState } from 'react'
+import {
+  DEFAULT_REVIEW_LENGTH,
+  DEFAULT_REVIEW_TONE,
+  REVIEW_LENGTH_OPTIONS,
+  REVIEW_TONE_OPTIONS,
+} from '../../../../shared/reviewOptions'
 
 const SKELETON_WIDTHS = [80, 96, 68, 110, 76, 90]
 
 export default function KeywordStep({
   keywords,
   initialSelectedKeywords,
-  initialLength = 'medium',
-  initialTone = 'neutral',
+  initialLength = DEFAULT_REVIEW_LENGTH,
+  initialTone = DEFAULT_REVIEW_TONE,
   onNext,
   onRefresh,
   onBackToUpload,
@@ -138,9 +144,11 @@ export default function KeywordStep({
                 onChange={(e) => setReviewLength(e.target.value)}
                 disabled={isLoading}
               >
-                <option value="short">짧게 (2~3문장)</option>
-                <option value="medium">보통 (4~5문장)</option>
-                <option value="long">길게 (7~8문장)</option>
+                {REVIEW_LENGTH_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.controlLabel}
+                  </option>
+                ))}
               </select>
             </div>
 
@@ -155,10 +163,11 @@ export default function KeywordStep({
                 onChange={(e) => setReviewTone(e.target.value)}
                 disabled={isLoading}
               >
-                <option value="neutral">기본 (자연스럽게)</option>
-                <option value="friendly">친근 (친구처럼)</option>
-                <option value="formal">격식 (정중하게)</option>
-                <option value="casual">반말 (편하게)</option>
+                {REVIEW_TONE_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.controlLabel}
+                  </option>
+                ))}
               </select>
             </div>
           </div>

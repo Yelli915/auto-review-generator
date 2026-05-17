@@ -3,15 +3,20 @@ import UploadStep from './steps/UploadStep'
 import KeywordStep from './steps/KeywordStep'
 import ReviewStep from './steps/ReviewStep'
 import { generateKeywords, generateReview } from './api/geminiService'
+import { normalizeReviewCategory } from '../../../shared/reviewCategories'
+import {
+  DEFAULT_REVIEW_LENGTH,
+  DEFAULT_REVIEW_TONE,
+} from '../../../shared/reviewOptions'
 
 const STEPS = { UPLOAD: 'upload', KEYWORD: 'keyword', REVIEW: 'review' }
 const RATING_LABELS = ['', '매우 불만족', '불만족', '보통', '만족', '매우 만족']
 
 async function loadKeywordsFromImage(imagePayload) {
   const result = await generateKeywords({
-    imageBase64: imagePayload.base64Image,
+    images: imagePayload.images,
     rating: imagePayload.rating,
-    mimeType: imagePayload.mimeType || 'image/jpeg',
+    category: imagePayload.category,
   })
   if (!result?.ok) {
     throw new Error(result?.error || '키워드 생성 실패')
@@ -30,10 +35,11 @@ export default function ReviewGenerator({ onReviewComplete }) {
   const [lastUsedOptions, setLastUsedOptions] = useState(null)
 
   const handleUploadNext = async (data) => {
+    const images = Array.isArray(data?.images) ? data.images : []
     const normalizedData = {
-      ...data,
-      base64Image: data?.base64Image || data?.base64 || '',
+      images,
       rating: Number.isFinite(Number(data?.rating)) ? Number(data.rating) : 5,
+      category: normalizeReviewCategory(data?.category),
     }
 
     setImageData(normalizedData)
@@ -66,7 +72,7 @@ export default function ReviewGenerator({ onReviewComplete }) {
   }
 
   const handleRefresh = async () => {
-    if (!imageData?.base64Image || isLoading) return
+    if (!imageData?.images?.length || isLoading) return
     setError(null)
     setIsLoading(true)
     try {
@@ -87,8 +93,8 @@ export default function ReviewGenerator({ onReviewComplete }) {
 
   const handleKeywordNext = async (
     selectedKeywords,
-    reviewLength = 'medium',
-    reviewTone = 'neutral',
+    reviewLength = DEFAULT_REVIEW_LENGTH,
+    reviewTone = DEFAULT_REVIEW_TONE,
   ) => {
     setLastUsedOptions({ keywords: selectedKeywords, length: reviewLength, tone: reviewTone })
     setReview('')
@@ -99,16 +105,17 @@ export default function ReviewGenerator({ onReviewComplete }) {
     let fullReview = ''
     let isSuccess = false
     try {
-      await generateReview(
-        imageData.rating,
-        selectedKeywords,
-        reviewLength,
-        reviewTone,
-        (chunk) => {
+      await generateReview({
+        rating: imageData.rating,
+        keywords: selectedKeywords,
+        length: reviewLength,
+        tone: reviewTone,
+        category: imageData.category,
+        onChunk: (chunk) => {
           fullReview += chunk
           setReview(fullReview)
         },
-      )
+      })
       isSuccess = true
     } catch (e) {
       setError(e instanceof Error ? e.message : '리뷰 생성 실패')
@@ -127,7 +134,7 @@ export default function ReviewGenerator({ onReviewComplete }) {
     [STEPS.REVIEW]: 2,
   }[step]
   const stepMeta = [
-    { title: '사진 입력', desc: '이미지와 별점을 선택합니다.' },
+    { title: '사진 입력', desc: '리뷰 분야, 이미지, 별점을 선택합니다.' },
     { title: '옵션 선택', desc: '키워드, 길이, 말투를 정합니다.' },
     { title: '결과 확인', desc: '생성된 리뷰를 확인하고 복사합니다.' },
   ][stepIndex]
@@ -205,8 +212,8 @@ export default function ReviewGenerator({ onReviewComplete }) {
           <KeywordStep
             keywords={keywords}
             initialSelectedKeywords={lastUsedOptions?.keywords}
-            initialLength={lastUsedOptions?.length ?? 'medium'}
-            initialTone={lastUsedOptions?.tone ?? 'neutral'}
+            initialLength={lastUsedOptions?.length ?? DEFAULT_REVIEW_LENGTH}
+            initialTone={lastUsedOptions?.tone ?? DEFAULT_REVIEW_TONE}
             onNext={handleKeywordNext}
             onRefresh={handleRefresh}
             onBackToUpload={handleBackToUpload}
@@ -225,6 +232,8 @@ export default function ReviewGenerator({ onReviewComplete }) {
             selectedKeywords={lastUsedOptions?.keywords}
             reviewLength={lastUsedOptions?.length}
             reviewTone={lastUsedOptions?.tone}
+            reviewCategory={imageData?.category}
+            imageCount={imageData?.images?.length}
           />
         )}
       </main>

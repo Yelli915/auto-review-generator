@@ -1,12 +1,9 @@
 import { useState } from 'react'
-
-const LENGTH_LABELS = { short: '짧게', medium: '보통', long: '길게' }
-const TONE_LABELS = {
-  neutral: '기본',
-  friendly: '친근',
-  formal: '격식',
-  casual: '반말',
-}
+import { REVIEW_CATEGORY_LABELS } from '../../../../shared/reviewCategories'
+import {
+  REVIEW_LENGTH_MAP,
+  REVIEW_TONE_MAP,
+} from '../../../../shared/reviewOptions'
 
 export default function ReviewStep({
   review,
@@ -19,6 +16,8 @@ export default function ReviewStep({
   selectedKeywords,
   reviewLength,
   reviewTone,
+  reviewCategory,
+  imageCount,
 }) {
   const [copied, setCopied] = useState(false)
   const [copyError, setCopyError] = useState(false)
@@ -41,6 +40,8 @@ export default function ReviewStep({
   const charCount = trimmed.length
 
   const hasContext =
+    imageCount > 0 ||
+    reviewCategory ||
     rating != null ||
     (selectedKeywords && selectedKeywords.length > 0) ||
     reviewLength ||
@@ -50,11 +51,25 @@ export default function ReviewStep({
     <div className="step-card step-card--enter">
       <h2 className="step-card__title">생성된 리뷰</h2>
       <p className="step-card__lede">
-        아래 문장을 복사해 쇼핑몰·앱 리뷰에 붙여넣을 수 있습니다.
+        아래 문장을 복사해 필요한 리뷰란에 붙여넣을 수 있습니다.
       </p>
 
       {hasContext && (
         <div className="review-context">
+          {imageCount > 0 && (
+            <div className="review-context__row">
+              <span className="review-context__icon">이미지</span>
+              <span className="review-context__meta">{imageCount}장</span>
+            </div>
+          )}
+          {reviewCategory && (
+            <div className="review-context__row">
+              <span className="review-context__icon">분야</span>
+              <span className="review-context__meta">
+                {REVIEW_CATEGORY_LABELS[reviewCategory] ?? '맛집'}
+              </span>
+            </div>
+          )}
           {rating != null && (
             <div className="review-context__row">
               <span className="review-context__icon">별점</span>
@@ -77,7 +92,7 @@ export default function ReviewStep({
             <div className="review-context__row">
               <span className="review-context__icon">옵션</span>
               <span className="review-context__meta">
-                {[LENGTH_LABELS[reviewLength], TONE_LABELS[reviewTone]]
+                {[REVIEW_LENGTH_MAP[reviewLength]?.label, REVIEW_TONE_MAP[reviewTone]?.label]
                   .filter(Boolean)
                   .join(' · ')}
               </span>
