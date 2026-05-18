@@ -29,7 +29,7 @@ const KEYWORDS_MIN_COUNT = 3
 const KEYWORDS_MAX_COUNT = 8
 const KEYWORD_LEN_MIN = 2
 const KEYWORD_LEN_MAX = 30
-const KEYWORDS_MAX_OUTPUT_TOKENS = 320
+const KEYWORDS_MAX_OUTPUT_TOKENS = 1024
 
 function setCommonSecurityHeaders(res) {
   res.setHeader('X-Content-Type-Options', 'nosniff')
@@ -657,6 +657,29 @@ function parseKeywordsFromAny(data) {
   return { keywords: null, rawText: text }
 }
 
+export function buildKeywordGenerationConfig() {
+  return {
+    temperature: 0.1,
+    maxOutputTokens: KEYWORDS_MAX_OUTPUT_TOKENS,
+    responseMimeType: 'application/json',
+    responseSchema: {
+      type: 'object',
+      properties: {
+        keywords: {
+          type: 'array',
+          items: { type: 'string' },
+          minItems: KEYWORDS_MIN_COUNT,
+          maxItems: KEYWORDS_MAX_COUNT,
+        },
+      },
+      required: ['keywords'],
+    },
+    thinkingConfig: {
+      thinkingBudget: 0,
+    },
+  }
+}
+
 function summarizeKeywordDebug(data) {
   const candidates = Array.isArray(data?.candidates) ? data.candidates : []
   const first = candidates[0]
@@ -975,23 +998,7 @@ export default async function handler(req, res) {
           ],
         },
       ],
-      generationConfig: {
-        temperature: 0.1,
-        maxOutputTokens: KEYWORDS_MAX_OUTPUT_TOKENS,
-        responseMimeType: 'application/json',
-        responseJsonSchema: {
-          type: 'object',
-          properties: {
-            keywords: {
-              type: 'array',
-              items: { type: 'string' },
-              minItems: KEYWORDS_MIN_COUNT,
-              maxItems: KEYWORDS_MAX_COUNT,
-            },
-          },
-          required: ['keywords'],
-        },
-      },
+      generationConfig: buildKeywordGenerationConfig(),
     }
 
     const result = await requestGemini({ key, payload })

@@ -239,7 +239,7 @@ export default function ReviewGenerator({ onReviewComplete }) {
       </main>
 
       <footer className="review-app__footer">
-        <p>Powered by Gemini 2.5 Flash</p>
+        <p>Auto Review Generator</p>
       </footer>
     </div>
   )
