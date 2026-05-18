@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import {
   CROP_MODES,
+  calculateCanvasSize,
   calculateCropRect,
   normalizeRotation,
 } from './imageUtils.js'
@@ -43,4 +44,23 @@ test('normalizeRotation keeps rotation values within 0 to 359 degrees', () => {
   assert.equal(normalizeRotation(450), 90)
   assert.equal(normalizeRotation(-90), 270)
   assert.equal(normalizeRotation(undefined), 0)
+})
+
+test('calculateCanvasSize swaps dimensions for sideways rotation', () => {
+  assert.deepEqual(calculateCanvasSize(1200, 800, 0), {
+    width: 1200,
+    height: 800,
+  })
+  assert.deepEqual(calculateCanvasSize(1200, 800, 90), {
+    width: 800,
+    height: 1200,
+  })
+  assert.deepEqual(calculateCanvasSize(1200, 800, 270), {
+    width: 800,
+    height: 1200,
+  })
+  assert.deepEqual(calculateCanvasSize(1200, 800, 180), {
+    width: 1200,
+    height: 800,
+  })
 })

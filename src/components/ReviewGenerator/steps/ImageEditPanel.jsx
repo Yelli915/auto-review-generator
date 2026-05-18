@@ -21,7 +21,13 @@ export default function ImageEditPanel({
 
   if (!image) return null
 
-  const previewSrc = image.previewUrl
+  const savedRotation = normalizeRotation(image.rotation)
+  const savedCropMode = image.cropMode || DEFAULT_IMAGE_EDIT.cropMode
+  const isShowingSavedEdit =
+    Boolean(image.editedPreviewUrl) &&
+    rotation === savedRotation &&
+    cropMode === savedCropMode
+  const previewSrc = isShowingSavedEdit ? image.editedPreviewUrl : image.previewUrl
 
   const rotate = (delta) => {
     setRotation((prev) => normalizeRotation(prev + delta))
@@ -33,7 +39,7 @@ export default function ImageEditPanel({
         <img
           src={previewSrc}
           alt={`${imageNumber}번째 이미지 편집 미리보기`}
-          style={{ transform: `rotate(${rotation}deg)` }}
+          style={{ transform: isShowingSavedEdit ? undefined : `rotate(${rotation}deg)` }}
         />
       </div>
 

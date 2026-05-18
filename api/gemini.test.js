@@ -4,6 +4,7 @@ import test from 'node:test'
 import {
   applyDailyUsageLimit,
   buildImageParts,
+  buildKeywordGenerationConfig,
   humanizeGeminiApiError,
   parseKeywordsFromText,
   sanitizeKeywordArray,
@@ -142,6 +143,16 @@ test('parseKeywordsFromText recovers keywords from quoted text', () => {
     parseKeywordsFromText('키워드는 "배송 빠름", "색감 좋음", "마감 깔끔" 입니다.'),
     ['배송 빠름', '색감 좋음', '마감 깔끔'],
   )
+})
+
+test('buildKeywordGenerationConfig reserves output for short JSON responses', () => {
+  const config = buildKeywordGenerationConfig()
+
+  assert.equal(config.responseMimeType, 'application/json')
+  assert.equal(config.responseSchema.type, 'object')
+  assert.equal(config.responseJsonSchema, undefined)
+  assert.equal(config.thinkingConfig.thinkingBudget, 0)
+  assert.ok(config.maxOutputTokens >= 1024)
 })
 
 test('humanizeGeminiApiError preserves non-quota API messages', () => {

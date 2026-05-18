@@ -49,6 +49,17 @@ export function calculateCropRect(width, height, cropMode = CROP_MODES.original)
   return { x: 0, y: 0, width: w, height: h }
 }
 
+export function calculateCanvasSize(width, height, rotation = 0) {
+  const w = Math.max(1, Math.round(Number(width) || 1))
+  const h = Math.max(1, Math.round(Number(height) || 1))
+  const safeRotation = normalizeRotation(rotation)
+  const isSideways = safeRotation === 90 || safeRotation === 270
+  return {
+    width: isSideways ? h : w,
+    height: isSideways ? w : h,
+  }
+}
+
 function canvasToBlob(canvas, quality) {
   return new Promise((resolve, reject) => {
     canvas.toBlob(
@@ -84,10 +95,10 @@ export function transformImageFile(
         const w = Math.max(1, Math.round(crop.width * scale))
         const h = Math.max(1, Math.round(crop.height * scale))
         const safeRotation = normalizeRotation(rotation)
-        const isSideways = safeRotation === 90 || safeRotation === 270
+        const canvasSize = calculateCanvasSize(w, h, safeRotation)
         const canvas = document.createElement('canvas')
-        canvas.width = isSideways ? h : w
-        canvas.height = isSideways ? w : h
+        canvas.width = canvasSize.width
+        canvas.height = canvasSize.height
         const ctx = canvas.getContext('2d')
         if (!ctx) {
           reject(new Error('canvas 2d를 사용할 수 없습니다'))
