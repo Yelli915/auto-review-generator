@@ -66,7 +66,7 @@ export default function ReviewStep({
             <div className="review-context__row">
               <span className="review-context__icon">분야</span>
               <span className="review-context__meta">
-                {REVIEW_CATEGORY_LABELS[reviewCategory] ?? '맛집'}
+                {REVIEW_CATEGORY_LABELS[reviewCategory] ?? '장소'}
               </span>
             </div>
           )}

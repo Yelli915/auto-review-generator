@@ -2,11 +2,21 @@ export const CROP_MODES = {
   original: 'original',
   square: 'square',
   ratio4x3: 'ratio4x3',
+  free: 'free',
 }
 
 export const DEFAULT_IMAGE_EDIT = {
   rotation: 0,
   cropMode: CROP_MODES.original,
+  cropRect: null,
+}
+
+function clamp(value, min, max) {
+  return Math.max(min, Math.min(max, value))
+}
+
+function toImageSize(value) {
+  return Math.max(1, Math.round(Number(value) || 1))
 }
 
 export function normalizeRotation(value) {
@@ -14,9 +24,40 @@ export function normalizeRotation(value) {
   return ((n % 360) + 360) % 360
 }
 
-export function calculateCropRect(width, height, cropMode = CROP_MODES.original) {
-  const w = Math.max(1, Math.round(Number(width) || 1))
-  const h = Math.max(1, Math.round(Number(height) || 1))
+function normalizeFreeCropRect(cropRect) {
+  if (!cropRect || typeof cropRect !== 'object') return null
+  const x = clamp(Number(cropRect.x) || 0, 0, 0.95)
+  const y = clamp(Number(cropRect.y) || 0, 0, 0.95)
+  const maxWidth = 1 - x
+  const maxHeight = 1 - y
+  return {
+    x,
+    y,
+    width: clamp(Number(cropRect.width) || maxWidth, 0.05, maxWidth),
+    height: clamp(Number(cropRect.height) || maxHeight, 0.05, maxHeight),
+  }
+}
+
+export function calculateCropRect(
+  width,
+  height,
+  cropMode = CROP_MODES.original,
+  cropRect = null,
+) {
+  const w = toImageSize(width)
+  const h = toImageSize(height)
+  if (cropMode === CROP_MODES.free) {
+    const rect = normalizeFreeCropRect(cropRect)
+    if (!rect) return { x: 0, y: 0, width: w, height: h }
+    const x = Math.min(w - 1, Math.round(w * rect.x))
+    const y = Math.min(h - 1, Math.round(h * rect.y))
+    return {
+      x,
+      y,
+      width: clamp(Math.round(w * rect.width), 1, w - x),
+      height: clamp(Math.round(h * rect.height), 1, h - y),
+    }
+  }
   if (cropMode === CROP_MODES.square) {
     const size = Math.min(w, h)
     return {
@@ -50,8 +91,8 @@ export function calculateCropRect(width, height, cropMode = CROP_MODES.original)
 }
 
 export function calculateCanvasSize(width, height, rotation = 0) {
-  const w = Math.max(1, Math.round(Number(width) || 1))
-  const h = Math.max(1, Math.round(Number(height) || 1))
+  const w = toImageSize(width)
+  const h = toImageSize(height)
   const safeRotation = normalizeRotation(rotation)
   const isSideways = safeRotation === 90 || safeRotation === 270
   return {
@@ -80,6 +121,7 @@ export function transformImageFile(
     quality = 0.85,
     rotation = DEFAULT_IMAGE_EDIT.rotation,
     cropMode = DEFAULT_IMAGE_EDIT.cropMode,
+    cropRect = DEFAULT_IMAGE_EDIT.cropRect,
     createPreviewUrl = false,
   } = {},
 ) {
@@ -89,7 +131,7 @@ export function transformImageFile(
     img.onload = async () => {
       try {
         URL.revokeObjectURL(url)
-        const crop = calculateCropRect(img.width, img.height, cropMode)
+        const crop = calculateCropRect(img.width, img.height, cropMode, cropRect)
         const longest = Math.max(crop.width, crop.height)
         const scale = longest > maxEdge ? maxEdge / longest : 1
         const w = Math.max(1, Math.round(crop.width * scale))

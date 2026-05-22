@@ -32,9 +32,9 @@ const KEYWORD_LEN_MIN = 2
 const KEYWORD_LEN_MAX = 30
 const KEYWORDS_MAX_OUTPUT_TOKENS = 1024
 const REVIEW_MAX_OUTPUT_TOKENS = {
-  short: 1024,
-  medium: 1536,
-  long: 2048,
+  short: 2048,
+  medium: 3072,
+  long: 4096,
 }
 
 function setCommonSecurityHeaders(res) {

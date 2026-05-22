@@ -40,6 +40,23 @@ test('calculateCropRect returns centered 4:3 crop', () => {
   })
 })
 
+test('calculateCropRect returns custom free crop', () => {
+  assert.deepEqual(
+    calculateCropRect(1000, 800, CROP_MODES.free, {
+      x: 0.1,
+      y: 0.2,
+      width: 0.5,
+      height: 0.4,
+    }),
+    {
+      x: 100,
+      y: 160,
+      width: 500,
+      height: 320,
+    },
+  )
+})
+
 test('normalizeRotation keeps rotation values within 0 to 359 degrees', () => {
   assert.equal(normalizeRotation(450), 90)
   assert.equal(normalizeRotation(-90), 270)

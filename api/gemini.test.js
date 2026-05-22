@@ -197,7 +197,8 @@ test('humanizeGeminiApiError returns rate-limit guidance for quota errors', () =
 })
 
 test('normalizeReviewCategory accepts known categories and falls back safely', () => {
+  assert.equal(normalizeReviewCategory('place'), 'place')
   assert.equal(normalizeReviewCategory('product'), 'product')
-  assert.equal(normalizeReviewCategory('unknown'), 'restaurant')
-  assert.equal(normalizeReviewCategory(undefined), 'restaurant')
+  assert.equal(normalizeReviewCategory('unknown'), 'place')
+  assert.equal(normalizeReviewCategory(undefined), 'place')
 })
