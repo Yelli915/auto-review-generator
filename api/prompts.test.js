@@ -47,6 +47,8 @@ test('buildReviewPrompt includes review category context', () => {
   assert.match(prompt, /키워드를 그대로 나열하지/)
   assert.match(prompt, /구체 정보는 새로 만들지/)
   assert.match(prompt, /90자 이상/)
+  assert.match(prompt, /완결성을 우선/)
+  assert.match(prompt, /중간에 끊기지 않게/)
   assert.match(prompt, /격식/)
 })
 

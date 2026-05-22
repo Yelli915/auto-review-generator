@@ -64,9 +64,9 @@ export default function KeywordStep({
 
   return (
     <div className="step-card step-card--enter">
-      <h2 className="step-card__title">키워드·글자수·말투</h2>
+      <h2 className="step-card__title">키워드·분량·말투</h2>
       <p className="step-card__lede">
-        키워드를 고르고 리뷰 글자수와 말투를 선택한 뒤 리뷰를 생성합니다.
+        키워드를 고르고 리뷰 분량과 말투를 선택한 뒤 리뷰를 생성합니다.
       </p>
 
       {isLoading && isEmpty ? (
@@ -137,7 +137,7 @@ export default function KeywordStep({
           <div className="options-row options-row--2">
             <div className="field">
               <label className="field__label" htmlFor={lengthId}>
-                글자수
+                분량
               </label>
               <select
                 id={lengthId}
@@ -174,7 +174,7 @@ export default function KeywordStep({
             </div>
           </div>
           {showSparseLongWarning && (
-            <p className="field__hint review-length-warning" role="status">
+            <p className="field__hint" role="status">
               선택한 키워드가 적어 긴 리뷰는 조금 더 일반적으로 작성될 수 있습니다.
             </p>
           )}

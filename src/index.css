@@ -5,11 +5,17 @@
   --bg: #f8fafc;
   --bg-page: #f3f4f6;
   --surface: #ffffff;
+  --surface-subtle: #f9fafb;
+  --surface-raised: #fcfcfd;
+  --overlay-bg: rgba(255, 255, 255, 0.92);
+  --overlay-text: #101828;
+  --overlay-border: rgba(17, 24, 39, 0.14);
   --border: #e4e7ec;
   --border-strong: #d0d5dd;
   --code-bg: #f2f4f7;
   --accent: #2563eb;
   --accent-hover: #1d4ed8;
+  --accent-contrast: #ffffff;
   --accent-bg: #eff6ff;
   --accent-border: #bfdbfe;
   --error-bg: #fef2f2;
@@ -53,11 +59,17 @@
     --bg: #1a1b22;
     --bg-page: #12131a;
     --surface: #1f2028;
+    --surface-subtle: #242631;
+    --surface-raised: #252733;
+    --overlay-bg: rgba(17, 19, 27, 0.9);
+    --overlay-text: #f3f4f6;
+    --overlay-border: rgba(229, 231, 235, 0.18);
     --border: #2e303a;
     --border-strong: #3d4050;
     --code-bg: #1f2028;
     --accent: #60a5fa;
     --accent-hover: #93c5fd;
+    --accent-contrast: #0f172a;
     --accent-bg: rgba(96, 165, 250, 0.14);
     --accent-border: rgba(96, 165, 250, 0.45);
     --error-bg: rgba(127, 29, 29, 0.25);
@@ -431,13 +443,13 @@ body {
 }
 
 .stepper__item.is-active .stepper__dot {
-  color: var(--surface);
+  color: var(--accent-contrast);
   background: var(--accent);
   border-color: var(--accent);
 }
 
 .stepper__item.is-done .stepper__dot {
-  color: #fff;
+  color: var(--accent-contrast);
   border-color: var(--accent);
   background: var(--accent);
 }
@@ -598,13 +610,13 @@ body {
 
 .file-drop:hover {
   border-color: var(--accent-border);
-  background: #f9fafb;
+  background: var(--surface-subtle);
 }
 
 .file-drop--ready {
   border-style: solid;
   border-color: var(--accent-border);
-  background: #f9fafb;
+  background: var(--surface-subtle);
 }
 
 .file-drop:focus-within {
@@ -704,10 +716,10 @@ body {
   right: 6px;
   width: 28px;
   height: 28px;
-  border: 1px solid rgba(17, 24, 39, 0.14);
+  border: 1px solid var(--overlay-border);
   border-radius: var(--radius-sm);
-  background: rgba(255, 255, 255, 0.92);
-  color: var(--text-h);
+  background: var(--overlay-bg);
+  color: var(--overlay-text);
   font: inherit;
   font-size: 0.8125rem;
   font-weight: 700;
@@ -721,10 +733,10 @@ body {
   bottom: 6px;
   min-height: 28px;
   padding: 0 10px;
-  border: 1px solid rgba(17, 24, 39, 0.14);
+  border: 1px solid var(--overlay-border);
   border-radius: var(--radius-sm);
-  background: rgba(255, 255, 255, 0.92);
-  color: var(--text-h);
+  background: var(--overlay-bg);
+  color: var(--overlay-text);
   font: inherit;
   font-size: 0.75rem;
   font-weight: 700;
@@ -761,7 +773,7 @@ body {
   padding: 14px;
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
-  background: #f9fafb;
+  background: var(--surface-subtle);
 }
 
 .image-editor__preview {
@@ -847,7 +859,7 @@ body {
 
 .segmented__item.is-active {
   border-color: var(--accent);
-  background: #fff;
+  background: var(--surface);
   color: var(--accent);
   box-shadow: var(--shadow-sm);
 }
@@ -889,7 +901,7 @@ body {
 }
 
 .btn--primary {
-  color: #fff;
+  color: var(--accent-contrast);
   background: var(--accent);
   box-shadow: none;
 }
@@ -905,12 +917,12 @@ body {
 
 .btn--secondary {
   color: var(--text-h);
-  background: #fff;
+  background: var(--surface);
   border: 1px solid var(--border-strong);
 }
 
 .btn--secondary:hover:not(:disabled) {
-  background: #f9fafb;
+  background: var(--surface-subtle);
   border-color: #98a2b3;
 }
 
@@ -921,7 +933,7 @@ body {
 }
 
 .btn--ghost:hover:not(:disabled) {
-  background: #f9fafb;
+  background: var(--surface-subtle);
   color: var(--text-h);
 }
 
@@ -994,7 +1006,7 @@ body {
 .keyword-empty {
   padding: 22px 18px;
   text-align: center;
-  background: #f9fafb;
+  background: var(--surface-subtle);
   border: 1px dashed var(--border-strong);
   border-radius: var(--radius-md);
   margin-bottom: 20px;
@@ -1062,7 +1074,7 @@ body {
   margin-bottom: 16px;
   font-size: 0.9375rem;
   color: var(--text-h);
-  background: #fcfcfd;
+  background: var(--surface-raised);
   text-align: left;
 }
 
@@ -1074,7 +1086,7 @@ body {
   color: var(--text-muted);
   font-size: 0.875rem;
   text-align: center;
-  background: #fcfcfd;
+  background: var(--surface-raised);
 }
 
 @media (prefers-reduced-motion: reduce) {

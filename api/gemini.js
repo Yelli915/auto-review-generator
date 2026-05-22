@@ -22,6 +22,7 @@ const RATE_LIMIT_STORE = new Map()
 const DAILY_USAGE_MAX_REQUESTS = 20
 const DAILY_USAGE_ACTIONS = new Set(['keywords', 'review'])
 const DAILY_USAGE_STORE = new Map()
+const USAGE_STORE_KEY_PREFIX = 'auto-review-generator'
 const GOOGLE_OAUTH_CLIENT = new OAuth2Client()
 const DEBUG_LOGS =
   process.env.NODE_ENV !== 'production' || process.env.GEMINI_DEBUG_LOGS === '1'
@@ -31,6 +32,11 @@ const KEYWORDS_MAX_COUNT = 8
 const KEYWORD_LEN_MIN = 2
 const KEYWORD_LEN_MAX = 30
 const KEYWORDS_MAX_OUTPUT_TOKENS = 1024
+const REVIEW_MAX_OUTPUT_TOKENS = {
+  short: 1024,
+  medium: 1536,
+  long: 2048,
+}
 
 function setCommonSecurityHeaders(res) {
   res.setHeader('X-Content-Type-Options', 'nosniff')
@@ -82,7 +88,57 @@ function getClientIp(req) {
   return isValidIp(socketIp) ? socketIp : ''
 }
 
-function applyRateLimit(identifier) {
+function encodeUsageKeyPart(value) {
+  return encodeURIComponent(String(value || 'unknown'))
+}
+
+function getSharedUsageStoreConfig() {
+  const url =
+    typeof process.env.UPSTASH_REDIS_REST_URL === 'string'
+      ? process.env.UPSTASH_REDIS_REST_URL.trim().replace(/\/+$/, '')
+      : ''
+  const token =
+    typeof process.env.UPSTASH_REDIS_REST_TOKEN === 'string'
+      ? process.env.UPSTASH_REDIS_REST_TOKEN.trim()
+      : ''
+  return url && token ? { url, token } : null
+}
+
+async function callSharedUsageStore(config, commands) {
+  const response = await fetch(`${config.url}/pipeline`, {
+    method: 'POST',
+    headers: createJsonHeaders({ Authorization: `Bearer ${config.token}` }),
+    body: JSON.stringify(commands),
+  })
+  const data = await readJsonSafely(response)
+  if (!response.ok || !Array.isArray(data)) {
+    throw new Error('공유 사용량 저장소에 접근할 수 없습니다.')
+  }
+  return data
+}
+
+async function incrementSharedUsageLimit({
+  config,
+  key,
+  limit,
+  ttlSec,
+  retryAfterSec = ttlSec,
+}) {
+  const results = await callSharedUsageStore(config, [
+    ['INCR', key],
+    ['EXPIRE', key, ttlSec, 'NX'],
+  ])
+  const count = Number(results[0]?.result)
+  if (!Number.isFinite(count)) {
+    throw new Error('공유 사용량 저장소 응답을 읽을 수 없습니다.')
+  }
+  if (count > limit) {
+    return { ok: false, retryAfterSec, limit }
+  }
+  return { ok: true, count, limit }
+}
+
+function applyMemoryRateLimit(identifier) {
   const now = Date.now()
   const windowStart = now - RATE_LIMIT_WINDOW_MS
   const key = typeof identifier === 'string' && identifier ? identifier : 'unknown'
@@ -103,6 +159,25 @@ function applyRateLimit(identifier) {
   return { ok: true }
 }
 
+export async function applyRateLimit(identifier) {
+  const config = getSharedUsageStoreConfig()
+  if (!config) return applyMemoryRateLimit(identifier)
+
+  const windowId = Math.floor(Date.now() / RATE_LIMIT_WINDOW_MS)
+  const key = [
+    USAGE_STORE_KEY_PREFIX,
+    'rate',
+    encodeUsageKeyPart(identifier),
+    windowId,
+  ].join(':')
+  return incrementSharedUsageLimit({
+    config,
+    key,
+    limit: RATE_LIMIT_MAX_REQUESTS,
+    ttlSec: Math.ceil(RATE_LIMIT_WINDOW_MS / 1000),
+  })
+}
+
 function getLocalDayKey(date = new Date()) {
   const y = date.getFullYear()
   const m = String(date.getMonth() + 1).padStart(2, '0')
@@ -116,7 +191,7 @@ function secondsUntilNextLocalDay(date = new Date()) {
   return Math.max(1, Math.ceil((nextDay.getTime() - date.getTime()) / 1000))
 }
 
-export function applyDailyUsageLimit(identifier, action) {
+function applyMemoryDailyUsageLimit(identifier, action) {
   if (!DAILY_USAGE_ACTIONS.has(action)) return { ok: true }
 
   const now = new Date()
@@ -146,6 +221,29 @@ export function applyDailyUsageLimit(identifier, action) {
   }
 
   return { ok: true }
+}
+
+export async function applyDailyUsageLimit(identifier, action) {
+  if (!DAILY_USAGE_ACTIONS.has(action)) return { ok: true }
+
+  const config = getSharedUsageStoreConfig()
+  if (!config) return applyMemoryDailyUsageLimit(identifier, action)
+
+  const now = new Date()
+  const key = [
+    USAGE_STORE_KEY_PREFIX,
+    'daily',
+    getLocalDayKey(now),
+    encodeUsageKeyPart(action),
+    encodeUsageKeyPart(identifier),
+  ].join(':')
+  return incrementSharedUsageLimit({
+    config,
+    key,
+    limit: DAILY_USAGE_MAX_REQUESTS,
+    ttlSec: secondsUntilNextLocalDay(now),
+    retryAfterSec: secondsUntilNextLocalDay(now),
+  })
 }
 
 function normalizeImageMimeType(value) {
@@ -681,6 +779,16 @@ export function buildKeywordGenerationConfig() {
   }
 }
 
+export function buildReviewGenerationConfig(length) {
+  return {
+    temperature: 0.6,
+    maxOutputTokens: REVIEW_MAX_OUTPUT_TOKENS[length] ?? REVIEW_MAX_OUTPUT_TOKENS.medium,
+    thinkingConfig: {
+      thinkingBudget: 0,
+    },
+  }
+}
+
 function summarizeKeywordDebug(data) {
   const candidates = Array.isArray(data?.candidates) ? data.candidates : []
   const first = candidates[0]
@@ -752,10 +860,10 @@ async function requestGemini({ key, payload, maxRetries = MAX_RETRIES }) {
           await wait(Math.min(6000, retryAfterSec * 1000))
           continue
         }
-        return { ok: false, error: message, status: response.status, details: data }
+        return { ok: false, error: message, status: response.status }
       }
       if (!RETRYABLE_STATUS.has(response.status) || attempt === maxRetries) {
-        return { ok: false, error: message, status: response.status, details: data }
+        return { ok: false, error: message, status: response.status }
       }
       await wait(700 * 2 ** attempt)
     } catch (err) {
@@ -791,10 +899,7 @@ async function streamGeminiReview({
     headers: createJsonHeaders({ 'x-goog-api-key': key }),
     body: JSON.stringify({
       contents: [{ parts: [{ text: prompt }] }],
-      generationConfig: {
-        temperature: 0.6,
-        maxOutputTokens: safeLength === 'long' ? 760 : 520,
-      },
+      generationConfig: buildReviewGenerationConfig(safeLength),
     }),
   })
 
@@ -864,6 +969,12 @@ async function streamGeminiReview({
   }
 
   const normalizedReview = normalizeReviewText(fullText)
+  if (finishReason === 'MAX_TOKENS') {
+    writeJsonLine({
+      error: '리뷰가 중간에 잘렸습니다. 글자수보다 완성된 리뷰를 우선해 다시 생성해 주세요.',
+    })
+    return res.end()
+  }
   if (normalizedReview.length < minReviewChars) {
     writeJsonLine({ error: '리뷰가 너무 짧게 생성되었습니다. 다시 생성해 주세요.' })
     return res.end()
@@ -900,8 +1011,17 @@ async function readJsonBody(req) {
   }
 }
 
-function rejectDailyUsageLimit(res, identifier, action) {
-  const dailyUsage = applyDailyUsageLimit(identifier, action)
+async function rejectDailyUsageLimit(res, identifier, action) {
+  let dailyUsage
+  try {
+    dailyUsage = await applyDailyUsageLimit(identifier, action)
+  } catch {
+    json(res, 503, {
+      ok: false,
+      error: '사용량 제한 저장소를 확인할 수 없습니다. 잠시 후 다시 시도해 주세요.',
+    })
+    return true
+  }
   if (dailyUsage.ok) return false
 
   res.setHeader('Retry-After', String(dailyUsage.retryAfterSec))
@@ -925,7 +1045,15 @@ export default async function handler(req, res) {
   const rateKey = auth.userId
     ? `user:${auth.userId}`
     : `ip:${getClientIp(req) || 'unknown'}`
-  const rate = applyRateLimit(rateKey)
+  let rate
+  try {
+    rate = await applyRateLimit(rateKey)
+  } catch {
+    return json(res, 503, {
+      ok: false,
+      error: '요청 제한 저장소를 확인할 수 없습니다. 잠시 후 다시 시도해 주세요.',
+    })
+  }
   if (!rate.ok) {
     res.setHeader('Retry-After', String(rate.retryAfterSec))
     return json(res, 429, {
@@ -957,11 +1085,7 @@ export default async function handler(req, res) {
   }
 
   if (body.action === 'ping') {
-    const result = await requestGemini({
-      key,
-      payload: { contents: [{ parts: [{ text: 'hello' }] }] },
-    })
-    return json(res, result.ok ? 200 : toClientErrorStatus(result.status), result)
+    return json(res, 200, { ok: true, model: MODEL })
   }
 
   if (body.action === 'keywords') {
@@ -979,7 +1103,7 @@ export default async function handler(req, res) {
       })
     }
 
-    if (rejectDailyUsageLimit(res, rateKey, body.action)) return
+    if (await rejectDailyUsageLimit(res, rateKey, body.action)) return
 
     const prompt = buildKeywordPrompt({
       rating,
@@ -1047,7 +1171,7 @@ export default async function handler(req, res) {
   if (body.action === 'review') {
     const rating = normalizeReviewRating(body.rating)
     const tone = normalizeReviewTone(body.tone)
-    if (rejectDailyUsageLimit(res, rateKey, body.action)) return
+    if (await rejectDailyUsageLimit(res, rateKey, body.action)) return
     try {
       await streamGeminiReview({
         key,

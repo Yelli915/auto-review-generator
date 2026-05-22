@@ -4,7 +4,7 @@ import {
   readJsonSafely,
 } from '../../../../shared/httpJson.js'
 import {
-  REVIEW_MIN_CHARS,
+  getReviewMinChars,
   normalizeReviewLength,
   normalizeReviewTone,
 } from '../../../../shared/reviewOptions.js'
@@ -46,7 +46,6 @@ async function callApi(payload) {
         ok: false,
         error: pickErrorMessage(data, `요청 실패 (HTTP ${response.status})`),
         status: response.status,
-        details: data,
       }
     }
     return data
@@ -56,10 +55,6 @@ async function callApi(payload) {
       error: err instanceof Error ? err.message : '네트워크 또는 알 수 없는 오류',
     }
   }
-}
-
-export async function pingGemini() {
-  return callApi({ action: 'ping' })
 }
 
 export async function generateKeywords({
@@ -192,7 +187,7 @@ export async function generateReview({
   if (streamError) {
     throw new Error(streamError)
   }
-  if (normalizedReview.length < REVIEW_MIN_CHARS[safeLength]) {
+  if (normalizedReview.length < getReviewMinChars(safeLength)) {
     throw new Error('리뷰가 너무 짧게 생성되었습니다. 다시 생성해 주세요.')
   }
 }
