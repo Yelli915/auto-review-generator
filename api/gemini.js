@@ -36,17 +36,47 @@ const REVIEW_MAX_OUTPUT_TOKENS = {
   medium: 3072,
   long: 4096,
 }
+const KEYWORD_RETRY_LIMIT = 3
 
-function keywordSignature(keywords) {
-  return sanitizeKeywordArray(keywords)
-    .map((keyword) => keyword.replace(/\s+/g, ' ').trim())
+function normalizeKeywordSet(keywords) {
+  const normalized = Array.isArray(keywords)
+    ? keywords
+        .map((keyword) =>
+          typeof keyword === 'string' ? keyword.replace(/\s+/g, ' ').trim() : '',
+        )
+        .filter(Boolean)
+    : []
+  return sanitizeKeywordArray(normalized) || []
+}
+
+export function keywordSignature(keywords) {
+  return normalizeKeywordSet(keywords)
     .sort((a, b) => a.localeCompare(b, 'ko'))
     .join('|')
 }
 
-function isSameKeywordSet(a, b) {
+export function isSameKeywordSet(a, b) {
   const aSignature = keywordSignature(a)
   return Boolean(aSignature) && aSignature === keywordSignature(b)
+}
+
+export function appendKeywordRetryGuidance(prompt, rejectedSets) {
+  const safeRejectedSets = Array.isArray(rejectedSets)
+    ? rejectedSets.map((set) => normalizeKeywordSet(set)).filter((set) => set.length > 0)
+    : []
+  if (!safeRejectedSets.length) return prompt
+
+  const previousRuns = safeRejectedSets
+    .map((set, index) => `${index + 1}. ${set.join(', ')}`)
+    .join('\n')
+
+  return (
+    `${prompt}\n\n` +
+    '금지된 이전 키워드 조합:\n' +
+    `${previousRuns}\n\n` +
+    '위 목록 중 어느 것과도 완전히 같은 조합을 다시 내지 마. ' +
+    '최소 1개는 다른 표현으로 바꾸고, 가능하면 다른 관찰 포인트를 하나 더 넣어 JSON만 출력해.'
+  )
 }
 
 function setCommonSecurityHeaders(res) {
@@ -1139,43 +1169,46 @@ export default async function handler(req, res) {
       generationConfig: buildKeywordGenerationConfig(),
     })
 
-    let result = await requestGemini({ key, payload: buildKeywordPayload(prompt) })
-    if (!result.ok) {
-      return json(res, toClientErrorStatus(result.status), result)
-    }
+    const rejectedKeywordSets = previousKeywords.length ? [previousKeywords] : []
+    let result = null
+    let parsed = null
+    let sawDuplicate = false
 
-    let parsed = parseKeywordsFromAny(result.data)
-    if (
-      previousKeywords.length &&
-      parsed.keywords &&
-      parsed.keywords.length >= KEYWORDS_MIN_COUNT &&
-      isSameKeywordSet(parsed.keywords, previousKeywords)
-    ) {
-      const retryPrompt =
-        `${prompt}\n\n중요: 방금 결과가 직전 키워드와 완전히 같았어. ` +
-        '이번 응답은 반드시 최소 1개 이상의 키워드를 다른 표현이나 다른 관찰 포인트로 바꿔서 JSON만 출력해.'
-      result = await requestGemini({ key, payload: buildKeywordPayload(retryPrompt) })
+    for (let attempt = 0; attempt < KEYWORD_RETRY_LIMIT; attempt += 1) {
+      const promptForAttempt =
+        attempt === 0
+          ? prompt
+          : appendKeywordRetryGuidance(prompt, rejectedKeywordSets)
+
+      result = await requestGemini({
+        key,
+        payload: buildKeywordPayload(promptForAttempt),
+      })
       if (!result.ok) {
         return json(res, toClientErrorStatus(result.status), result)
       }
-      parsed = parseKeywordsFromAny(result.data)
-    }
 
-    if (parsed.keywords && parsed.keywords.length >= KEYWORDS_MIN_COUNT) {
-      if (previousKeywords.length && isSameKeywordSet(parsed.keywords, previousKeywords)) {
-        return json(res, 502, {
-          ok: false,
-          error: '이전과 같은 키워드가 생성되었습니다. 키워드 다시 생성을 한 번 더 눌러 주세요.',
+      parsed = parseKeywordsFromAny(result.data)
+      if (!parsed.keywords || parsed.keywords.length < KEYWORDS_MIN_COUNT) {
+        break
+      }
+
+      const isDuplicate = rejectedKeywordSets.some((set) =>
+        isSameKeywordSet(parsed.keywords, set),
+      )
+      if (!isDuplicate) {
+        return json(res, 200, {
+          ok: true,
+          keywords: parsed.keywords,
+          model: result.model,
         })
       }
-      return json(res, 200, {
-        ok: true,
-        keywords: parsed.keywords,
-        model: result.model,
-      })
+      rejectedKeywordSets.push(parsed.keywords)
+      sawDuplicate = true
+      parsed = null
     }
 
-    if (parsed.tooFew) {
+    if (parsed?.tooFew) {
       const n = parsed.partial?.length ?? 0
       if (DEBUG_LOGS) {
         console.warn('[gemini keywords] too few after filter', {
@@ -1189,7 +1222,14 @@ export default async function handler(req, res) {
       })
     }
 
-    const apiIssue = describeKeywordGeminiIssue(result.data, parsed.rawText)
+    if (sawDuplicate) {
+      return json(res, 502, {
+        ok: false,
+        error: '이전과 같은 키워드만 반복 생성되었습니다. 다시 시도해 주세요.',
+      })
+    }
+
+    const apiIssue = describeKeywordGeminiIssue(result.data, parsed?.rawText)
     if (DEBUG_LOGS) {
       console.warn('[gemini keywords] parse failed', {
         apiIssue,

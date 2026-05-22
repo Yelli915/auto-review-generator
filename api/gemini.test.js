@@ -8,7 +8,9 @@ import {
   buildImageParts,
   buildKeywordGenerationConfig,
   buildReviewGenerationConfig,
+  appendKeywordRetryGuidance,
   humanizeGeminiApiError,
+  isSameKeywordSet,
   parseKeywordsFromText,
   sanitizeKeywordArray,
   validateImageInput,
@@ -147,6 +149,29 @@ test('sanitizeKeywordArray keeps short Hangul phrases and removes invalid values
     ]),
     ['배송 빠름', '색감 좋음'],
   )
+})
+
+test('isSameKeywordSet matches keyword sets regardless of order and spacing', () => {
+  assert.equal(
+    isSameKeywordSet(['배송 빠름', '색감 좋음'], [' 색감  좋음 ', '배송 빠름']),
+    true,
+  )
+  assert.equal(
+    isSameKeywordSet(['배송 빠름', '색감 좋음'], ['마감 깔끔', '색감 좋음']),
+    false,
+  )
+})
+
+test('appendKeywordRetryGuidance includes rejected keyword sets', () => {
+  const prompt = appendKeywordRetryGuidance('기본 프롬프트', [
+    ['배송 빠름', '색감 좋음'],
+    ['마감 깔끔', '포장 꼼꼼'],
+  ])
+
+  assert.match(prompt, /금지된 이전 키워드 조합/)
+  assert.match(prompt, /배송 빠름, 색감 좋음/)
+  assert.match(prompt, /마감 깔끔, 포장 꼼꼼/)
+  assert.match(prompt, /완전히 같은 조합/)
 })
 
 test('parseKeywordsFromText reads JSON keyword responses', () => {

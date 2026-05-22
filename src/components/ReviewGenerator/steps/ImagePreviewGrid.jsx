@@ -13,18 +13,17 @@ export default function ImagePreviewGrid({
     <div className="preview-grid upload-row__preview" aria-label="선택한 이미지 미리보기">
       {images.map((image, index) => (
         <div className="preview-frame preview-frame--thumb" key={image.previewUrl}>
-          <img
-            src={image.editedPreviewUrl || image.previewUrl}
-            alt={`선택한 이미지 ${index + 1}`}
-          />
           <button
             type="button"
-            className="preview-frame__edit"
+            className="preview-frame__image-button"
             onClick={() => onEdit(index)}
             disabled={isBusy}
-            aria-label={`${index + 1}번째 이미지 편집`}
+            aria-label={`${index + 1}번째 이미지 수정`}
           >
-            편집
+            <img
+              src={image.editedPreviewUrl || image.previewUrl}
+              alt={`선택한 이미지 ${index + 1}`}
+            />
           </button>
           <button
             type="button"

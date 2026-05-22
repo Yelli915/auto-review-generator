@@ -15,13 +15,6 @@ const DEFAULT_FREE_CROP_RECT = {
   height: 0.84,
 }
 
-const FREE_CROP_FIELDS = [
-  { key: 'x', label: '왼쪽', min: 0, getMax: () => 90 },
-  { key: 'y', label: '위', min: 0, getMax: () => 90 },
-  { key: 'width', label: '너비', min: 10, getMax: (rect) => Math.round((1 - rect.x) * 100) },
-  { key: 'height', label: '높이', min: 10, getMax: (rect) => Math.round((1 - rect.y) * 100) },
-]
-
 const CROP_HANDLES = ['nw', 'ne', 'sw', 'se']
 const MIN_CROP_SIZE = 0.1
 
@@ -81,15 +74,6 @@ export default function ImageEditPanel({
 
   const rotate = (delta) => {
     setRotation((prev) => normalizeRotation(prev + delta))
-  }
-
-  const updateCropRect = (key, value) => {
-    setCropRect((prev) => {
-      return normalizeCropRect({
-        ...(prev || DEFAULT_FREE_CROP_RECT),
-        [key]: Number(value) / 100,
-      })
-    })
   }
 
   const getCropPoint = (event) => {
@@ -259,21 +243,9 @@ export default function ImageEditPanel({
           </div>
 
           {cropMode === CROP_MODES.free && (
-            <div className="image-editor__group image-editor__free-crop">
+            <div className="image-editor__group">
               <span className="field__label">자유 자르기</span>
-              {FREE_CROP_FIELDS.map((field) => (
-                <label key={field.key}>
-                  {field.label}
-                  <input
-                    type="range"
-                    min={field.min}
-                    max={field.getMax(safeCropRect)}
-                    value={Math.round(safeCropRect[field.key] * 100)}
-                    onChange={(e) => updateCropRect(field.key, e.target.value)}
-                    disabled={isBusy}
-                  />
-                </label>
-              ))}
+              <p className="field__hint">박스를 마우스로 드래그하거나 모서리를 잡아 조절하세요.</p>
             </div>
           )}
 
