@@ -2,8 +2,11 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import {
   CROP_MODES,
+  areCropAreasEqual,
   calculateCanvasSize,
   calculateCropRect,
+  createCropAreaFromPoints,
+  normalizeCropArea,
   normalizeRotation,
 } from './imageUtils.js'
 
@@ -38,6 +41,72 @@ test('calculateCropRect returns centered 4:3 crop', () => {
     width: 900,
     height: 675,
   })
+})
+
+test('calculateCropRect returns free rectangle crop', () => {
+  assert.deepEqual(
+    calculateCropRect(1000, 800, CROP_MODES.free, {
+      x: 0.2,
+      y: 0.25,
+      width: 0.5,
+      height: 0.4,
+    }),
+    {
+      x: 200,
+      y: 200,
+      width: 500,
+      height: 320,
+    },
+  )
+})
+
+test('normalizeCropArea clamps free rectangle values inside image bounds', () => {
+  assert.deepEqual(
+    normalizeCropArea({
+      x: 0.75,
+      y: -0.2,
+      width: 0.4,
+      height: 2,
+    }),
+    {
+      x: 0.75,
+      y: 0,
+      width: 0.25,
+      height: 1,
+    },
+  )
+})
+
+test('areCropAreasEqual compares normalized crop rectangles', () => {
+  assert.equal(
+    areCropAreasEqual(
+      { x: 0.2, y: 0.1, width: 0.5, height: 0.6 },
+      { x: 0.2, y: 0.1, width: 0.5, height: 0.6 },
+    ),
+    true,
+  )
+  assert.equal(
+    areCropAreasEqual(
+      { x: 0.2, y: 0.1, width: 0.5, height: 0.6 },
+      { x: 0.2, y: 0.1, width: 0.4, height: 0.6 },
+    ),
+    false,
+  )
+})
+
+test('createCropAreaFromPoints supports reverse drag direction', () => {
+  assert.deepEqual(
+    createCropAreaFromPoints(
+      { x: 0.75, y: 0.8 },
+      { x: 0.25, y: 0.3 },
+    ),
+    {
+      x: 0.25,
+      y: 0.3,
+      width: 0.5,
+      height: 0.5,
+    },
+  )
 })
 
 test('normalizeRotation keeps rotation values within 0 to 359 degrees', () => {

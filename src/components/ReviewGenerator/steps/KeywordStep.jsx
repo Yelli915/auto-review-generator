@@ -4,6 +4,7 @@ import {
   DEFAULT_REVIEW_TONE,
   REVIEW_LENGTH_OPTIONS,
   REVIEW_TONE_OPTIONS,
+  isSparseLongReview,
 } from '../../../../shared/reviewOptions'
 
 const SKELETON_WIDTHS = [80, 96, 68, 110, 76, 90]
@@ -59,12 +60,13 @@ export default function KeywordStep({
 
   const isEmpty = list.length === 0
   const allSelected = list.length > 0 && selected.length === list.length
+  const showSparseLongWarning = isSparseLongReview(reviewLength, selected.length)
 
   return (
     <div className="step-card step-card--enter">
-      <h2 className="step-card__title">키워드·길이·말투</h2>
+      <h2 className="step-card__title">키워드·글자수·말투</h2>
       <p className="step-card__lede">
-        키워드를 고르고 리뷰 길이와 말투를 선택한 뒤 리뷰를 생성합니다.
+        키워드를 고르고 리뷰 글자수와 말투를 선택한 뒤 리뷰를 생성합니다.
       </p>
 
       {isLoading && isEmpty ? (
@@ -135,7 +137,7 @@ export default function KeywordStep({
           <div className="options-row options-row--2">
             <div className="field">
               <label className="field__label" htmlFor={lengthId}>
-                길이
+                글자수
               </label>
               <select
                 id={lengthId}
@@ -171,6 +173,11 @@ export default function KeywordStep({
               </select>
             </div>
           </div>
+          {showSparseLongWarning && (
+            <p className="field__hint review-length-warning" role="status">
+              선택한 키워드가 적어 긴 리뷰는 조금 더 일반적으로 작성될 수 있습니다.
+            </p>
+          )}
         </div>
       )}
 
