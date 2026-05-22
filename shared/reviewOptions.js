@@ -16,6 +16,12 @@ export const REVIEW_LENGTH_OPTIONS = [
   },
 ]
 
+export const REVIEW_LENGTH_MIN_CHARS = {
+  short: 60,
+  medium: 100,
+  long: 160,
+}
+
 export const REVIEW_TONE_OPTIONS = [
   {
     value: 'neutral',
@@ -51,6 +57,10 @@ export const REVIEW_TONE_MAP = REVIEW_TONE_OPTIONS.reduce((acc, option) => {
 
 export function normalizeReviewLength(value) {
   return REVIEW_LENGTH_MAP[value] ? value : DEFAULT_REVIEW_LENGTH
+}
+
+export function getReviewMinChars(value) {
+  return REVIEW_LENGTH_MIN_CHARS[normalizeReviewLength(value)]
 }
 
 export function normalizeReviewTone(value) {

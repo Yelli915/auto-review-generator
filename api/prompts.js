@@ -3,6 +3,7 @@ import {
   normalizeReviewCategory,
 } from '../shared/reviewCategories.js'
 import {
+  getReviewMinChars,
   normalizeReviewLength,
   normalizeReviewTone,
 } from '../shared/reviewOptions.js'
@@ -12,12 +13,6 @@ const REVIEW_LENGTH_PROMPT_MAP = {
   short: '2~3문장 이내로 간결하게',
   medium: '4~5문장 분량으로',
   long: '7~8문장의 상세한 내용으로',
-}
-
-const REVIEW_LENGTH_MIN_CHARS_MAP = {
-  short: 60,
-  medium: 100,
-  long: 160,
 }
 
 const REVIEW_TONE_PROMPT_MAP = {
@@ -86,7 +81,7 @@ export function buildReviewPrompt({ rating, keywords, length, tone, category }) 
   const safeTone = normalizeReviewTone(tone)
   const safeCategory = normalizeReviewCategory(category)
   const categoryMeta = REVIEW_CATEGORY_MAP[safeCategory]
-  const minReviewChars = REVIEW_LENGTH_MIN_CHARS_MAP[safeLength]
+  const minReviewChars = getReviewMinChars(safeLength)
 
   return {
     prompt:
