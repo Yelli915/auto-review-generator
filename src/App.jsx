@@ -106,7 +106,6 @@ function App() {
               >
                 <ol className="auth-intro__flow">
                   <li>이미지와 별점 입력</li>
-                  <li>키워드/분량/말투 선택</li>
                   <li>리뷰 생성 후 복사</li>
                 </ol>
               </div>

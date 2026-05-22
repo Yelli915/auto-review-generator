@@ -3,13 +3,16 @@ import {
   normalizeReviewCategory,
 } from '../shared/reviewCategories.js'
 import {
-  getReviewMinChars,
-  getReviewLengthPrompt,
-  isSparseLongReview,
   normalizeReviewLength,
   normalizeReviewTone,
 } from '../shared/reviewOptions.js'
 import { isLikelyKeywordPhrase } from './keywordUtils.js'
+
+const REVIEW_LENGTH_PROMPT_MAP = {
+  short: '2~3문장 이내로 간결하게',
+  medium: '4~5문장 분량으로',
+  long: '7~8문장의 상세한 내용으로',
+}
 
 const REVIEW_TONE_PROMPT_MAP = {
   neutral:
@@ -57,7 +60,7 @@ export function buildKeywordPrompt({
     imageGuide +
     '이미지에서 직접 확인 가능한 단서를 우선하고, 보이지 않는 사실은 추측하지 마. ' +
     `별점 ${rating}점 기준 감정은 ${keywordSentimentGuide(rating)} 반영해. ` +
-    `대상 기준은 ${categoryMeta.focus}으로 잡아. ` +
+    `분야 기준은 ${categoryMeta.focus}으로 잡아. ` +
     `주의사항: ${categoryMeta.avoid}. ` +
     '키워드는 리뷰에 바로 사용할 수 있는 짧은 명사구 또는 형용사구로 작성해. ' +
     `서로 다른 키워드를 ${minKeywordCount}~${maxKeywordCount}개 작성하고, 모든 값은 한글을 포함해야 해. ` +
@@ -77,19 +80,13 @@ export function buildReviewPrompt({ rating, keywords, length, tone, category }) 
   const safeTone = normalizeReviewTone(tone)
   const safeCategory = normalizeReviewCategory(category)
   const categoryMeta = REVIEW_CATEGORY_MAP[safeCategory]
-  const minReviewChars = getReviewMinChars(safeLength)
-  const sparseLongReviewGuide =
-    isSparseLongReview(safeLength, safeKeywords.length)
-      ? '선택된 키워드가 적으므로 같은 키워드를 반복해 분량을 늘리지 말고, 대상·별점·이미지에서 확인 가능한 단서를 바탕으로 자연스럽게 내용을 확장해. '
-      : ''
 
   return {
     prompt:
-      `대상: ${categoryMeta.label}\n키워드: ${safeKeywords.join(', ')}\n별점: ${rating}점\n길이: ${getReviewLengthPrompt(safeLength)}\n말투: ${REVIEW_TONE_PROMPT_MAP[safeTone]}\n\n` +
+      `분야: ${categoryMeta.label}\n키워드: ${safeKeywords.join(', ')}\n별점: ${rating}점\n길이: ${REVIEW_LENGTH_PROMPT_MAP[safeLength]}\n말투: ${REVIEW_TONE_PROMPT_MAP[safeTone]}\n\n` +
       `${categoryMeta.label} 리뷰처럼 자연스럽게 작성하고, ${categoryMeta.focus}을 문맥에 맞게 반영해. ` +
       `주의사항: ${categoryMeta.avoid}. ` +
       '선택된 키워드를 그대로 나열하지 말고 실제 사용자가 쓴 후기처럼 자연스럽게 연결해. ' +
-      sparseLongReviewGuide +
       '사진이나 키워드에서 확인되지 않는 구체 정보는 새로 만들지 마. ' +
       '광고 문구, 과장된 표현, 반복적인 감탄사는 피하고 담백하게 작성해. ' +
       '글자수보다 문장과 리뷰의 완결성을 우선하고, 마지막 문장이 중간에 끊기지 않게 마무리해. ' +

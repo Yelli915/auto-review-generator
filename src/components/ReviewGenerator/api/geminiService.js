@@ -159,7 +159,7 @@ export async function generateReview({
       }
       if (text) {
         fullText += text
-        safeOnChunk(text)
+        safeOnChunk(fullText)
       }
     } catch {
       void 0

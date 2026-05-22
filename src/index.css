@@ -787,40 +787,10 @@ body {
   overflow: hidden;
 }
 
-.image-editor__image-wrap {
-  position: relative;
-  display: inline-block;
-  max-width: 100%;
-  line-height: 0;
-  touch-action: none;
-}
-
-.image-editor__image-wrap.is-free-crop {
-  cursor: crosshair;
-}
-
 .image-editor__preview img {
-  display: block;
   max-width: 100%;
   max-height: 260px;
   object-fit: contain;
-  user-select: none;
-}
-
-.image-editor__crop-layer {
-  position: absolute;
-  inset: 0;
-  overflow: hidden;
-  pointer-events: none;
-}
-
-.image-editor__crop-frame {
-  position: absolute;
-  border: 2px solid #fff;
-  box-shadow:
-    0 0 0 999px rgba(16, 24, 40, 0.48),
-    0 0 0 1px var(--accent);
-  box-sizing: border-box;
 }
 
 .image-editor__controls {
@@ -841,7 +811,7 @@ body {
 
 .segmented {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 6px;
 }
 
@@ -1402,18 +1372,6 @@ code {
 
 .review-nav {
   margin-top: 12px;
-}
-
-.review-regenerate {
-  color: var(--accent);
-  background: var(--accent-bg);
-  border-color: var(--accent-border);
-}
-
-.review-regenerate:hover:not(:disabled) {
-  color: var(--accent-hover);
-  background: var(--surface);
-  border-color: var(--accent);
 }
 
 .review-reset {
