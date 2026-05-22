@@ -61,6 +61,7 @@ export async function generateKeywords({
   images,
   rating,
   category,
+  previousKeywords = [],
 }) {
   const safeImages = Array.isArray(images)
     ? images
@@ -78,6 +79,7 @@ export async function generateKeywords({
     images: safeImages,
     rating,
     category,
+    previousKeywords: Array.isArray(previousKeywords) ? previousKeywords : [],
   }
   const requestKey = JSON.stringify(payload)
   const now = Date.now()

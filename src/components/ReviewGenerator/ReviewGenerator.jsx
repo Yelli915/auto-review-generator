@@ -13,11 +13,12 @@ import { normalizeReviewRating } from '../../../shared/reviewRating'
 const STEPS = { UPLOAD: 'upload', KEYWORD: 'keyword', REVIEW: 'review' }
 const RATING_LABELS = ['', '매우 불만족', '불만족', '보통', '만족', '매우 만족']
 
-async function loadKeywordsFromImage(imagePayload) {
+async function loadKeywordsFromImage(imagePayload, previousKeywords = []) {
   const result = await generateKeywords({
     images: imagePayload.images,
     rating: imagePayload.rating,
     category: imagePayload.category,
+    previousKeywords,
   })
   if (!result?.ok) {
     throw new Error(result?.error || '키워드 생성 실패')
@@ -77,7 +78,7 @@ export default function ReviewGenerator({ onReviewComplete }) {
     setError(null)
     setIsLoading(true)
     try {
-      const nextKeywords = await loadKeywordsFromImage(imageData)
+      const nextKeywords = await loadKeywordsFromImage(imageData, keywords)
       setKeywords(nextKeywords)
     } catch (e) {
       setError(e instanceof Error ? e.message : '키워드 생성 실패')

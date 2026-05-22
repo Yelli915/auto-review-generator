@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { CROP_MODES, DEFAULT_IMAGE_EDIT, normalizeRotation } from '../utils/imageUtils'
 
 const CROP_OPTIONS = [
@@ -22,6 +22,24 @@ const FREE_CROP_FIELDS = [
   { key: 'height', label: '높이', min: 10, getMax: (rect) => Math.round((1 - rect.y) * 100) },
 ]
 
+const CROP_HANDLES = ['nw', 'ne', 'sw', 'se']
+const MIN_CROP_SIZE = 0.1
+
+function clamp(value, min, max) {
+  return Math.max(min, Math.min(max, value))
+}
+
+function normalizeCropRect(rect) {
+  const x = clamp(rect.x, 0, 1 - MIN_CROP_SIZE)
+  const y = clamp(rect.y, 0, 1 - MIN_CROP_SIZE)
+  return {
+    x,
+    y,
+    width: clamp(rect.width, MIN_CROP_SIZE, 1 - x),
+    height: clamp(rect.height, MIN_CROP_SIZE, 1 - y),
+  }
+}
+
 function cropRectKey(rect) {
   const safeRect = rect || DEFAULT_FREE_CROP_RECT
   return ['x', 'y', 'width', 'height']
@@ -36,6 +54,8 @@ export default function ImageEditPanel({
   onApply,
   onClose,
 }) {
+  const cropCanvasRef = useRef(null)
+  const cropDragRef = useRef(null)
   const [rotation, setRotation] = useState(() => normalizeRotation(image?.rotation))
   const [cropMode, setCropMode] = useState(
     () => image?.cropMode || DEFAULT_IMAGE_EDIT.cropMode,
@@ -65,14 +85,82 @@ export default function ImageEditPanel({
 
   const updateCropRect = (key, value) => {
     setCropRect((prev) => {
-      const next = {
+      return normalizeCropRect({
         ...(prev || DEFAULT_FREE_CROP_RECT),
         [key]: Number(value) / 100,
-      }
-      next.width = Math.max(0.1, Math.min(1 - next.x, next.width))
-      next.height = Math.max(0.1, Math.min(1 - next.y, next.height))
-      return next
+      })
     })
+  }
+
+  const getCropPoint = (event) => {
+    const bounds = cropCanvasRef.current?.getBoundingClientRect()
+    if (!bounds?.width || !bounds?.height) return null
+    return {
+      x: clamp((event.clientX - bounds.left) / bounds.width, 0, 1),
+      y: clamp((event.clientY - bounds.top) / bounds.height, 0, 1),
+    }
+  }
+
+  const beginCropDrag = (event, action) => {
+    if (isBusy) return
+    const point = getCropPoint(event)
+    if (!point) return
+    event.preventDefault()
+    event.stopPropagation()
+    event.currentTarget.setPointerCapture?.(event.pointerId)
+    cropDragRef.current = {
+      action,
+      pointerId: event.pointerId,
+      startPoint: point,
+      startRect: { ...safeCropRect },
+    }
+  }
+
+  const dragCrop = (event) => {
+    const drag = cropDragRef.current
+    if (!drag || drag.pointerId !== event.pointerId) return
+    const point = getCropPoint(event)
+    if (!point) return
+    event.preventDefault()
+
+    const dx = point.x - drag.startPoint.x
+    const dy = point.y - drag.startPoint.y
+    const rect = drag.startRect
+
+    if (drag.action === 'move') {
+      setCropRect(normalizeCropRect({
+        ...rect,
+        x: clamp(rect.x + dx, 0, 1 - rect.width),
+        y: clamp(rect.y + dy, 0, 1 - rect.height),
+      }))
+      return
+    }
+
+    const next = { ...rect }
+    if (drag.action.includes('w')) {
+      const nextX = clamp(rect.x + dx, 0, rect.x + rect.width - MIN_CROP_SIZE)
+      next.width = rect.width + rect.x - nextX
+      next.x = nextX
+    }
+    if (drag.action.includes('e')) {
+      next.width = clamp(rect.width + dx, MIN_CROP_SIZE, 1 - rect.x)
+    }
+    if (drag.action.includes('n')) {
+      const nextY = clamp(rect.y + dy, 0, rect.y + rect.height - MIN_CROP_SIZE)
+      next.height = rect.height + rect.y - nextY
+      next.y = nextY
+    }
+    if (drag.action.includes('s')) {
+      next.height = clamp(rect.height + dy, MIN_CROP_SIZE, 1 - rect.y)
+    }
+    setCropRect(normalizeCropRect(next))
+  }
+
+  const endCropDrag = (event) => {
+    const drag = cropDragRef.current
+    if (!drag || drag.pointerId !== event.pointerId) return
+    event.currentTarget.releasePointerCapture?.(event.pointerId)
+    cropDragRef.current = null
   }
 
   return (
@@ -93,23 +181,40 @@ export default function ImageEditPanel({
 
       <div className="image-editor__body">
         <div className="image-editor__preview">
-          <img
-            src={previewSrc}
-            alt={`${imageNumber}번째 이미지 편집 미리보기`}
-            style={{ transform: isShowingSavedEdit ? undefined : `rotate(${rotation}deg)` }}
-          />
-          {cropMode === CROP_MODES.free && (
-            <div
-              className="image-editor__crop-box"
-              aria-hidden="true"
-              style={{
-                left: `${safeCropRect.x * 100}%`,
-                top: `${safeCropRect.y * 100}%`,
-                width: `${safeCropRect.width * 100}%`,
-                height: `${safeCropRect.height * 100}%`,
-              }}
+          <div className="image-editor__crop-canvas" ref={cropCanvasRef}>
+            <img
+              src={previewSrc}
+              alt={`${imageNumber}번째 이미지 편집 미리보기`}
+              style={{ transform: isShowingSavedEdit ? undefined : `rotate(${rotation}deg)` }}
             />
-          )}
+            {cropMode === CROP_MODES.free && (
+              <div
+                className="image-editor__crop-box"
+                aria-label="자유 자르기 영역"
+                role="group"
+                tabIndex={0}
+                style={{
+                  left: `${safeCropRect.x * 100}%`,
+                  top: `${safeCropRect.y * 100}%`,
+                  width: `${safeCropRect.width * 100}%`,
+                  height: `${safeCropRect.height * 100}%`,
+                }}
+                onPointerDown={(event) => beginCropDrag(event, 'move')}
+                onPointerMove={dragCrop}
+                onPointerUp={endCropDrag}
+                onPointerCancel={endCropDrag}
+              >
+                {CROP_HANDLES.map((handle) => (
+                  <span
+                    key={handle}
+                    className={`image-editor__crop-handle image-editor__crop-handle--${handle}`}
+                    aria-hidden="true"
+                    onPointerDown={(event) => beginCropDrag(event, handle)}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
         </div>
 
         <div className="image-editor__controls">

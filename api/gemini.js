@@ -37,6 +37,18 @@ const REVIEW_MAX_OUTPUT_TOKENS = {
   long: 4096,
 }
 
+function keywordSignature(keywords) {
+  return sanitizeKeywordArray(keywords)
+    .map((keyword) => keyword.replace(/\s+/g, ' ').trim())
+    .sort((a, b) => a.localeCompare(b, 'ko'))
+    .join('|')
+}
+
+function isSameKeywordSet(a, b) {
+  const aSignature = keywordSignature(a)
+  return Boolean(aSignature) && aSignature === keywordSignature(b)
+}
+
 function setCommonSecurityHeaders(res) {
   res.setHeader('X-Content-Type-Options', 'nosniff')
   res.setHeader('Referrer-Policy', 'same-origin')
@@ -1104,6 +1116,7 @@ export default async function handler(req, res) {
     }
 
     if (await rejectDailyUsageLimit(res, rateKey, body.action)) return
+    const previousKeywords = sanitizeKeywordArray(body.previousKeywords)
 
     const prompt = buildKeywordPrompt({
       rating,
@@ -1111,27 +1124,50 @@ export default async function handler(req, res) {
       imageCount: imageInput.images.length,
       minKeywordCount: KEYWORDS_MIN_COUNT,
       maxKeywordCount: KEYWORDS_MAX_COUNT,
+      previousKeywords,
     })
     const imageParts = buildImageParts(imageInput.images)
-    const payload = {
+    const buildKeywordPayload = (text) => ({
       contents: [
         {
           parts: [
             ...imageParts,
-            { text: prompt },
+            { text },
           ],
         },
       ],
       generationConfig: buildKeywordGenerationConfig(),
-    }
+    })
 
-    const result = await requestGemini({ key, payload })
+    let result = await requestGemini({ key, payload: buildKeywordPayload(prompt) })
     if (!result.ok) {
       return json(res, toClientErrorStatus(result.status), result)
     }
 
-    const parsed = parseKeywordsFromAny(result.data)
+    let parsed = parseKeywordsFromAny(result.data)
+    if (
+      previousKeywords.length &&
+      parsed.keywords &&
+      parsed.keywords.length >= KEYWORDS_MIN_COUNT &&
+      isSameKeywordSet(parsed.keywords, previousKeywords)
+    ) {
+      const retryPrompt =
+        `${prompt}\n\n중요: 방금 결과가 직전 키워드와 완전히 같았어. ` +
+        '이번 응답은 반드시 최소 1개 이상의 키워드를 다른 표현이나 다른 관찰 포인트로 바꿔서 JSON만 출력해.'
+      result = await requestGemini({ key, payload: buildKeywordPayload(retryPrompt) })
+      if (!result.ok) {
+        return json(res, toClientErrorStatus(result.status), result)
+      }
+      parsed = parseKeywordsFromAny(result.data)
+    }
+
     if (parsed.keywords && parsed.keywords.length >= KEYWORDS_MIN_COUNT) {
+      if (previousKeywords.length && isSameKeywordSet(parsed.keywords, previousKeywords)) {
+        return json(res, 502, {
+          ok: false,
+          error: '이전과 같은 키워드가 생성되었습니다. 키워드 다시 생성을 한 번 더 눌러 주세요.',
+        })
+      }
       return json(res, 200, {
         ok: true,
         keywords: parsed.keywords,

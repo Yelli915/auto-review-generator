@@ -44,6 +44,7 @@ export function buildKeywordPrompt({
   imageCount = 1,
   minKeywordCount,
   maxKeywordCount,
+  previousKeywords = [],
 }) {
   const safeCategory = normalizeReviewCategory(category)
   const categoryMeta = REVIEW_CATEGORY_MAP[safeCategory]
@@ -51,10 +52,21 @@ export function buildKeywordPrompt({
     imageCount > 1
       ? `첨부된 ${imageCount}장의 이미지를 같은 리뷰 대상의 보조 정보로 보고 종합해. `
       : '첨부된 이미지를 리뷰 대상의 보조 정보로 봐. '
+  const safePreviousKeywords = Array.isArray(previousKeywords)
+    ? previousKeywords
+        .filter((v) => typeof v === 'string' && v.trim())
+        .map((v) => v.trim())
+        .filter((v) => isLikelyKeywordPhrase(v))
+        .slice(0, maxKeywordCount)
+    : []
+  const variationGuide = safePreviousKeywords.length
+    ? `직전 키워드 조합 ${JSON.stringify(safePreviousKeywords)}와 완전히 같은 목록을 다시 내지 마. 비슷한 방향은 가능하지만 최소 1개 이상은 다른 표현이나 다른 관찰 포인트로 바꿔. `
+    : ''
 
   return (
     `${categoryMeta.label} 리뷰에 사용할 키워드를 한국어 짧은 구로만 작성해. ` +
     imageGuide +
+    variationGuide +
     '이미지에서 직접 확인 가능한 단서를 우선하고, 보이지 않는 사실은 추측하지 마. ' +
     `별점 ${rating}점 기준 감정은 ${keywordSentimentGuide(rating)} 반영해. ` +
     `대상 기준은 ${categoryMeta.focus}으로 잡아. ` +

@@ -30,6 +30,21 @@ test('buildKeywordPrompt includes review category and multi-image context', () =
   assert.match(prompt, /3~8개/)
 })
 
+test('buildKeywordPrompt asks for variation from previous keywords', () => {
+  const prompt = buildKeywordPrompt({
+    rating: 5,
+    category: 'product',
+    imageCount: 1,
+    minKeywordCount: 3,
+    maxKeywordCount: 8,
+    previousKeywords: ['색감 좋음', '배송 빠름', '마감 깔끔'],
+  })
+
+  assert.match(prompt, /직전 키워드 조합/)
+  assert.match(prompt, /색감 좋음/)
+  assert.match(prompt, /최소 1개 이상/)
+})
+
 test('buildReviewPrompt includes review category context', () => {
   const { prompt, safeLength, minReviewChars } = buildReviewPrompt({
     rating: 5,

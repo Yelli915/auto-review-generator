@@ -73,7 +73,6 @@ function StarRating({ value, onChange, disabled, ratingLabels }) {
 
 export default function UploadStep({ onNext, isLoading, ratingLabels }) {
   const inputId = useId()
-  const categoryId = useId()
   const inputRef = useRef(null)
   const [images, setImages] = useState([])
   const [reviewCategory, setReviewCategory] = useState(DEFAULT_REVIEW_CATEGORY)
@@ -249,22 +248,27 @@ export default function UploadStep({ onNext, isLoading, ratingLabels }) {
       </p>
 
       <div className="field">
-        <label className="field__label" htmlFor={categoryId}>
-          리뷰 분야
-        </label>
-        <select
-          id={categoryId}
-          className="select-input"
-          value={reviewCategory}
-          onChange={(e) => setReviewCategory(e.target.value)}
-          disabled={busy}
-        >
-          {REVIEW_CATEGORY_OPTIONS.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </select>
+        <span className="field__label">리뷰 분야</span>
+        <div className="category-choice-grid" role="radiogroup" aria-label="리뷰 분야 선택">
+          {REVIEW_CATEGORY_OPTIONS.map((option) => {
+            const isActive = reviewCategory === option.value
+            return (
+              <button
+                key={option.value}
+                type="button"
+                className={`category-choice${isActive ? ' is-active' : ''}`}
+                onClick={() => setReviewCategory(option.value)}
+                disabled={busy}
+                aria-pressed={isActive}
+              >
+                <span className="category-choice__label">{option.label}</span>
+                <span className="category-choice__meta">
+                  {option.value === 'place' ? '장소 중심 후기' : '상품 중심 후기'}
+                </span>
+              </button>
+            )
+          })}
+        </div>
       </div>
 
       <div className="field">
