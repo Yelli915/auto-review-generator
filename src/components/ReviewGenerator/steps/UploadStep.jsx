@@ -245,12 +245,12 @@ export default function UploadStep({ onNext, isLoading, ratingLabels }) {
     <section className="step-card step-card--enter">
       <h2 className="step-card__title">사진 업로드</h2>
       <p className="step-card__lede">
-        리뷰 분야와 사진, 별점을 선택하면 그에 맞는 키워드를 자동으로 추출합니다.
+        리뷰 대상과 사진, 별점을 선택하면 그에 맞는 키워드를 자동으로 추출합니다.
       </p>
 
       <div className="field">
         <label className="field__label" htmlFor={categoryId}>
-          리뷰 분야
+          리뷰 대상
         </label>
         <select
           id={categoryId}

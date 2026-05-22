@@ -29,8 +29,24 @@ function getNetlifyHeaderMap() {
   return headers
 }
 
-test('Vercel and Netlify security headers stay in sync', () => {
-  assert.deepEqual(getNetlifyHeaderMap(), getVercelHeaderMap())
+function getNginxHeaderMap() {
+  const config = readFileSync('deploy/nginx/security-headers.conf', 'utf8')
+  const headers = {}
+  const re = /^\s*add_header\s+([A-Za-z0-9-]+)\s+"((?:\\"|[^"])*)"\s+always;\s*$/gm
+  let match
+
+  while ((match = re.exec(config)) !== null) {
+    headers[match[1]] = match[2].replace(/\\"/g, '"')
+  }
+
+  return headers
+}
+
+test('security headers stay in sync across deploy configs', () => {
+  const expected = getVercelHeaderMap()
+
+  assert.deepEqual(getNetlifyHeaderMap(), expected)
+  assert.deepEqual(getNginxHeaderMap(), expected)
 })
 
 test('Vercel and Netlify publish the same Vite build output', () => {

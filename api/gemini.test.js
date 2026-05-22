@@ -12,6 +12,7 @@ import {
   validateImagesInput,
 } from './gemini.js'
 import { normalizeReviewCategory } from '../shared/reviewCategories.js'
+import { normalizeReviewRating } from '../shared/reviewRating.js'
 
 const png1x1Base64 =
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII='
@@ -167,7 +168,19 @@ test('humanizeGeminiApiError returns rate-limit guidance for quota errors', () =
 })
 
 test('normalizeReviewCategory accepts known categories and falls back safely', () => {
+  assert.equal(normalizeReviewCategory('place'), 'place')
   assert.equal(normalizeReviewCategory('product'), 'product')
-  assert.equal(normalizeReviewCategory('unknown'), 'restaurant')
-  assert.equal(normalizeReviewCategory(undefined), 'restaurant')
+  assert.equal(normalizeReviewCategory('restaurant'), 'place')
+  assert.equal(normalizeReviewCategory('accommodation'), 'place')
+  assert.equal(normalizeReviewCategory('service'), 'place')
+  assert.equal(normalizeReviewCategory('unknown'), 'place')
+  assert.equal(normalizeReviewCategory(undefined), 'place')
+})
+
+test('normalizeReviewRating clamps invalid or out-of-range ratings safely', () => {
+  assert.equal(normalizeReviewRating(0), 1)
+  assert.equal(normalizeReviewRating(3), 3)
+  assert.equal(normalizeReviewRating(6), 5)
+  assert.equal(normalizeReviewRating('4'), 4)
+  assert.equal(normalizeReviewRating(undefined), 5)
 })

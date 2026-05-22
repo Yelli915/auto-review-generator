@@ -2,11 +2,22 @@ export const CROP_MODES = {
   original: 'original',
   square: 'square',
   ratio4x3: 'ratio4x3',
+  free: 'free',
 }
+
+export const DEFAULT_CROP_AREA = {
+  x: 0.1,
+  y: 0.1,
+  width: 0.8,
+  height: 0.8,
+}
+
+export const MIN_CROP_AREA_SIZE = 0.02
 
 export const DEFAULT_IMAGE_EDIT = {
   rotation: 0,
   cropMode: CROP_MODES.original,
+  cropArea: DEFAULT_CROP_AREA,
 }
 
 export function normalizeRotation(value) {
@@ -14,9 +25,72 @@ export function normalizeRotation(value) {
   return ((n % 360) + 360) % 360
 }
 
-export function calculateCropRect(width, height, cropMode = CROP_MODES.original) {
+function clamp(value, min, max) {
+  return Math.min(max, Math.max(min, value))
+}
+
+export function normalizeCropArea(cropArea = DEFAULT_CROP_AREA) {
+  const x = clamp(Number(cropArea?.x) || 0, 0, 0.98)
+  const y = clamp(Number(cropArea?.y) || 0, 0, 0.98)
+  const width = clamp(
+    Number(cropArea?.width) || DEFAULT_CROP_AREA.width,
+    MIN_CROP_AREA_SIZE,
+    1,
+  )
+  const height = clamp(
+    Number(cropArea?.height) || DEFAULT_CROP_AREA.height,
+    MIN_CROP_AREA_SIZE,
+    1,
+  )
+  return {
+    x,
+    y,
+    width: Math.min(width, 1 - x),
+    height: Math.min(height, 1 - y),
+  }
+}
+
+export function areCropAreasEqual(a, b) {
+  const left = normalizeCropArea(a)
+  const right = normalizeCropArea(b)
+  return (
+    left.x === right.x &&
+    left.y === right.y &&
+    left.width === right.width &&
+    left.height === right.height
+  )
+}
+
+export function createCropAreaFromPoints(start, end) {
+  const startX = Number(start?.x) || 0
+  const startY = Number(start?.y) || 0
+  const endX = Number(end?.x) || 0
+  const endY = Number(end?.y) || 0
+  return normalizeCropArea({
+    x: Math.min(startX, endX),
+    y: Math.min(startY, endY),
+    width: Math.max(MIN_CROP_AREA_SIZE, Math.abs(endX - startX)),
+    height: Math.max(MIN_CROP_AREA_SIZE, Math.abs(endY - startY)),
+  })
+}
+
+export function calculateCropRect(
+  width,
+  height,
+  cropMode = CROP_MODES.original,
+  cropArea = DEFAULT_CROP_AREA,
+) {
   const w = Math.max(1, Math.round(Number(width) || 1))
   const h = Math.max(1, Math.round(Number(height) || 1))
+  if (cropMode === CROP_MODES.free) {
+    const area = normalizeCropArea(cropArea)
+    return {
+      x: Math.round(w * area.x),
+      y: Math.round(h * area.y),
+      width: Math.max(1, Math.round(w * area.width)),
+      height: Math.max(1, Math.round(h * area.height)),
+    }
+  }
   if (cropMode === CROP_MODES.square) {
     const size = Math.min(w, h)
     return {
@@ -80,6 +154,7 @@ export function transformImageFile(
     quality = 0.85,
     rotation = DEFAULT_IMAGE_EDIT.rotation,
     cropMode = DEFAULT_IMAGE_EDIT.cropMode,
+    cropArea = DEFAULT_IMAGE_EDIT.cropArea,
     createPreviewUrl = false,
   } = {},
 ) {
@@ -89,7 +164,7 @@ export function transformImageFile(
     img.onload = async () => {
       try {
         URL.revokeObjectURL(url)
-        const crop = calculateCropRect(img.width, img.height, cropMode)
+        const crop = calculateCropRect(img.width, img.height, cropMode, cropArea)
         const longest = Math.max(crop.width, crop.height)
         const scale = longest > maxEdge ? maxEdge / longest : 1
         const w = Math.max(1, Math.round(crop.width * scale))
