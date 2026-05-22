@@ -3,7 +3,7 @@ import {
   normalizeReviewCategory,
 } from '../shared/reviewCategories.js'
 import {
-  REVIEW_MIN_CHARS,
+  getReviewMinChars,
   normalizeReviewLength,
   normalizeReviewTone,
 } from '../shared/reviewOptions.js'
@@ -81,7 +81,7 @@ export function buildReviewPrompt({ rating, keywords, length, tone, category }) 
   const safeTone = normalizeReviewTone(tone)
   const safeCategory = normalizeReviewCategory(category)
   const categoryMeta = REVIEW_CATEGORY_MAP[safeCategory]
-  const minReviewChars = REVIEW_MIN_CHARS[safeLength]
+  const minReviewChars = getReviewMinChars(safeLength)
 
   return {
     prompt:
@@ -91,6 +91,7 @@ export function buildReviewPrompt({ rating, keywords, length, tone, category }) 
       '선택된 키워드를 그대로 나열하지 말고 실제 사용자가 쓴 후기처럼 자연스럽게 연결해. ' +
       '사진이나 키워드에서 확인되지 않는 구체 정보는 새로 만들지 마. ' +
       '광고 문구, 과장된 표현, 반복적인 감탄사는 피하고 담백하게 작성해. ' +
+      '글자수보다 문장과 리뷰의 완결성을 우선하고, 마지막 문장이 중간에 끊기지 않게 마무리해. ' +
       `아래 조건을 모두 지켜 리뷰 본문만 작성해. 제목, 머리말, 번호, 목록 없이 최소 ${minReviewChars}자 이상의 자연스러운 문장으로 써 줘.`,
     safeLength,
     minReviewChars,

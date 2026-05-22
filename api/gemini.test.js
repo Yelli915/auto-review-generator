@@ -1,10 +1,13 @@
+/* global process */
 import assert from 'node:assert/strict'
 import { Buffer } from 'node:buffer'
 import test from 'node:test'
 import {
   applyDailyUsageLimit,
+  applyRateLimit,
   buildImageParts,
   buildKeywordGenerationConfig,
+  buildReviewGenerationConfig,
   humanizeGeminiApiError,
   parseKeywordsFromText,
   sanitizeKeywordArray,
@@ -15,6 +18,9 @@ import { normalizeReviewCategory } from '../shared/reviewCategories.js'
 
 const png1x1Base64 =
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII='
+
+delete process.env.UPSTASH_REDIS_REST_URL
+delete process.env.UPSTASH_REDIS_REST_TOKEN
 
 test('validateImageInput accepts supported image content', () => {
   const result = validateImageInput(`\n${png1x1Base64}\n`, 'IMAGE/PNG')
@@ -102,16 +108,28 @@ test('buildImageParts maps validated images to Gemini inline data parts', () => 
   )
 })
 
-test('applyDailyUsageLimit allows only counted actions up to the daily limit', () => {
-  const id = `test-user-${Date.now()}-${Math.random()}`
-
-  assert.equal(applyDailyUsageLimit(id, 'ping').ok, true)
+test('applyRateLimit blocks bursts after the request window limit', async () => {
+  const id = `test-rate-${Date.now()}-${Math.random()}`
 
   for (let i = 0; i < 20; i += 1) {
-    assert.equal(applyDailyUsageLimit(id, 'keywords').ok, true)
+    assert.equal((await applyRateLimit(id)).ok, true)
   }
 
-  const blocked = applyDailyUsageLimit(id, 'review')
+  const blocked = await applyRateLimit(id)
+  assert.equal(blocked.ok, false)
+  assert.equal(Number.isInteger(blocked.retryAfterSec), true)
+})
+
+test('applyDailyUsageLimit allows only counted actions up to the daily limit', async () => {
+  const id = `test-user-${Date.now()}-${Math.random()}`
+
+  assert.equal((await applyDailyUsageLimit(id, 'ping')).ok, true)
+
+  for (let i = 0; i < 20; i += 1) {
+    assert.equal((await applyDailyUsageLimit(id, 'keywords')).ok, true)
+  }
+
+  const blocked = await applyDailyUsageLimit(id, 'review')
   assert.equal(blocked.ok, false)
   assert.equal(blocked.limit, 20)
   assert.equal(Number.isInteger(blocked.retryAfterSec), true)
@@ -153,6 +171,18 @@ test('buildKeywordGenerationConfig reserves output for short JSON responses', ()
   assert.equal(config.responseJsonSchema, undefined)
   assert.equal(config.thinkingConfig.thinkingBudget, 0)
   assert.ok(config.maxOutputTokens >= 1024)
+})
+
+test('buildReviewGenerationConfig prioritizes complete reviews over tight length caps', () => {
+  const shortConfig = buildReviewGenerationConfig('short')
+  const mediumConfig = buildReviewGenerationConfig('medium')
+  const longConfig = buildReviewGenerationConfig('long')
+
+  assert.equal(shortConfig.temperature, 0.6)
+  assert.equal(shortConfig.thinkingConfig.thinkingBudget, 0)
+  assert.ok(shortConfig.maxOutputTokens >= 1024)
+  assert.ok(mediumConfig.maxOutputTokens > shortConfig.maxOutputTokens)
+  assert.ok(longConfig.maxOutputTokens > mediumConfig.maxOutputTokens)
 })
 
 test('humanizeGeminiApiError preserves non-quota API messages', () => {

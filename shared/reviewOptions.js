@@ -5,22 +5,22 @@ export const REVIEW_LENGTH_OPTIONS = [
   {
     value: 'short',
     label: '짧게',
-    controlLabel: '짧게 (2~3문장)',
-    minChars: 40,
   },
   {
     value: 'medium',
     label: '보통',
-    controlLabel: '보통 (4~5문장)',
-    minChars: 90,
   },
   {
     value: 'long',
     label: '길게',
-    controlLabel: '길게 (7~8문장)',
-    minChars: 160,
   },
 ]
+
+export const REVIEW_LENGTH_MIN_CHARS = {
+  short: 60,
+  medium: 100,
+  long: 160,
+}
 
 export const REVIEW_TONE_OPTIONS = [
   {
@@ -55,13 +55,12 @@ export const REVIEW_TONE_MAP = REVIEW_TONE_OPTIONS.reduce((acc, option) => {
   return acc
 }, {})
 
-export const REVIEW_MIN_CHARS = REVIEW_LENGTH_OPTIONS.reduce((acc, option) => {
-  acc[option.value] = option.minChars
-  return acc
-}, {})
-
 export function normalizeReviewLength(value) {
   return REVIEW_LENGTH_MAP[value] ? value : DEFAULT_REVIEW_LENGTH
+}
+
+export function getReviewMinChars(value) {
+  return REVIEW_LENGTH_MIN_CHARS[normalizeReviewLength(value)]
 }
 
 export function normalizeReviewTone(value) {

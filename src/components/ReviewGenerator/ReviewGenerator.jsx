@@ -134,8 +134,6 @@ export default function ReviewGenerator({ onReviewComplete }) {
     [STEPS.REVIEW]: 2,
   }[step]
   const stepMeta = [
-    { title: '사진 입력', desc: '리뷰 분야, 이미지, 별점을 선택합니다.' },
-    { title: '옵션 선택', desc: '키워드, 길이, 말투를 정합니다.' },
     { title: '결과 확인', desc: '생성된 리뷰를 확인하고 복사합니다.' },
   ][stepIndex]
 

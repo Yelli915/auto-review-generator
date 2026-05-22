@@ -62,11 +62,6 @@ export default function KeywordStep({
 
   return (
     <div className="step-card step-card--enter">
-      <h2 className="step-card__title">키워드·길이·말투</h2>
-      <p className="step-card__lede">
-        키워드를 고르고 리뷰 길이와 말투를 선택한 뒤 리뷰를 생성합니다.
-      </p>
-
       {isLoading && isEmpty ? (
         <div className="chip-skeleton-group" aria-label="키워드 생성 중" aria-busy="true">
           {SKELETON_WIDTHS.map((w, i) => (
