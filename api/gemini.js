@@ -3,7 +3,6 @@ import { OAuth2Client } from 'google-auth-library'
 import { createJsonHeaders, readJsonSafely } from '../shared/httpJson.js'
 import { MAX_REVIEW_IMAGE_COUNT } from '../shared/reviewCategories.js'
 import { normalizeReviewTone } from '../shared/reviewOptions.js'
-import { normalizeReviewRating } from '../shared/reviewRating.js'
 import { hasHangul, isLikelyKeywordPhrase } from './keywordUtils.js'
 import {
   buildKeywordPrompt,
@@ -965,7 +964,8 @@ export default async function handler(req, res) {
   }
 
   if (body.action === 'keywords') {
-    const rating = normalizeReviewRating(body.rating)
+    const rawRating = Number.isFinite(Number(body.rating)) ? Number(body.rating) : 5
+    const rating = Math.max(1, Math.min(5, rawRating))
     const imageInput = validateImagesInput(
       body.images,
       body.imageBase64,
@@ -1045,7 +1045,7 @@ export default async function handler(req, res) {
   }
 
   if (body.action === 'review') {
-    const rating = normalizeReviewRating(body.rating)
+    const rating = Number.isFinite(Number(body.rating)) ? Number(body.rating) : 5
     const tone = normalizeReviewTone(body.tone)
     if (rejectDailyUsageLimit(res, rateKey, body.action)) return
     try {

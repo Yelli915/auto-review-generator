@@ -64,9 +64,9 @@ export default function ReviewStep({
           )}
           {reviewCategory && (
             <div className="review-context__row">
-              <span className="review-context__icon">대상</span>
+              <span className="review-context__icon">분야</span>
               <span className="review-context__meta">
-                {REVIEW_CATEGORY_LABELS[reviewCategory] ?? '장소'}
+                {REVIEW_CATEGORY_LABELS[reviewCategory] ?? '맛집'}
               </span>
             </div>
           )}
@@ -153,16 +153,6 @@ export default function ReviewStep({
         >
           키워드 다시 선택
         </button>
-        {typeof onRegenerate === 'function' && (
-          <button
-            type="button"
-            className="btn btn--secondary review-regenerate"
-            onClick={onRegenerate}
-            disabled={isStreaming}
-          >
-            리뷰 다시 생성
-          </button>
-        )}
       </div>
       <div className="review-more">
         <button
@@ -176,6 +166,16 @@ export default function ReviewStep({
         </button>
         {showMoreActions && (
           <div className="btn-row review-more__actions">
+            {typeof onRegenerate === 'function' && (
+              <button
+                type="button"
+                className="btn btn--secondary"
+                onClick={onRegenerate}
+                disabled={isStreaming}
+              >
+                리뷰 다시 생성
+              </button>
+            )}
             <button
               type="button"
               className="btn btn--ghost review-reset"
