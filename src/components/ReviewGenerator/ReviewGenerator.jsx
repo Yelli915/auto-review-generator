@@ -8,6 +8,7 @@ import {
   DEFAULT_REVIEW_LENGTH,
   DEFAULT_REVIEW_TONE,
 } from '../../../shared/reviewOptions'
+import { normalizeReviewRating } from '../../../shared/reviewRating'
 
 const STEPS = { UPLOAD: 'upload', KEYWORD: 'keyword', REVIEW: 'review' }
 const RATING_LABELS = ['', '매우 불만족', '불만족', '보통', '만족', '매우 만족']
@@ -38,7 +39,7 @@ export default function ReviewGenerator({ onReviewComplete }) {
     const images = Array.isArray(data?.images) ? data.images : []
     const normalizedData = {
       images,
-      rating: Number.isFinite(Number(data?.rating)) ? Number(data.rating) : 5,
+      rating: normalizeReviewRating(data?.rating),
       category: normalizeReviewCategory(data?.category),
     }
 
@@ -134,6 +135,8 @@ export default function ReviewGenerator({ onReviewComplete }) {
     [STEPS.REVIEW]: 2,
   }[step]
   const stepMeta = [
+    { title: '사진 입력', desc: '리뷰 대상, 이미지, 별점을 선택합니다.' },
+    { title: '옵션 선택', desc: '키워드, 분량, 말투를 정합니다.' },
     { title: '결과 확인', desc: '생성된 리뷰를 확인하고 복사합니다.' },
   ][stepIndex]
 
