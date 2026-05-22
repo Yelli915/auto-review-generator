@@ -62,8 +62,6 @@ export default function KeywordStep({
 
   return (
     <div className="step-card step-card--enter">
-      </p>
-
       {isLoading && isEmpty ? (
         <div className="chip-skeleton-group" aria-label="키워드 생성 중" aria-busy="true">
           {SKELETON_WIDTHS.map((w, i) => (
@@ -132,6 +130,7 @@ export default function KeywordStep({
           <div className="options-row options-row--2">
             <div className="field">
               <label className="field__label" htmlFor={lengthId}>
+                길이
               </label>
               <select
                 id={lengthId}

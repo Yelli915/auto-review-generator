@@ -14,6 +14,12 @@ const REVIEW_LENGTH_PROMPT_MAP = {
   long: '7~8문장의 상세한 내용으로',
 }
 
+const REVIEW_LENGTH_MIN_CHARS_MAP = {
+  short: 60,
+  medium: 100,
+  long: 160,
+}
+
 const REVIEW_TONE_PROMPT_MAP = {
   neutral:
     '1인칭 구매자 입장의 자연스러운 온라인 쇼핑몰 리뷰 말투. 과장하지 말 것.',
@@ -80,6 +86,7 @@ export function buildReviewPrompt({ rating, keywords, length, tone, category }) 
   const safeTone = normalizeReviewTone(tone)
   const safeCategory = normalizeReviewCategory(category)
   const categoryMeta = REVIEW_CATEGORY_MAP[safeCategory]
+  const minReviewChars = REVIEW_LENGTH_MIN_CHARS_MAP[safeLength]
 
   return {
     prompt:
