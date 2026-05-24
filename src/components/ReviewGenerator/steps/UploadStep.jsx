@@ -136,7 +136,7 @@ export default function UploadStep({ onNext, isLoading, ratingLabels }) {
         objectUrlsRef.current = getImageObjectUrls(nextImages)
         setImages(nextImages)
         setStatus({
-          text: getImageFileNames(nextImages),
+          text: `${nextImages.length}장 선택됨 · ${getImageFileNames(nextImages)}`,
           isError: false,
         })
       })
@@ -307,11 +307,12 @@ export default function UploadStep({ onNext, isLoading, ratingLabels }) {
               <p className="file-drop__text file-drop__text--drag">여기에 놓으세요</p>
             ) : (
               <>
+                <span className="file-drop__icon" aria-hidden="true">+</span>
                 <p className="file-drop__text">
-                  탭하거나 파일을 끌어다 놓으세요
+                  {images.length ? '이미지를 더 추가하거나 다시 선택하세요' : '이미지를 추가하세요'}
                 </p>
                 <p className="file-drop__sub">
-                  JPG · PNG · WEBP 등 · 최대 {MAX_REVIEW_IMAGE_COUNT}장 · 각 {MAX_FILE_SIZE_MB}MB
+                  클릭 또는 드래그 앤 드롭 · 최대 {MAX_REVIEW_IMAGE_COUNT}장 · 각 {MAX_FILE_SIZE_MB}MB
                 </p>
               </>
             )}
