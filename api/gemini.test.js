@@ -172,6 +172,46 @@ test('handler generates keywords from productUrl metadata', async () => {
   assert.equal(calls.length, 2)
 })
 
+test('handler analyzes product options from productUrl', async () => {
+  const oldApiAuthToken = process.env.API_AUTH_TOKEN
+  const oldFetch = globalThis.fetch
+  delete process.env.API_AUTH_TOKEN
+
+  globalThis.fetch = async (url) => {
+    if (String(url).startsWith('https://shop.example/product')) {
+      return new Response(
+        '<html><head><title>테스트 상품</title></head><body><label for="color">색상</label><select id="color" name="color"><option value="">선택</option><option value="black">블랙</option><option value="white">화이트</option></select></body></html>',
+        { status: 200, headers: { 'Content-Type': 'text/html; charset=utf-8' } },
+      )
+    }
+    return new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } })
+  }
+
+  const req = createMockRequest({
+    action: 'analyze-product',
+    productUrl: 'https://shop.example/product/keyboard',
+  })
+  const res = createMockResponse()
+
+  try {
+    await handler(req, res)
+  } finally {
+    globalThis.fetch = oldFetch
+    if (oldApiAuthToken == null) delete process.env.API_AUTH_TOKEN
+    else process.env.API_AUTH_TOKEN = oldApiAuthToken
+  }
+
+  assert.equal(res.statusCode, 200)
+  const body = JSON.parse(res.body)
+  assert.equal(body.ok, true)
+  assert.equal(body.optionGroups.length, 1)
+  assert.equal(body.optionGroups[0].label, '색상')
+  assert.deepEqual(
+    body.optionGroups[0].options.map((option) => option.label),
+    ['블랙', '화이트'],
+  )
+})
+
 test('fetchProductContext falls back when product page returns non-ok response', async () => {
   const oldFetch = globalThis.fetch
   globalThis.fetch = async () => new Response('blocked', { status: 403 })

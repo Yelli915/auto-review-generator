@@ -1,9 +1,14 @@
 import { useState } from 'react'
 import CategoryStep from './steps/CategoryStep'
 import UploadStep from './steps/UploadStep'
+import ProductOptionStep from './steps/ProductOptionStep'
 import KeywordStep from './steps/KeywordStep'
 import ReviewStep from './steps/ReviewStep'
-import { generateKeywords, generateReview } from './api/geminiService'
+import {
+  analyzeProductUrl,
+  generateKeywords,
+  generateReview,
+} from './api/geminiService'
 import {
   DEFAULT_REVIEW_CATEGORY,
   normalizeReviewCategory,
@@ -17,26 +22,39 @@ import { normalizeReviewRating } from '../../../shared/reviewRating'
 const STEPS = {
   CATEGORY: 'category',
   UPLOAD: 'upload',
+  PRODUCT_OPTIONS: 'product-options',
   KEYWORD: 'keyword',
   REVIEW: 'review',
 }
 
-const STEP_ORDER = [STEPS.CATEGORY, STEPS.UPLOAD, STEPS.KEYWORD, STEPS.REVIEW]
+const STEP_ORDER = [
+  STEPS.CATEGORY,
+  STEPS.UPLOAD,
+  STEPS.PRODUCT_OPTIONS,
+  STEPS.KEYWORD,
+  STEPS.REVIEW,
+]
+
 const STEP_META = {
   [STEPS.CATEGORY]: {
     title: '리뷰 분야 선택',
-    desc: '장소 후기와 상품 후기 중 하나를 선택합니다.',
+    desc: '먼저 장소인지 상품인지 선택합니다.',
     label: '분야',
   },
   [STEPS.UPLOAD]: {
-    title: '사진 입력',
-    desc: '리뷰 대상 이미지와 별점을 선택합니다.',
-    label: '사진',
+    title: '사진 또는 링크 입력',
+    desc: '리뷰 재료와 별점을 입력합니다.',
+    label: '입력',
+  },
+  [STEPS.PRODUCT_OPTIONS]: {
+    title: '상품 옵션 선택',
+    desc: 'URL 분석 결과에서 옵션을 고르고 반영합니다.',
+    label: '옵션',
   },
   [STEPS.KEYWORD]: {
-    title: '옵션 선택',
-    desc: '키워드, 분량, 말투를 정합니다.',
-    label: '옵션',
+    title: '키워드 선택',
+    desc: '옵션과 재료를 반영한 키워드를 고릅니다.',
+    label: '키워드',
   },
   [STEPS.REVIEW]: {
     title: '결과 확인',
@@ -47,24 +65,48 @@ const STEP_META = {
 
 const RATING_LABELS = ['', '매우 불만족', '불만족', '보통', '만족', '매우 만족']
 
-async function loadKeywordsFromImage(imagePayload, previousKeywords = []) {
+async function loadKeywordsFromSource(sourcePayload, previousKeywords = []) {
   const result = await generateKeywords({
-    images: imagePayload.images,
-    productUrl: imagePayload.productUrl,
-    rating: imagePayload.rating,
-    category: imagePayload.category,
+    images: sourcePayload.images,
+    productUrl: sourcePayload.productUrl,
+    productContext: sourcePayload.productContext,
+    productSelection: sourcePayload.productSelection,
+    rating: sourcePayload.rating,
+    category: sourcePayload.category,
     previousKeywords,
   })
   if (!result?.ok) {
-    throw new Error(result?.error || '키워드 생성 실패')
+    throw new Error(result?.error || '키워드 생성에 실패했습니다.')
   }
   return Array.isArray(result.keywords) ? result.keywords : []
+}
+
+function buildOptionSummary(optionGroups, selections) {
+  if (!Array.isArray(optionGroups) || !optionGroups.length) return ''
+  return optionGroups
+    .map((group, index) => {
+      const selectedValue = selections?.[index] || ''
+      const selectedOption = Array.isArray(group.options)
+        ? group.options.find((option) => option.value === selectedValue)
+        : null
+      const label = selectedOption?.label || selectedOption?.value || '미선택'
+      return `${group.label}: ${label}`
+    })
+    .join('\n')
+}
+
+function getDefaultSelections(optionGroups) {
+  return Array.isArray(optionGroups)
+    ? optionGroups.map((group) => group?.options?.[0]?.value || '')
+    : []
 }
 
 export default function ReviewGenerator({ onReviewComplete }) {
   const [step, setStep] = useState(STEPS.CATEGORY)
   const [reviewCategory, setReviewCategory] = useState(DEFAULT_REVIEW_CATEGORY)
-  const [imageData, setImageData] = useState(null)
+  const [sourceData, setSourceData] = useState(null)
+  const [productAnalysis, setProductAnalysis] = useState(null)
+  const [productOptionSelections, setProductOptionSelections] = useState([])
   const [keywords, setKeywords] = useState([])
   const [review, setReview] = useState('')
   const [isLoading, setIsLoading] = useState(false)
@@ -74,7 +116,9 @@ export default function ReviewGenerator({ onReviewComplete }) {
 
   const handleCategorySelect = (category) => {
     setReviewCategory(normalizeReviewCategory(category))
-    setImageData(null)
+    setSourceData(null)
+    setProductAnalysis(null)
+    setProductOptionSelections([])
     setKeywords([])
     setReview('')
     setError(null)
@@ -87,19 +131,92 @@ export default function ReviewGenerator({ onReviewComplete }) {
     const normalizedData = {
       images,
       productUrl: typeof data?.productUrl === 'string' ? data.productUrl.trim() : '',
+      productContext: typeof data?.productContext === 'string' ? data.productContext.trim() : '',
       rating: normalizeReviewRating(data?.rating),
       category: normalizeReviewCategory(data?.category ?? reviewCategory),
+      productSelection: '',
     }
 
-    setImageData(normalizedData)
     setError(null)
     setIsLoading(true)
+
     try {
-      const nextKeywords = await loadKeywordsFromImage(normalizedData)
+      if (normalizedData.productUrl) {
+        const analysis = await analyzeProductUrl(normalizedData.productUrl)
+        if (!analysis?.ok) {
+          throw new Error(analysis?.error || '상품 URL 분석에 실패했습니다.')
+        }
+
+        const nextAnalysis = {
+          url: analysis.url || normalizedData.productUrl,
+          productContext: analysis.productContext || '',
+          optionGroups: Array.isArray(analysis.optionGroups) ? analysis.optionGroups : [],
+        }
+
+        const nextSource = {
+          ...normalizedData,
+          productUrl: nextAnalysis.url,
+          productContext: nextAnalysis.productContext,
+        }
+
+        setSourceData(nextSource)
+        setProductAnalysis(nextAnalysis)
+
+        if (nextAnalysis.optionGroups.length > 0) {
+          setProductOptionSelections(getDefaultSelections(nextAnalysis.optionGroups))
+          setStep(STEPS.PRODUCT_OPTIONS)
+          return
+        }
+
+        const nextKeywords = await loadKeywordsFromSource(nextSource)
+        setKeywords(nextKeywords)
+        setStep(STEPS.KEYWORD)
+        return
+      }
+
+      const nextSource = { ...normalizedData }
+      setSourceData(nextSource)
+      setProductAnalysis(null)
+      setProductOptionSelections([])
+
+      const nextKeywords = await loadKeywordsFromSource(nextSource)
       setKeywords(nextKeywords)
       setStep(STEPS.KEYWORD)
     } catch (e) {
-      setError(e instanceof Error ? e.message : '키워드 생성 실패')
+      setError(e instanceof Error ? e.message : '키워드 생성에 실패했습니다.')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleProductOptionNext = async (selectedSelections) => {
+    if (!productAnalysis || !sourceData?.productUrl) return
+    const optionGroups = Array.isArray(productAnalysis.optionGroups)
+      ? productAnalysis.optionGroups
+      : []
+    const safeSelections = Array.isArray(selectedSelections)
+      ? selectedSelections
+      : getDefaultSelections(optionGroups)
+    const selectionSummary = buildOptionSummary(optionGroups, safeSelections)
+    const nextSource = {
+      ...sourceData,
+      productSelection: selectionSummary,
+      productContext: selectionSummary
+        ? `${sourceData.productContext}\n\n선택 옵션:\n${selectionSummary}`
+        : sourceData.productContext,
+    }
+
+    setProductOptionSelections(safeSelections)
+    setSourceData(nextSource)
+    setError(null)
+    setIsLoading(true)
+
+    try {
+      const nextKeywords = await loadKeywordsFromSource(nextSource)
+      setKeywords(nextKeywords)
+      setStep(STEPS.KEYWORD)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '키워드 생성에 실패했습니다.')
     } finally {
       setIsLoading(false)
     }
@@ -115,14 +232,14 @@ export default function ReviewGenerator({ onReviewComplete }) {
   }
 
   const handleRefresh = async () => {
-    if (!imageData?.images?.length || isLoading) return
+    if (!sourceData || isLoading) return
     setError(null)
     setIsLoading(true)
     try {
-      const nextKeywords = await loadKeywordsFromImage(imageData, keywords)
+      const nextKeywords = await loadKeywordsFromSource(sourceData, keywords)
       setKeywords(nextKeywords)
     } catch (e) {
-      setError(e instanceof Error ? e.message : '키워드 생성 실패')
+      setError(e instanceof Error ? e.message : '키워드 재생성에 실패했습니다.')
     } finally {
       setIsLoading(false)
     }
@@ -131,13 +248,17 @@ export default function ReviewGenerator({ onReviewComplete }) {
   const handleBackToUpload = () => {
     setStep(STEPS.UPLOAD)
     setKeywords([])
+    setProductAnalysis(null)
+    setProductOptionSelections([])
     setError(null)
   }
 
   const handleResetToStart = () => {
     setStep(STEPS.CATEGORY)
     setReviewCategory(DEFAULT_REVIEW_CATEGORY)
-    setImageData(null)
+    setSourceData(null)
+    setProductAnalysis(null)
+    setProductOptionSelections([])
     setKeywords([])
     setReview('')
     setError(null)
@@ -151,6 +272,7 @@ export default function ReviewGenerator({ onReviewComplete }) {
     reviewLength = DEFAULT_REVIEW_LENGTH,
     reviewTone = DEFAULT_REVIEW_TONE,
   ) => {
+    if (!sourceData) return
     setLastUsedOptions({ keywords: selectedKeywords, length: reviewLength, tone: reviewTone })
     setReview('')
     setError(null)
@@ -161,11 +283,11 @@ export default function ReviewGenerator({ onReviewComplete }) {
     let isSuccess = false
     try {
       await generateReview({
-        rating: imageData.rating,
+        rating: sourceData.rating,
         keywords: selectedKeywords,
         length: reviewLength,
         tone: reviewTone,
-        category: imageData.category,
+        category: sourceData.category,
         onChunk: (chunk) => {
           fullReview = chunk
           setReview(fullReview)
@@ -173,7 +295,7 @@ export default function ReviewGenerator({ onReviewComplete }) {
       })
       isSuccess = true
     } catch (e) {
-      setError(e instanceof Error ? e.message : '리뷰 생성 실패')
+      setError(e instanceof Error ? e.message : '리뷰 생성에 실패했습니다.')
       setStep(STEPS.KEYWORD)
     } finally {
       setIsStreaming(false)
@@ -195,7 +317,9 @@ export default function ReviewGenerator({ onReviewComplete }) {
   return (
     <div className={`review-app ${isEntryStep ? 'review-app--upload-center' : ''}`}>
       <header className="review-app__header">
-        <p className="review-app__eyebrow">STEP {stepIndex + 1} / {STEP_ORDER.length}</p>
+        <p className="review-app__eyebrow">
+          STEP {stepIndex + 1} / {STEP_ORDER.length}
+        </p>
         <h1 className="review-app__title">{stepMeta.title}</h1>
         <p className="review-app__tagline">{stepMeta.desc}</p>
       </header>
@@ -224,14 +348,12 @@ export default function ReviewGenerator({ onReviewComplete }) {
         {isLoading && (
           <div className="banner banner--info" role="status" aria-live="polite">
             {step === STEPS.UPLOAD
-              ? '이미지를 분석해 키워드를 준비하고 있습니다.'
-              : '선택한 이미지로 키워드를 다시 생성하고 있습니다.'}
+              ? '이미지를 분석하고 키워드를 준비하고 있습니다.'
+              : '선택한 옵션을 반영해 다시 계산하고 있습니다.'}
           </div>
         )}
 
-        {step === STEPS.CATEGORY && (
-          <CategoryStep onSelect={handleCategorySelect} />
-        )}
+        {step === STEPS.CATEGORY && <CategoryStep onSelect={handleCategorySelect} />}
         {step === STEPS.UPLOAD && (
           <UploadStep
             category={reviewCategory}
@@ -239,6 +361,16 @@ export default function ReviewGenerator({ onReviewComplete }) {
             onBackToCategory={() => setStep(STEPS.CATEGORY)}
             isLoading={isLoading}
             ratingLabels={RATING_LABELS}
+          />
+        )}
+        {step === STEPS.PRODUCT_OPTIONS && (
+          <ProductOptionStep
+            key={productAnalysis?.url || 'product-options'}
+            analysis={productAnalysis}
+            initialSelections={productOptionSelections}
+            onNext={handleProductOptionNext}
+            onBack={handleBackToUpload}
+            isLoading={isLoading}
           />
         )}
         {step === STEPS.KEYWORD && (

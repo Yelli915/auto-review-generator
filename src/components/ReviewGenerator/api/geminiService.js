@@ -8,8 +8,10 @@ import {
   normalizeReviewLength,
   normalizeReviewTone,
 } from '../../../../shared/reviewOptions.js'
+
 const API_PATH = '/api/gemini'
 const KEYWORD_DEBOUNCE_MS = 900
+
 let googleIdToken = ''
 let onUnauthorized = null
 
@@ -57,9 +59,22 @@ async function callApi(payload) {
   }
 }
 
+export async function analyzeProductUrl(productUrl) {
+  const safeProductUrl = typeof productUrl === 'string' ? productUrl.trim() : ''
+  if (!safeProductUrl) {
+    return { ok: false, error: '상품 링크를 입력해 주세요.' }
+  }
+  return callApi({
+    action: 'analyze-product',
+    productUrl: safeProductUrl,
+  })
+}
+
 export async function generateKeywords({
   images,
   productUrl,
+  productContext,
+  productSelection,
   rating,
   category,
   previousKeywords = [],
@@ -72,15 +87,22 @@ export async function generateKeywords({
           mimeType: image.mimeType || 'image/jpeg',
         }))
     : []
-  const safeProductUrl =
-    typeof productUrl === 'string' ? productUrl.trim() : ''
-  if (!safeImages.length && !safeProductUrl) {
-    return { ok: false, error: '이미지를 1장 이상 선택해 주세요.' }
+  const safeProductUrl = typeof productUrl === 'string' ? productUrl.trim() : ''
+  const safeProductContext =
+    typeof productContext === 'string' ? productContext.trim() : ''
+  const safeProductSelection =
+    typeof productSelection === 'string' ? productSelection.trim() : ''
+
+  if (!safeImages.length && !safeProductUrl && !safeProductContext) {
+    return { ok: false, error: '이미지나 상품 링크를 1개 이상 선택해 주세요.' }
   }
+
   const payload = {
     action: 'keywords',
     images: safeImages,
     productUrl: safeProductUrl,
+    productContext: safeProductContext,
+    productSelection: safeProductSelection,
     rating,
     category,
     previousKeywords: Array.isArray(previousKeywords) ? previousKeywords : [],

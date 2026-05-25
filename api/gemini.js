@@ -4,7 +4,7 @@ import { createJsonHeaders, readJsonSafely } from '../shared/httpJson.js'
 import { MAX_REVIEW_IMAGE_COUNT } from '../shared/reviewCategories.js'
 import { normalizeReviewTone } from '../shared/reviewOptions.js'
 import { hasHangul, isLikelyKeywordPhrase } from './keywordUtils.js'
-import { fetchProductContext } from './productContext.js'
+import { fetchProductAnalysis, fetchProductContext } from './productContext.js'
 import {
   buildKeywordPrompt,
   buildReviewPrompt,
@@ -1122,6 +1122,30 @@ export default async function handler(req, res) {
     })
   }
 
+  if (body.action === 'analyze-product') {
+    const productUrl =
+      typeof body.productUrl === 'string' ? body.productUrl.trim() : ''
+    if (!productUrl) {
+      return json(res, 400, {
+        ok: false,
+        error: '상품 링크를 입력해 주세요.',
+      })
+    }
+    const analysis = await fetchProductAnalysis(productUrl)
+    if (!analysis.ok) {
+      return json(res, analysis.status, {
+        ok: false,
+        error: analysis.error,
+      })
+    }
+    return json(res, 200, {
+      ok: true,
+      url: analysis.url,
+      productContext: analysis.productContext,
+      optionGroups: analysis.optionGroups,
+    })
+  }
+
   const key =
     typeof process.env.GEMINI_API_KEY === 'string'
       ? process.env.GEMINI_API_KEY.trim()
@@ -1133,16 +1157,24 @@ export default async function handler(req, res) {
     })
   }
 
-
   if (body.action === 'keywords') {
     const rawRating = Number.isFinite(Number(body.rating)) ? Number(body.rating) : 5
     const rating = Math.max(1, Math.min(5, rawRating))
     const productUrl =
       typeof body.productUrl === 'string' ? body.productUrl.trim() : ''
     let imageInput = null
-    let productContext = ''
+    let productContext =
+      typeof body.productContext === 'string' ? body.productContext.trim() : ''
+    const productSelection =
+      typeof body.productSelection === 'string' ? body.productSelection.trim() : ''
 
-    if (productUrl) {
+    if (productSelection) {
+      productContext = productContext
+        ? `${productContext}\n\n선택 옵션:\n${productSelection}`
+        : `선택 옵션:\n${productSelection}`
+    }
+
+    if (!productContext && productUrl) {
       const productResult = await fetchProductContext(productUrl)
       if (!productResult.ok) {
         return json(res, productResult.status, {

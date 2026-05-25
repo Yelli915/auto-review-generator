@@ -12,30 +12,38 @@ import {
 import { isLikelyKeywordPhrase } from './keywordUtils.js'
 
 const REVIEW_TONE_PROMPT_MAP = {
-  neutral:
-    '1인칭 구매자 입장의 자연스러운 온라인 쇼핑몰 리뷰 말투. 과장하지 말 것.',
-  friendly:
-    '친근하고 부드러운 말투. 이모티콘·느낌표 남발은 피할 것.',
-  formal:
-    '정중한 존댓말(~습니다·해요체)로 격식 있게. 무례하지 않게.',
-  casual:
-    '편한 일상 반말(~했어, ~야 느낌). 공격적·무례한 표현은 금지.',
+  neutral: '차분하고 균형 있게. 과장하지 말고, 실제 경험한 관찰만 적어.',
+  friendly: '친근하지만 구체적으로. 감정은 자연스럽게, 내용은 사실 중심으로 써.',
+  formal: '정중하고 단정하게. 불필요한 감탄사나 과장을 피하고 명확하게 써.',
+  casual: '자연스러운 말투로 쓰되, 핵심은 실제 관찰 포인트에 둬.',
 }
 
 export function keywordSentimentGuide(rating) {
   if (rating <= 1) {
-    return '매우 낮은 만족도. 공격적 표현은 피하고 불편했던 점을 사실 기반으로 제안.'
+    return '매우 불만족. 불편했던 사실과 문제 지점을 바탕으로 구체적으로 써.'
   }
   if (rating <= 2) {
-    return '낮은 만족도. 부정적 단서를 중심으로 하되 감정 과잉 없이 제안.'
+    return '불만족. 아쉬웠던 실제 요소를 중심으로 적고, 감정만 반복하지 마.'
   }
   if (rating < 4) {
-    return '보통 만족도. 장단점이 섞인 중립 키워드 위주로 제안.'
+    return '보통. 장단점이 함께 보이도록 실제 체험 요소를 중심으로 써.'
   }
   if (rating < 5) {
-    return '높은 만족도. 긍정 키워드를 중심으로 하되 과장은 피해서 제안.'
+    return '만족. 좋았던 포인트를 구체적으로 적되 흔한 칭찬어는 줄여.'
   }
-  return '매우 높은 만족도. 강한 긍정 키워드를 중심으로 하되 광고처럼 과장하지 말고 제안.'
+  return '매우 만족. 뛰어난 점을 구체적으로 써서 카테고리 공용 문구로 흐르지 않게 해.'
+}
+
+function buildSpecificityGuide(category) {
+  return category === 'place'
+    ? '장소 후기라면 위치, 동선, 좌석, 조명, 소음, 청결, 응대, 예약/대기, 시설 상태 같은 실제 체험 요소를 꼭 넣어.'
+    : '상품 후기라면 디자인, 색상, 소재, 무게, 크기, 마감, 사용감, 옵션, 배송, 포장 같은 실제 상품 요소를 꼭 넣어.'
+}
+
+function buildCategoryGenericBan(category) {
+  return category === 'place'
+    ? '예: "분위기 좋음", "깔끔함", "만족", "가성비", "무난함"처럼 어느 장소에나 붙는 문구는 피하고, 실제 장소 특징만 써.'
+    : '예: "좋음", "깔끔함", "만족", "가성비", "무난함"처럼 어느 상품에나 붙는 문구는 피하고, 실제 상품 특징만 써.'
 }
 
 export function buildKeywordPrompt({
@@ -51,8 +59,8 @@ export function buildKeywordPrompt({
   const categoryMeta = REVIEW_CATEGORY_MAP[safeCategory]
   const imageGuide =
     imageCount > 1
-      ? `첨부된 ${imageCount}장의 이미지를 같은 리뷰 대상의 보조 정보로 보고 종합해. `
-      : '첨부된 이미지를 리뷰 대상의 보조 정보로 봐. '
+      ? `사진 ${imageCount}장을 함께 보고, 공통 카테고리 문구가 아니라 사진마다 실제로 보이는 차이를 우선적으로 뽑아. `
+      : '사진 1장을 기준으로, 카테고리 공통말이 아니라 사진에서 확인되는 구체 특징만 뽑아. '
   const safePreviousKeywords = Array.isArray(previousKeywords)
     ? previousKeywords
         .filter((v) => typeof v === 'string' && v.trim())
@@ -61,27 +69,27 @@ export function buildKeywordPrompt({
         .slice(0, maxKeywordCount)
     : []
   const variationGuide = safePreviousKeywords.length
-    ? `직전 키워드 조합 ${JSON.stringify(safePreviousKeywords)}와 완전히 같은 목록을 다시 내지 마. 비슷한 방향은 가능하지만 최소 1개 이상은 다른 표현이나 다른 관찰 포인트로 바꿔. `
+    ? `직전 조합 ${JSON.stringify(safePreviousKeywords)}과 같은 말은 다시 쓰지 말고, 최소 1개 이상은 완전히 다른 관찰 포인트를 넣어. `
     : ''
 
   const safeProductContext =
     typeof productContext === 'string' ? productContext.trim().slice(0, 2800) : ''
   const sourceGuide = safeProductContext
-    ? `상품 링크에서 수집한 공개 정보:\n${safeProductContext}\n\n위 상품 정보를 리뷰 대상의 근거로 보고, 링크에 없는 실제 사용 기간/배송 속도/가격/구매처는 새로 만들지 마. `
+    ? `상품/장소에서 수집한 실제 정보:\n${safeProductContext}\n\n이 정보에 적힌 제목, 설명, 옵션, 위치, 시설, 재질, 크기, 분위기 같은 구체 항목을 기준으로 키워드를 만들어. ` +
+      `${buildCategoryGenericBan(safeCategory)} ` +
+      `반드시 ${buildSpecificityGuide(safeCategory)} `
     : imageGuide
 
   return (
-    `${categoryMeta.label} 리뷰에 사용할 키워드를 한국어 짧은 구로만 작성해. ` +
+    `${categoryMeta.label} 리뷰용 키워드를 만들되, 흔한 후기 문구는 금지하고 실제 관찰 포인트만 사용해. ` +
     sourceGuide +
     variationGuide +
-    '이미지에서 직접 확인 가능한 단서를 우선하고, 보이지 않는 사실은 추측하지 마. ' +
-    `별점 ${rating}점 기준 감정은 ${keywordSentimentGuide(rating)} 반영해. ` +
-    `대상 기준은 ${categoryMeta.focus}으로 잡아. ` +
-    `주의사항: ${categoryMeta.avoid}. ` +
-    '키워드는 리뷰에 바로 사용할 수 있는 짧은 명사구 또는 형용사구로 작성해. ' +
-    `서로 다른 키워드를 ${minKeywordCount}~${maxKeywordCount}개 작성하고, 모든 값은 한글을 포함해야 해. ` +
-    '설명, 서문, 코드블록, 영어 문장 없이 JSON만 출력해. ' +
-    '형식: {"keywords":["...","...","..."]}'
+    '이미지나 상품 페이지에서 직접 확인되지 않은 내용은 넣지 말고, 추측은 배제해. ' +
+    `별점 ${rating}점의 감정 톤은 ${keywordSentimentGuide(rating)}를 반영하되, 문구 자체는 ${categoryMeta.focus}에 맞춰 구체적으로 써. ` +
+    `주의: ${categoryMeta.avoid}. ` +
+    '키워드는 리뷰에서 바로 재사용할 수 있는 구체 명사구로만 만들고, 일반론이나 광고성 문장, 카테고리 공용표현은 제외해. ' +
+    `최소 ${minKeywordCount}개, 최대 ${maxKeywordCount}개를 만들되, 각 키워드는 서로 다른 관찰 지점을 담아. ` +
+    '형식은 JSON만 출력: {"keywords":["...","...","..."]}'
   )
 }
 
@@ -97,23 +105,24 @@ export function buildReviewPrompt({ rating, keywords, length, tone, category }) 
   const safeCategory = normalizeReviewCategory(category)
   const categoryMeta = REVIEW_CATEGORY_MAP[safeCategory]
   const minReviewChars = getReviewMinChars(safeLength)
-  const sparseLongReviewGuide =
-    isSparseLongReview(safeLength, safeKeywords.length)
-      ? '선택된 키워드가 적으므로 같은 키워드를 반복해 분량을 늘리지 말고, 대상·별점·이미지에서 확인 가능한 단서를 바탕으로 자연스럽게 내용을 확장해. '
-      : ''
+  const sparseLongReviewGuide = isSparseLongReview(safeLength, safeKeywords.length)
+    ? '선택한 키워드가 적어서 길게 쓰면 흔한 말로 흐를 수 있으니, 카테고리 공통문장 대신 실제 대상에서 확인된 구체 요소를 더 강하게 써. '
+    : ''
+  const specificityGuide = buildSpecificityGuide(safeCategory)
+  const genericBan = buildCategoryGenericBan(safeCategory)
 
   return {
     prompt:
-      `대상: ${categoryMeta.label}\n키워드: ${safeKeywords.join(', ')}\n별점: ${rating}점\n길이: ${getReviewLengthPrompt(safeLength)}\n말투: ${REVIEW_TONE_PROMPT_MAP[safeTone]}\n\n` +
-      `${categoryMeta.label} 리뷰처럼 자연스럽게 작성하고, ${categoryMeta.focus}을 문맥에 맞게 반영해. ` +
-      `주의사항: ${categoryMeta.avoid}. ` +
-      '선택된 키워드를 그대로 나열하지 말고 실제 사용자가 쓴 후기처럼 자연스럽게 연결해. ' +
+      `대상: ${categoryMeta.label}\n키워드: ${safeKeywords.join(', ')}\n별점: ${rating}점\n길이: ${getReviewLengthPrompt(safeLength)}\n톤: ${REVIEW_TONE_PROMPT_MAP[safeTone]}\n\n` +
+      `${categoryMeta.label} 리뷰를 쓰되, 누구에게나 붙는 뻔한 표현은 빼고 실제 대상의 특징만 드러내. ` +
+      `${specificityGuide} ` +
+      `다음 키워드는 반드시 반영해: ${safeKeywords.join(', ')}. 하지만 키워드를 그대로 나열하지 말고, 키워드가 가리키는 구체 요소를 중심으로 자연스럽게 풀어써. ` +
+      `${categoryMeta.focus}에 맞는 사실만 유지하고, ${categoryMeta.avoid}. ` +
+      `${genericBan} ` +
+      '추측, 과장, 광고성 문구, 카테고리 공용 문구, 다른 상품이나 장소에도 그대로 쓸 수 있는 말은 제외해. ' +
       sparseLongReviewGuide +
-      '사진이나 키워드에서 확인되지 않는 구체 정보는 새로 만들지 마. ' +
-      '광고 문구, 과장된 표현, 반복적인 감탄사는 피하고 담백하게 작성해. ' +
-      '글자수는 최소 분량 안내일 뿐이며, 글자수를 맞추려고 문장을 중간에서 끝내지 마. ' +
-      '문장과 리뷰의 완결성을 우선하고 마지막 문장을 자연스럽게 마무리해. ' +
-      `아래 조건을 모두 지켜 리뷰 본문만 작성해. 제목, 머리말, 번호, 목록 없이 최소 ${minReviewChars}자 이상으로 쓰되 완성된 문장으로 끝내 줘.`,
+      `최소 ${minReviewChars}자 이상으로, 문장마다 실제 경험한 디테일이 남도록 써.`
+    ,
     safeLength,
     minReviewChars,
   }

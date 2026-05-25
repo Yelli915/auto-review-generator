@@ -585,6 +585,36 @@ body {
   color: var(--text-muted);
 }
 
+.product-analysis {
+  margin-bottom: 14px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-subtle);
+}
+
+.product-analysis--muted {
+  background: var(--surface-raised);
+}
+
+.product-analysis__label {
+  margin: 0 0 6px;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.product-analysis__text {
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--text-h);
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 .upload-row {
   display: grid;
   grid-template-columns: 1fr;
