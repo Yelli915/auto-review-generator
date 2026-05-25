@@ -2,6 +2,16 @@ const MAX_PRODUCT_URL_LENGTH = 2048
 const MAX_PRODUCT_PAGE_BYTES = 512 * 1024
 const PRODUCT_PAGE_TIMEOUT_MS = 6000
 
+const PRODUCT_FETCH_HEADERS = {
+  Accept:
+    'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+  'Accept-Language': 'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7',
+  'Cache-Control': 'no-cache',
+  'User-Agent':
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 ' +
+    '(KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
+}
+
 function normalizeProductUrl(rawUrl) {
   if (typeof rawUrl !== 'string' || !rawUrl.trim()) {
     return { ok: false, status: 400, error: '상품 링크를 입력해 주세요.' }
@@ -102,6 +112,40 @@ function extractProductContextFromHtml(html, url) {
   return parts.join('\n')
 }
 
+function productNameFromUrl(url) {
+  const segments = url.pathname
+    .split('/')
+    .map((part) => part.trim())
+    .filter(Boolean)
+  const lastMeaningfulSegment = [...segments]
+    .reverse()
+    .find((part) => !/^\d+$/.test(part) && !/^[a-f0-9-]{12,}$/i.test(part))
+
+  if (!lastMeaningfulSegment) return ''
+
+  try {
+    return decodeURIComponent(lastMeaningfulSegment)
+      .replace(/\.[a-z0-9]+$/i, '')
+      .replace(/[-_+]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+  } catch {
+    return lastMeaningfulSegment.replace(/[-_+]+/g, ' ').trim()
+  }
+}
+
+function buildFallbackProductContext(urlString, reason = '') {
+  const url = new URL(urlString)
+  const productName = productNameFromUrl(url)
+  const parts = [
+    `사이트: ${url.hostname}`,
+    productName && `상품명 단서: ${productName}`,
+    reason && `페이지 수집 상태: ${reason}`,
+    `링크: ${urlString}`,
+  ].filter(Boolean)
+  return parts.join('\n')
+}
+
 async function readResponseTextLimited(response) {
   if (!response.body) return ''
   const reader = response.body.getReader()
@@ -134,36 +178,60 @@ export async function fetchProductContext(rawUrl) {
   let response
   try {
     response = await fetch(normalized.url, {
-      headers: {
-        Accept: 'text/html,application/xhtml+xml',
-        'User-Agent': 'AutoReviewGenerator/1.0',
-      },
+      headers: PRODUCT_FETCH_HEADERS,
+      redirect: 'follow',
       signal: AbortSignal.timeout(PRODUCT_PAGE_TIMEOUT_MS),
     })
   } catch {
-    return { ok: false, status: 422, error: '상품 링크를 읽을 수 없습니다.' }
+    return {
+      ok: true,
+      productContext: buildFallbackProductContext(
+        normalized.url,
+        '서버에서 페이지를 직접 읽지 못했습니다.',
+      ),
+    }
   }
 
   if (!response.ok) {
-    return { ok: false, status: 422, error: '상품 페이지 응답이 올바르지 않습니다.' }
+    return {
+      ok: true,
+      productContext: buildFallbackProductContext(
+        normalized.url,
+        `HTTP ${response.status} 응답으로 페이지 본문을 읽지 못했습니다.`,
+      ),
+    }
   }
+
   const contentType = response.headers.get('content-type') || ''
   if (contentType && !/text\/html|application\/xhtml\+xml/i.test(contentType)) {
-    return { ok: false, status: 415, error: 'HTML 상품 페이지 링크만 사용할 수 있습니다.' }
+    return {
+      ok: true,
+      productContext: buildFallbackProductContext(
+        normalized.url,
+        'HTML 페이지가 아닌 응답입니다.',
+      ),
+    }
   }
 
   try {
     const html = await readResponseTextLimited(response)
     const productContext = extractProductContextFromHtml(html, normalized.url)
-    if (!productContext.trim()) {
-      return { ok: false, status: 422, error: '상품 정보를 찾을 수 없습니다.' }
+    return {
+      ok: true,
+      productContext:
+        productContext.trim() ||
+        buildFallbackProductContext(
+          normalized.url,
+          '페이지에서 상품 메타 정보를 찾지 못했습니다.',
+        ),
     }
-    return { ok: true, productContext }
   } catch (err) {
     return {
-      ok: false,
-      status: 422,
-      error: err instanceof Error ? err.message : '상품 정보를 읽을 수 없습니다.',
+      ok: true,
+      productContext: buildFallbackProductContext(
+        normalized.url,
+        err instanceof Error ? err.message : '상품 정보를 읽지 못했습니다.',
+      ),
     }
   }
 }

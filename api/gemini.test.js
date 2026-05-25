@@ -17,6 +17,7 @@ import handler, {
   validateImagesInput,
 } from './gemini.js'
 import { normalizeReviewCategory } from '../shared/reviewCategories.js'
+import { fetchProductContext } from './productContext.js'
 import { Readable } from 'node:stream'
 
 const png1x1Base64 =
@@ -169,6 +170,24 @@ test('handler generates keywords from productUrl metadata', async () => {
   assert.equal(res.statusCode, 200)
   assert.deepEqual(JSON.parse(res.body).keywords, ['조용한 타건감', '얇은 디자인', '가벼운 무게'])
   assert.equal(calls.length, 2)
+})
+
+test('fetchProductContext falls back when product page returns non-ok response', async () => {
+  const oldFetch = globalThis.fetch
+  globalThis.fetch = async () => new Response('blocked', { status: 403 })
+
+  try {
+    const result = await fetchProductContext(
+      'https://shop.example/products/noise-canceling-headphones',
+    )
+
+    assert.equal(result.ok, true)
+    assert.match(result.productContext, /shop\.example/)
+    assert.match(result.productContext, /noise canceling headphones/)
+    assert.match(result.productContext, /HTTP 403/)
+  } finally {
+    globalThis.fetch = oldFetch
+  }
 })
 
 test('validateImageInput rejects unsupported mime types', () => {
