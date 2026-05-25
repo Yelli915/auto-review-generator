@@ -17,7 +17,6 @@ import handler, {
   validateImagesInput,
 } from './gemini.js'
 import { normalizeReviewCategory } from '../shared/reviewCategories.js'
-import { fetchProductContext } from './productContext.js'
 import { Readable } from 'node:stream'
 
 const png1x1Base64 =
@@ -212,12 +211,58 @@ test('handler analyzes product options from productUrl', async () => {
   )
 })
 
-test('fetchProductContext falls back when product page returns non-ok response', async () => {
+test('handler generates keywords from productContext without images', async () => {
+  const oldGeminiKey = process.env.GEMINI_API_KEY
+  const oldGoogleClientId = process.env.GOOGLE_CLIENT_ID
+  const oldApiAuthToken = process.env.API_AUTH_TOKEN
+  const oldFetch = globalThis.fetch
+  process.env.GEMINI_API_KEY = 'test-key'
+  delete process.env.GOOGLE_CLIENT_ID
+  delete process.env.API_AUTH_TOKEN
+
+  const calls = []
+  globalThis.fetch = async (url) => {
+    calls.push(String(url))
+    return new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: '{"keywords":["블랙 컬러","무선 연결","가벼운 무게"]}' }] } }] }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    })
+  }
+
+  const req = createMockRequest({
+    action: 'keywords',
+    productUrl: 'https://shop.example/product/keyboard',
+    productContext: '사이트: shop.example\n상품명: 테스트 키보드\n선택 옵션:\n색상: 블랙',
+    rating: 5,
+    category: 'product',
+    previousKeywords: [],
+  })
+  const res = createMockResponse()
+
+  try {
+    await handler(req, res)
+  } finally {
+    globalThis.fetch = oldFetch
+    if (oldGeminiKey == null) delete process.env.GEMINI_API_KEY
+    else process.env.GEMINI_API_KEY = oldGeminiKey
+    if (oldGoogleClientId == null) delete process.env.GOOGLE_CLIENT_ID
+    else process.env.GOOGLE_CLIENT_ID = oldGoogleClientId
+    if (oldApiAuthToken == null) delete process.env.API_AUTH_TOKEN
+    else process.env.API_AUTH_TOKEN = oldApiAuthToken
+  }
+
+  assert.equal(res.statusCode, 200)
+  assert.deepEqual(JSON.parse(res.body).keywords, ['블랙 컬러', '무선 연결', '가벼운 무게'])
+  assert.equal(calls.length, 1)
+})
+
+test('fetchProductAnalysis falls back when product page returns non-ok response', async () => {
   const oldFetch = globalThis.fetch
   globalThis.fetch = async () => new Response('blocked', { status: 403 })
 
   try {
-    const result = await fetchProductContext(
+    const { fetchProductAnalysis } = await import('./productContext.js')
+    const result = await fetchProductAnalysis(
       'https://shop.example/products/noise-canceling-headphones',
     )
 

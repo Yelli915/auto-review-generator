@@ -388,9 +388,3 @@ export async function fetchProductAnalysis(rawUrl) {
     }
   }
 }
-
-export async function fetchProductContext(rawUrl) {
-  const analysis = await fetchProductAnalysis(rawUrl)
-  if (!analysis.ok) return analysis
-  return { ok: true, productContext: analysis.productContext }
-}

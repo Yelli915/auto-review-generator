@@ -4,7 +4,7 @@ import { createJsonHeaders, readJsonSafely } from '../shared/httpJson.js'
 import { MAX_REVIEW_IMAGE_COUNT } from '../shared/reviewCategories.js'
 import { normalizeReviewTone } from '../shared/reviewOptions.js'
 import { hasHangul, isLikelyKeywordPhrase } from './keywordUtils.js'
-import { fetchProductAnalysis, fetchProductContext } from './productContext.js'
+import { fetchProductAnalysis } from './productContext.js'
 import {
   buildKeywordPrompt,
   buildReviewPrompt,
@@ -1162,20 +1162,12 @@ export default async function handler(req, res) {
     const rating = Math.max(1, Math.min(5, rawRating))
     const productUrl =
       typeof body.productUrl === 'string' ? body.productUrl.trim() : ''
-    let imageInput = null
     let productContext =
       typeof body.productContext === 'string' ? body.productContext.trim() : ''
-    const productSelection =
-      typeof body.productSelection === 'string' ? body.productSelection.trim() : ''
-
-    if (productSelection) {
-      productContext = productContext
-        ? `${productContext}\n\n선택 옵션:\n${productSelection}`
-        : `선택 옵션:\n${productSelection}`
-    }
+    let imageInput = null
 
     if (!productContext && productUrl) {
-      const productResult = await fetchProductContext(productUrl)
+      const productResult = await fetchProductAnalysis(productUrl)
       if (!productResult.ok) {
         return json(res, productResult.status, {
           ok: false,
@@ -1183,7 +1175,9 @@ export default async function handler(req, res) {
         })
       }
       productContext = productResult.productContext
-    } else {
+    }
+
+    if (!productContext) {
       imageInput = validateImagesInput(
         body.images,
         body.imageBase64,

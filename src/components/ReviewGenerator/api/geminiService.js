@@ -74,7 +74,6 @@ export async function generateKeywords({
   images,
   productUrl,
   productContext,
-  productSelection,
   rating,
   category,
   previousKeywords = [],
@@ -90,8 +89,6 @@ export async function generateKeywords({
   const safeProductUrl = typeof productUrl === 'string' ? productUrl.trim() : ''
   const safeProductContext =
     typeof productContext === 'string' ? productContext.trim() : ''
-  const safeProductSelection =
-    typeof productSelection === 'string' ? productSelection.trim() : ''
 
   if (!safeImages.length && !safeProductUrl && !safeProductContext) {
     return { ok: false, error: '이미지나 상품 링크를 1개 이상 선택해 주세요.' }
@@ -102,7 +99,6 @@ export async function generateKeywords({
     images: safeImages,
     productUrl: safeProductUrl,
     productContext: safeProductContext,
-    productSelection: safeProductSelection,
     rating,
     category,
     previousKeywords: Array.isArray(previousKeywords) ? previousKeywords : [],

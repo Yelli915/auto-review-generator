@@ -70,7 +70,6 @@ async function loadKeywordsFromSource(sourcePayload, previousKeywords = []) {
     images: sourcePayload.images,
     productUrl: sourcePayload.productUrl,
     productContext: sourcePayload.productContext,
-    productSelection: sourcePayload.productSelection,
     rating: sourcePayload.rating,
     category: sourcePayload.category,
     previousKeywords,
@@ -134,7 +133,6 @@ export default function ReviewGenerator({ onReviewComplete }) {
       productContext: typeof data?.productContext === 'string' ? data.productContext.trim() : '',
       rating: normalizeReviewRating(data?.rating),
       category: normalizeReviewCategory(data?.category ?? reviewCategory),
-      productSelection: '',
     }
 
     setError(null)
@@ -200,7 +198,6 @@ export default function ReviewGenerator({ onReviewComplete }) {
     const selectionSummary = buildOptionSummary(optionGroups, safeSelections)
     const nextSource = {
       ...sourceData,
-      productSelection: selectionSummary,
       productContext: selectionSummary
         ? `${sourceData.productContext}\n\n선택 옵션:\n${selectionSummary}`
         : sourceData.productContext,
