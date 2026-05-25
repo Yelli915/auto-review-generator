@@ -67,12 +67,6 @@ export default function ReviewGenerator({ onReviewComplete }) {
     )
   }
 
-  const handleBackToKeyword = () => {
-    setStep(STEPS.KEYWORD)
-    setReview('')
-    setError(null)
-  }
-
   const handleRefresh = async () => {
     if (!imageData?.images?.length || isLoading) return
     setError(null)
@@ -114,7 +108,7 @@ export default function ReviewGenerator({ onReviewComplete }) {
         tone: reviewTone,
         category: imageData.category,
         onChunk: (chunk) => {
-          fullReview += chunk
+          fullReview = chunk
           setReview(fullReview)
         },
       })
@@ -226,16 +220,7 @@ export default function ReviewGenerator({ onReviewComplete }) {
           <ReviewStep
             review={review}
             isStreaming={isStreaming}
-            onBack={handleBackToKeyword}
-            onReset={handleBackToUpload}
             onRegenerate={handleRegenerate}
-            rating={imageData?.rating}
-            ratingLabels={RATING_LABELS}
-            selectedKeywords={lastUsedOptions?.keywords}
-            reviewLength={lastUsedOptions?.length}
-            reviewTone={lastUsedOptions?.tone}
-            reviewCategory={imageData?.category}
-            imageCount={imageData?.images?.length}
           />
         )}
       </main>

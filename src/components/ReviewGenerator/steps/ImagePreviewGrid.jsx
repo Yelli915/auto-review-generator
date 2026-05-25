@@ -18,17 +18,6 @@ export default function ImagePreviewGrid({
             {images.length}/{MAX_REVIEW_IMAGE_COUNT}장
           </p>
         </div>
-        {images.length < MAX_REVIEW_IMAGE_COUNT && (
-          <button
-            type="button"
-            className="upload-preview__add"
-            onClick={onAdd}
-            disabled={isBusy}
-          >
-            <span aria-hidden="true">+</span>
-            이미지 추가
-          </button>
-        )}
       </div>
 
       <div className="preview-grid">
