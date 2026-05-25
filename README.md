@@ -132,8 +132,8 @@ auto-review-generator/
 │  ├─ gemini.js
 │  ├─ gemini.test.js
 │  ├─ keywordUtils.js
-│  ├─ keywordUtils.test.js
-│  └─ prompts.js
+│  ├─ prompts.js
+│  └─ prompts.test.js
 ├─ deploy/
 │  └─ nginx/
 │     └─ security-headers.conf

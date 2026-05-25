@@ -442,6 +442,12 @@ function getGoogleClientId() {
     : ''
 }
 
+function getApiAuthToken() {
+  return typeof process.env.API_AUTH_TOKEN === 'string'
+    ? process.env.API_AUTH_TOKEN.trim()
+    : ''
+}
+
 function getBearerToken(req) {
   const auth = req.headers?.authorization
   if (typeof auth !== 'string') return ''
@@ -450,10 +456,7 @@ function getBearerToken(req) {
 }
 
 function hasValidAppToken(req) {
-  const secret =
-    typeof process.env.API_AUTH_TOKEN === 'string'
-      ? process.env.API_AUTH_TOKEN.trim()
-      : ''
+  const secret = getApiAuthToken()
   if (!secret) return true
   const headerToken = req.headers?.['x-api-auth-token']
   return typeof headerToken === 'string' && headerToken.trim() === secret
@@ -485,8 +488,9 @@ async function verifyGoogleToken(idToken) {
 
 async function authorizeRequest(req) {
   const googleClientId = getGoogleClientId()
+  const appAuthToken = getApiAuthToken()
   if (process.env.NODE_ENV === 'production') {
-    if (!googleClientId) {
+    if (!googleClientId && !appAuthToken) {
       return {
         ok: false,
         status: 500,
@@ -502,8 +506,8 @@ async function authorizeRequest(req) {
     }
   }
 
-  if (googleClientId) {
-    const bearer = getBearerToken(req)
+  const bearer = getBearerToken(req)
+  if (googleClientId && bearer) {
     if (!bearer) {
       return { ok: false, status: 401, error: 'Google 로그인이 필요합니다.' }
     }
@@ -515,8 +519,11 @@ async function authorizeRequest(req) {
     return { ok: true, userId: verified.userId }
   }
 
-  if (!hasValidAppToken(req)) {
+  if (appAuthToken && !hasValidAppToken(req)) {
     return { ok: false, status: 401, error: '인증되지 않은 요청입니다.' }
+  }
+  if (googleClientId && !appAuthToken) {
+    return { ok: false, status: 401, error: 'Google 로그인이 필요합니다.' }
   }
   if (process.env.NODE_ENV === 'production' && !isTrustedOrigin(req)) {
     return { ok: false, status: 403, error: '허용되지 않은 출처(origin)입니다.' }
@@ -1078,6 +1085,21 @@ export default async function handler(req, res) {
     return json(res, 405, { ok: false, error: 'Method Not Allowed' })
   }
 
+  const body = await readJsonBody(req)
+  if (body?.tooLarge) {
+    return json(res, 413, {
+      ok: false,
+      error: '요청 본문이 너무 큽니다. 이미지 크기를 줄여 다시 시도해 주세요.',
+    })
+  }
+  if (!body) {
+    return json(res, 400, { ok: false, error: '잘못된 JSON 본문입니다.' })
+  }
+
+  if (body.action === 'ping') {
+    return json(res, 200, { ok: true, model: MODEL })
+  }
+
   const auth = await authorizeRequest(req)
   if (!auth.ok) {
     return json(res, auth.status, { ok: false, error: auth.error })
@@ -1114,7 +1136,7 @@ export default async function handler(req, res) {
     })
   }
 
-  const body = await readJsonBody(req)
+  // Body was read before auth so ping can work as a lightweight health check.
   if (body?.tooLarge) {
     return json(res, 413, {
       ok: false,
@@ -1146,7 +1168,7 @@ export default async function handler(req, res) {
     }
 
     if (await rejectDailyUsageLimit(res, rateKey, body.action)) return
-    const previousKeywords = sanitizeKeywordArray(body.previousKeywords)
+    const previousKeywords = sanitizeKeywordArray(body.previousKeywords) || []
 
     const prompt = buildKeywordPrompt({
       rating,

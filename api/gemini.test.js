@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict'
 import { Buffer } from 'node:buffer'
 import test from 'node:test'
-import {
+import handler, {
   applyDailyUsageLimit,
   applyRateLimit,
   buildImageParts,
@@ -17,6 +17,7 @@ import {
   validateImagesInput,
 } from './gemini.js'
 import { normalizeReviewCategory } from '../shared/reviewCategories.js'
+import { Readable } from 'node:stream'
 
 const png1x1Base64 =
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII='
@@ -24,12 +25,101 @@ const png1x1Base64 =
 delete process.env.UPSTASH_REDIS_REST_URL
 delete process.env.UPSTASH_REDIS_REST_TOKEN
 
+function createMockRequest(body, headers = {}) {
+  const req = Readable.from([Buffer.from(JSON.stringify(body))])
+  req.method = 'POST'
+  req.headers = headers
+  req.socket = { remoteAddress: '127.0.0.1' }
+  return req
+}
+
+function createMockResponse() {
+  return {
+    statusCode: 200,
+    headers: {},
+    body: '',
+    setHeader(key, value) {
+      this.headers[key.toLowerCase()] = value
+    },
+    end(chunk = '') {
+      this.body += chunk
+    },
+    write(chunk = '') {
+      this.body += chunk
+    },
+  }
+}
+
 test('validateImageInput accepts supported image content', () => {
   const result = validateImageInput(`\n${png1x1Base64}\n`, 'IMAGE/PNG')
 
   assert.equal(result.ok, true)
   assert.equal(result.mimeType, 'image/png')
   assert.equal(result.imageBase64, png1x1Base64)
+})
+
+test('handler ping works without auth or Gemini environment variables', async () => {
+  const oldGeminiKey = process.env.GEMINI_API_KEY
+  const oldGoogleClientId = process.env.GOOGLE_CLIENT_ID
+  const oldAllowedOrigins = process.env.ALLOWED_ORIGINS
+  delete process.env.GEMINI_API_KEY
+  delete process.env.GOOGLE_CLIENT_ID
+  delete process.env.ALLOWED_ORIGINS
+
+  const req = createMockRequest({ action: 'ping' })
+  const res = createMockResponse()
+
+  try {
+    await handler(req, res)
+  } finally {
+    if (oldGeminiKey == null) delete process.env.GEMINI_API_KEY
+    else process.env.GEMINI_API_KEY = oldGeminiKey
+    if (oldGoogleClientId == null) delete process.env.GOOGLE_CLIENT_ID
+    else process.env.GOOGLE_CLIENT_ID = oldGoogleClientId
+    if (oldAllowedOrigins == null) delete process.env.ALLOWED_ORIGINS
+    else process.env.ALLOWED_ORIGINS = oldAllowedOrigins
+  }
+
+  assert.equal(res.statusCode, 200)
+  assert.equal(JSON.parse(res.body).ok, true)
+})
+
+test('handler treats missing previousKeywords as an empty list', async () => {
+  const oldGeminiKey = process.env.GEMINI_API_KEY
+  const oldGoogleClientId = process.env.GOOGLE_CLIENT_ID
+  const oldApiAuthToken = process.env.API_AUTH_TOKEN
+  const oldFetch = globalThis.fetch
+  process.env.GEMINI_API_KEY = 'test-key'
+  delete process.env.GOOGLE_CLIENT_ID
+  delete process.env.API_AUTH_TOKEN
+  globalThis.fetch = async () =>
+    new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: '{"keywords":["깔끔한 포장","빠른 배송","좋은 색감"]}' }] } }] }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    })
+
+  const req = createMockRequest({
+    action: 'keywords',
+    images: [{ imageBase64: png1x1Base64, mimeType: 'image/png' }],
+    rating: 5,
+    category: 'product',
+  })
+  const res = createMockResponse()
+
+  try {
+    await handler(req, res)
+  } finally {
+    globalThis.fetch = oldFetch
+    if (oldGeminiKey == null) delete process.env.GEMINI_API_KEY
+    else process.env.GEMINI_API_KEY = oldGeminiKey
+    if (oldGoogleClientId == null) delete process.env.GOOGLE_CLIENT_ID
+    else process.env.GOOGLE_CLIENT_ID = oldGoogleClientId
+    if (oldApiAuthToken == null) delete process.env.API_AUTH_TOKEN
+    else process.env.API_AUTH_TOKEN = oldApiAuthToken
+  }
+
+  assert.equal(res.statusCode, 200)
+  assert.deepEqual(JSON.parse(res.body).keywords, ['깔끔한 포장', '빠른 배송', '좋은 색감'])
 })
 
 test('validateImageInput rejects unsupported mime types', () => {
