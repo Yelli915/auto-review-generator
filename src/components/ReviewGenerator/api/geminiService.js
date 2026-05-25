@@ -59,6 +59,7 @@ async function callApi(payload) {
 
 export async function generateKeywords({
   images,
+  productUrl,
   rating,
   category,
   previousKeywords = [],
@@ -71,12 +72,15 @@ export async function generateKeywords({
           mimeType: image.mimeType || 'image/jpeg',
         }))
     : []
-  if (!safeImages.length) {
+  const safeProductUrl =
+    typeof productUrl === 'string' ? productUrl.trim() : ''
+  if (!safeImages.length && !safeProductUrl) {
     return { ok: false, error: '이미지를 1장 이상 선택해 주세요.' }
   }
   const payload = {
     action: 'keywords',
     images: safeImages,
+    productUrl: safeProductUrl,
     rating,
     category,
     previousKeywords: Array.isArray(previousKeywords) ? previousKeywords : [],

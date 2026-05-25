@@ -1,21 +1,56 @@
 import { useState } from 'react'
+import CategoryStep from './steps/CategoryStep'
 import UploadStep from './steps/UploadStep'
 import KeywordStep from './steps/KeywordStep'
 import ReviewStep from './steps/ReviewStep'
 import { generateKeywords, generateReview } from './api/geminiService'
-import { normalizeReviewCategory } from '../../../shared/reviewCategories'
+import {
+  DEFAULT_REVIEW_CATEGORY,
+  normalizeReviewCategory,
+} from '../../../shared/reviewCategories'
 import {
   DEFAULT_REVIEW_LENGTH,
   DEFAULT_REVIEW_TONE,
 } from '../../../shared/reviewOptions'
 import { normalizeReviewRating } from '../../../shared/reviewRating'
 
-const STEPS = { UPLOAD: 'upload', KEYWORD: 'keyword', REVIEW: 'review' }
+const STEPS = {
+  CATEGORY: 'category',
+  UPLOAD: 'upload',
+  KEYWORD: 'keyword',
+  REVIEW: 'review',
+}
+
+const STEP_ORDER = [STEPS.CATEGORY, STEPS.UPLOAD, STEPS.KEYWORD, STEPS.REVIEW]
+const STEP_META = {
+  [STEPS.CATEGORY]: {
+    title: '리뷰 분야 선택',
+    desc: '장소 후기와 상품 후기 중 하나를 선택합니다.',
+    label: '분야',
+  },
+  [STEPS.UPLOAD]: {
+    title: '사진 입력',
+    desc: '리뷰 대상 이미지와 별점을 선택합니다.',
+    label: '사진',
+  },
+  [STEPS.KEYWORD]: {
+    title: '옵션 선택',
+    desc: '키워드, 분량, 말투를 정합니다.',
+    label: '옵션',
+  },
+  [STEPS.REVIEW]: {
+    title: '결과 확인',
+    desc: '생성된 리뷰를 확인하고 복사합니다.',
+    label: '리뷰',
+  },
+}
+
 const RATING_LABELS = ['', '매우 불만족', '불만족', '보통', '만족', '매우 만족']
 
 async function loadKeywordsFromImage(imagePayload, previousKeywords = []) {
   const result = await generateKeywords({
     images: imagePayload.images,
+    productUrl: imagePayload.productUrl,
     rating: imagePayload.rating,
     category: imagePayload.category,
     previousKeywords,
@@ -27,7 +62,8 @@ async function loadKeywordsFromImage(imagePayload, previousKeywords = []) {
 }
 
 export default function ReviewGenerator({ onReviewComplete }) {
-  const [step, setStep] = useState(STEPS.UPLOAD)
+  const [step, setStep] = useState(STEPS.CATEGORY)
+  const [reviewCategory, setReviewCategory] = useState(DEFAULT_REVIEW_CATEGORY)
   const [imageData, setImageData] = useState(null)
   const [keywords, setKeywords] = useState([])
   const [review, setReview] = useState('')
@@ -36,12 +72,23 @@ export default function ReviewGenerator({ onReviewComplete }) {
   const [error, setError] = useState(null)
   const [lastUsedOptions, setLastUsedOptions] = useState(null)
 
+  const handleCategorySelect = (category) => {
+    setReviewCategory(normalizeReviewCategory(category))
+    setImageData(null)
+    setKeywords([])
+    setReview('')
+    setError(null)
+    setLastUsedOptions(null)
+    setStep(STEPS.UPLOAD)
+  }
+
   const handleUploadNext = async (data) => {
     const images = Array.isArray(data?.images) ? data.images : []
     const normalizedData = {
       images,
+      productUrl: typeof data?.productUrl === 'string' ? data.productUrl.trim() : '',
       rating: normalizeReviewRating(data?.rating),
-      category: normalizeReviewCategory(data?.category),
+      category: normalizeReviewCategory(data?.category ?? reviewCategory),
     }
 
     setImageData(normalizedData)
@@ -87,6 +134,18 @@ export default function ReviewGenerator({ onReviewComplete }) {
     setError(null)
   }
 
+  const handleResetToStart = () => {
+    setStep(STEPS.CATEGORY)
+    setReviewCategory(DEFAULT_REVIEW_CATEGORY)
+    setImageData(null)
+    setKeywords([])
+    setReview('')
+    setError(null)
+    setLastUsedOptions(null)
+    setIsLoading(false)
+    setIsStreaming(false)
+  }
+
   const handleKeywordNext = async (
     selectedKeywords,
     reviewLength = DEFAULT_REVIEW_LENGTH,
@@ -124,63 +183,36 @@ export default function ReviewGenerator({ onReviewComplete }) {
     }
   }
 
-  const stepIndex = {
-    [STEPS.UPLOAD]: 0,
-    [STEPS.KEYWORD]: 1,
-    [STEPS.REVIEW]: 2,
-  }[step]
-  const stepMeta = [
-    { title: '사진 입력', desc: '리뷰 대상, 이미지, 별점을 선택합니다.' },
-    { title: '옵션 선택', desc: '키워드, 분량, 말투를 정합니다.' },
-    { title: '결과 확인', desc: '생성된 리뷰를 확인하고 복사합니다.' },
-  ][stepIndex]
-
-  const stepClass = (i) => {
-    if (i < stepIndex) return 'stepper__item is-done'
-    if (i === stepIndex) return 'stepper__item is-active'
+  const stepIndex = STEP_ORDER.indexOf(step)
+  const stepMeta = STEP_META[step]
+  const stepClass = (index) => {
+    if (index < stepIndex) return 'stepper__item is-done'
+    if (index === stepIndex) return 'stepper__item is-active'
     return 'stepper__item'
   }
-
-  const isUploadStep = step === STEPS.UPLOAD
+  const isEntryStep = step === STEPS.CATEGORY || step === STEPS.UPLOAD
 
   return (
-    <div className={`review-app ${isUploadStep ? 'review-app--upload-center' : ''}`}>
+    <div className={`review-app ${isEntryStep ? 'review-app--upload-center' : ''}`}>
       <header className="review-app__header">
-        <p className="review-app__eyebrow">STEP {stepIndex + 1} / 3</p>
+        <p className="review-app__eyebrow">STEP {stepIndex + 1} / {STEP_ORDER.length}</p>
         <h1 className="review-app__title">{stepMeta.title}</h1>
-        <p className="review-app__tagline">
-          {stepMeta.desc}
-        </p>
+        <p className="review-app__tagline">{stepMeta.desc}</p>
       </header>
 
       <nav className="stepper" aria-label="진행 단계">
-        <div
-          className={stepClass(0)}
-          aria-current={step === STEPS.UPLOAD ? 'step' : undefined}
-        >
-          <span className="stepper__dot" aria-hidden="true">
-            1
-          </span>
-          <span className="stepper__label">사진</span>
-        </div>
-        <div
-          className={stepClass(1)}
-          aria-current={step === STEPS.KEYWORD ? 'step' : undefined}
-        >
-          <span className="stepper__dot" aria-hidden="true">
-            2
-          </span>
-          <span className="stepper__label">옵션</span>
-        </div>
-        <div
-          className={stepClass(2)}
-          aria-current={step === STEPS.REVIEW ? 'step' : undefined}
-        >
-          <span className="stepper__dot" aria-hidden="true">
-            3
-          </span>
-          <span className="stepper__label">리뷰</span>
-        </div>
+        {STEP_ORDER.map((item, index) => (
+          <div
+            key={item}
+            className={stepClass(index)}
+            aria-current={step === item ? 'step' : undefined}
+          >
+            <span className="stepper__dot" aria-hidden="true">
+              {index + 1}
+            </span>
+            <span className="stepper__label">{STEP_META[item].label}</span>
+          </div>
+        ))}
       </nav>
 
       <main className="review-app__main">
@@ -197,9 +229,14 @@ export default function ReviewGenerator({ onReviewComplete }) {
           </div>
         )}
 
+        {step === STEPS.CATEGORY && (
+          <CategoryStep onSelect={handleCategorySelect} />
+        )}
         {step === STEPS.UPLOAD && (
           <UploadStep
+            category={reviewCategory}
             onNext={handleUploadNext}
+            onBackToCategory={() => setStep(STEPS.CATEGORY)}
             isLoading={isLoading}
             ratingLabels={RATING_LABELS}
           />
@@ -221,6 +258,7 @@ export default function ReviewGenerator({ onReviewComplete }) {
             review={review}
             isStreaming={isStreaming}
             onRegenerate={handleRegenerate}
+            onReset={handleResetToStart}
           />
         )}
       </main>

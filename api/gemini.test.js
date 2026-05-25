@@ -122,6 +122,55 @@ test('handler treats missing previousKeywords as an empty list', async () => {
   assert.deepEqual(JSON.parse(res.body).keywords, ['깔끔한 포장', '빠른 배송', '좋은 색감'])
 })
 
+test('handler generates keywords from productUrl metadata', async () => {
+  const oldGeminiKey = process.env.GEMINI_API_KEY
+  const oldGoogleClientId = process.env.GOOGLE_CLIENT_ID
+  const oldApiAuthToken = process.env.API_AUTH_TOKEN
+  const oldFetch = globalThis.fetch
+  process.env.GEMINI_API_KEY = 'test-key'
+  delete process.env.GOOGLE_CLIENT_ID
+  delete process.env.API_AUTH_TOKEN
+
+  const calls = []
+  globalThis.fetch = async (url) => {
+    calls.push(String(url))
+    if (String(url).startsWith('https://shop.example/product')) {
+      return new Response(
+        '<html><head><title>가벼운 무선 키보드</title><meta name="description" content="조용한 타건감과 얇은 디자인의 키보드"></head></html>',
+        { status: 200, headers: { 'Content-Type': 'text/html; charset=utf-8' } },
+      )
+    }
+    return new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: '{"keywords":["조용한 타건감","얇은 디자인","가벼운 무게"]}' }] } }] }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    })
+  }
+
+  const req = createMockRequest({
+    action: 'keywords',
+    productUrl: 'https://shop.example/product/keyboard',
+    rating: 5,
+    category: 'product',
+  })
+  const res = createMockResponse()
+
+  try {
+    await handler(req, res)
+  } finally {
+    globalThis.fetch = oldFetch
+    if (oldGeminiKey == null) delete process.env.GEMINI_API_KEY
+    else process.env.GEMINI_API_KEY = oldGeminiKey
+    if (oldGoogleClientId == null) delete process.env.GOOGLE_CLIENT_ID
+    else process.env.GOOGLE_CLIENT_ID = oldGoogleClientId
+    if (oldApiAuthToken == null) delete process.env.API_AUTH_TOKEN
+    else process.env.API_AUTH_TOKEN = oldApiAuthToken
+  }
+
+  assert.equal(res.statusCode, 200)
+  assert.deepEqual(JSON.parse(res.body).keywords, ['조용한 타건감', '얇은 디자인', '가벼운 무게'])
+  assert.equal(calls.length, 2)
+})
+
 test('validateImageInput rejects unsupported mime types', () => {
   const result = validateImageInput(png1x1Base64, 'image/gif')
 

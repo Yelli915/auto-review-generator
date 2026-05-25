@@ -42,6 +42,7 @@ export function buildKeywordPrompt({
   rating,
   category,
   imageCount = 1,
+  productContext = '',
   minKeywordCount,
   maxKeywordCount,
   previousKeywords = [],
@@ -63,9 +64,15 @@ export function buildKeywordPrompt({
     ? `직전 키워드 조합 ${JSON.stringify(safePreviousKeywords)}와 완전히 같은 목록을 다시 내지 마. 비슷한 방향은 가능하지만 최소 1개 이상은 다른 표현이나 다른 관찰 포인트로 바꿔. `
     : ''
 
+  const safeProductContext =
+    typeof productContext === 'string' ? productContext.trim().slice(0, 2800) : ''
+  const sourceGuide = safeProductContext
+    ? `상품 링크에서 수집한 공개 정보:\n${safeProductContext}\n\n위 상품 정보를 리뷰 대상의 근거로 보고, 링크에 없는 실제 사용 기간/배송 속도/가격/구매처는 새로 만들지 마. `
+    : imageGuide
+
   return (
     `${categoryMeta.label} 리뷰에 사용할 키워드를 한국어 짧은 구로만 작성해. ` +
-    imageGuide +
+    sourceGuide +
     variationGuide +
     '이미지에서 직접 확인 가능한 단서를 우선하고, 보이지 않는 사실은 추측하지 마. ' +
     `별점 ${rating}점 기준 감정은 ${keywordSentimentGuide(rating)} 반영해. ` +

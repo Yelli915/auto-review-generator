@@ -6,9 +6,7 @@ import {
   transformImageFile,
 } from '../utils/imageUtils'
 import {
-  DEFAULT_REVIEW_CATEGORY,
   MAX_REVIEW_IMAGE_COUNT,
-  REVIEW_CATEGORY_OPTIONS,
 } from '../../../../shared/reviewCategories'
 
 const MAX_FILE_SIZE_MB = 15
@@ -71,11 +69,18 @@ function StarRating({ value, onChange, disabled, ratingLabels }) {
   )
 }
 
-export default function UploadStep({ onNext, isLoading, ratingLabels }) {
+export default function UploadStep({
+  category,
+  onNext,
+  onBackToCategory,
+  isLoading,
+  ratingLabels,
+}) {
   const inputId = useId()
   const inputRef = useRef(null)
   const [images, setImages] = useState([])
-  const [reviewCategory, setReviewCategory] = useState(DEFAULT_REVIEW_CATEGORY)
+  const [inputMode, setInputMode] = useState(category === 'product' ? 'link' : 'image')
+  const [productUrl, setProductUrl] = useState('')
   const [rating, setRating] = useState(5)
   const [status, setStatus] = useState({ text: '', isError: false })
   const [isDragging, setIsDragging] = useState(false)
@@ -89,6 +94,12 @@ export default function UploadStep({ onNext, isLoading, ratingLabels }) {
       revokeObjectUrls(objectUrlsRef.current)
     }
   }, [])
+
+  useEffect(() => {
+    if (category !== 'product' && inputMode !== 'image') {
+      setInputMode('image')
+    }
+  }, [category, inputMode])
 
   function replaceImages(nextImages) {
     revokeObjectUrls(objectUrlsRef.current)
@@ -222,11 +233,27 @@ export default function UploadStep({ onNext, isLoading, ratingLabels }) {
   }
 
   function handleNext() {
-    if (!images.length || typeof onNext !== 'function') return
+    if (typeof onNext !== 'function') return
+    const safeProductUrl = productUrl.trim()
+    if (inputMode === 'link') {
+      if (!safeProductUrl) {
+        setStatus({ text: '상품 링크를 입력해 주세요.', isError: true })
+        return
+      }
+      onNext({
+        images: [],
+        productUrl: safeProductUrl,
+        rating: Number(rating),
+        category,
+      })
+      return
+    }
+    if (!images.length) return
     onNext({
       images,
+      productUrl: '',
       rating: Number(rating),
-      category: reviewCategory,
+      category,
     })
   }
 
@@ -239,37 +266,15 @@ export default function UploadStep({ onNext, isLoading, ratingLabels }) {
     .join(' ')
 
   const busy = isLoading || isProcessing
+  const canUseLink = category === 'product'
+  const isLinkMode = canUseLink && inputMode === 'link'
 
   return (
     <section className="step-card step-card--enter">
       <h2 className="step-card__title">사진 업로드</h2>
       <p className="step-card__lede">
-        리뷰 분야와 사진, 별점을 선택하면 그에 맞는 키워드를 자동으로 추출합니다.
+        사진과 별점을 선택하면 앞에서 고른 분야에 맞춰 키워드를 자동으로 추출합니다.
       </p>
-
-      <div className="field">
-        <span className="field__label">리뷰 분야</span>
-        <div className="category-choice-grid" role="radiogroup" aria-label="리뷰 분야 선택">
-          {REVIEW_CATEGORY_OPTIONS.map((option) => {
-            const isActive = reviewCategory === option.value
-            return (
-              <button
-                key={option.value}
-                type="button"
-                className={`category-choice${isActive ? ' is-active' : ''}`}
-                onClick={() => setReviewCategory(option.value)}
-                disabled={busy}
-                aria-pressed={isActive}
-              >
-                <span className="category-choice__label">{option.label}</span>
-                <span className="category-choice__meta">
-                  {option.value === 'place' ? '장소 중심 후기' : '상품 중심 후기'}
-                </span>
-              </button>
-            )
-          })}
-        </div>
-      </div>
 
       <div className="field">
         <label className="field__label">별점</label>
@@ -281,6 +286,59 @@ export default function UploadStep({ onNext, isLoading, ratingLabels }) {
         />
       </div>
 
+      {canUseLink && (
+        <div className="field">
+          <span className="field__label">입력 방식</span>
+          <div className="input-mode" role="group" aria-label="입력 방식 선택">
+            <button
+              type="button"
+              className={`input-mode__button${isLinkMode ? ' is-active' : ''}`}
+              onClick={() => setInputMode('link')}
+              disabled={busy}
+            >
+              상품 링크
+            </button>
+            <button
+              type="button"
+              className={`input-mode__button${!isLinkMode ? ' is-active' : ''}`}
+              onClick={() => setInputMode('image')}
+              disabled={busy}
+            >
+              사진
+            </button>
+          </div>
+        </div>
+      )}
+
+      {isLinkMode ? (
+        <div className="field">
+          <label className="field__label" htmlFor={`${inputId}-url`}>
+            상품 링크
+          </label>
+          <input
+            id={`${inputId}-url`}
+            className="text-input"
+            type="url"
+            inputMode="url"
+            placeholder="https://example.com/product"
+            value={productUrl}
+            onChange={(e) => {
+              setProductUrl(e.target.value)
+              setStatus({ text: '', isError: false })
+            }}
+            disabled={busy}
+          />
+          <p className="field__hint">
+            공개 상품 페이지의 제목과 설명을 읽어 리뷰 키워드를 생성합니다.
+          </p>
+          {status.text && (
+            <p className={`field__hint ${status.isError ? 'field__hint--error' : ''}`}>
+              {status.text}
+            </p>
+          )}
+        </div>
+      ) : (
+      <>
       <div className="upload-row">
         <div className="field upload-row__drop">
           <span className="field__label" id={`${inputId}-label`}>
@@ -343,13 +401,15 @@ export default function UploadStep({ onNext, isLoading, ratingLabels }) {
         onApply={handleApplyImageEdit}
         onClose={() => setEditingIndex(null)}
       />
+      </>
+      )}
 
       <div className="btn-row">
         <button
           type="button"
           className="btn btn--primary btn--lg"
           onClick={handleNext}
-          disabled={images.length === 0 || busy}
+          disabled={(isLinkMode ? !productUrl.trim() : images.length === 0) || busy}
         >
           {isLoading
             ? '키워드 생성 중…'
@@ -357,6 +417,16 @@ export default function UploadStep({ onNext, isLoading, ratingLabels }) {
               ? '이미지 처리 중…'
               : '다음: 키워드 선택'}
         </button>
+        {typeof onBackToCategory === 'function' && (
+          <button
+            type="button"
+            className="btn btn--secondary"
+            onClick={onBackToCategory}
+            disabled={busy}
+          >
+            리뷰 분야 다시 선택
+          </button>
+        )}
       </div>
     </section>
   )

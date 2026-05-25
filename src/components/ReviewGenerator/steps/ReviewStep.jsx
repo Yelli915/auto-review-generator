@@ -4,6 +4,7 @@ export default function ReviewStep({
   review,
   isStreaming,
   onRegenerate,
+  onReset,
 }) {
   const [copied, setCopied] = useState(false)
   const [copyError, setCopyError] = useState(false)
@@ -62,6 +63,16 @@ export default function ReviewStep({
           </button>
         )}
       </div>
+      {typeof onReset === 'function' && (
+        <button
+          type="button"
+          className="btn btn--secondary review-reset"
+          onClick={onReset}
+          disabled={isStreaming}
+        >
+          처음부터 다시 작성
+        </button>
+      )}
     </div>
   )
 }
