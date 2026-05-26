@@ -108,31 +108,6 @@ export function buildKeywordPrompt({
   )
 }
 
-export function buildProductTypePrompt({
-  category,
-  imageCount = 0,
-  productContext = '',
-  minTypeCount,
-  maxTypeCount,
-}) {
-  const safeCategory = normalizeReviewCategory(category)
-  const categoryMeta = REVIEW_CATEGORY_MAP[safeCategory]
-  const safeProductContext =
-    typeof productContext === 'string' ? productContext.trim().slice(0, 2400) : ''
-  const sourceGuide = safeProductContext
-    ? `분석된 상품/장소 정보:\n${safeProductContext}\n\n`
-    : `이미지 ${Math.max(1, imageCount)}장을 보고 리뷰 대상의 유형을 추정해.\n\n`
-
-  return joinPromptParts(
-    `${categoryMeta.label} 리뷰 대상의 상품 유형 후보를 만들어. `,
-    sourceGuide,
-    '브랜드명, 모델명, 색상, 용량 같은 옵션값이 아니라 리뷰 대상의 분류를 나타내는 짧은 한국어 명사구만 써. ',
-    '너무 넓은 표현(상품, 제품, 물건, 장소)과 광고 문구는 제외해. ',
-    `후보는 서로 다른 수준이나 관점으로 ${minTypeCount}~${maxTypeCount}개를 만들되, 가장 가능성 높은 후보를 먼저 둬. `,
-    '각 후보는 2~18자 한국어 표현으로 제한해. ',
-    '형식은 JSON만 출력: {"productTypes":["...","...","..."]}',
-  )
-}
 
 export function buildReviewPrompt({ rating, keywords, length, tone, category }) {
   const safeKeywords = normalizeKeywordPhrases(keywords)

@@ -70,36 +70,6 @@ export async function analyzeProductUrl(productUrl) {
   })
 }
 
-export async function generateProductTypes({
-  images,
-  productUrl,
-  productContext,
-  category,
-}) {
-  const safeImages = Array.isArray(images)
-    ? images
-        .filter((image) => image?.base64Image)
-        .map((image) => ({
-          imageBase64: image.base64Image,
-          mimeType: image.mimeType || 'image/jpeg',
-        }))
-    : []
-  const safeProductUrl = typeof productUrl === 'string' ? productUrl.trim() : ''
-  const safeProductContext =
-    typeof productContext === 'string' ? productContext.trim() : ''
-
-  if (!safeImages.length && !safeProductUrl && !safeProductContext) {
-    return { ok: false, error: '상품 유형을 추정할 이미지나 상품 링크가 필요합니다.' }
-  }
-
-  return callApi({
-    action: 'product-types',
-    images: safeImages,
-    productUrl: safeProductUrl,
-    productContext: safeProductContext,
-    category,
-  })
-}
 
 export async function generateKeywords({
   images,

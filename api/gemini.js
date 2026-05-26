@@ -7,7 +7,6 @@ import { hasHangul, isLikelyKeywordPhrase } from './keywordUtils.js'
 import { fetchProductAnalysis } from './productContext.js'
 import {
   buildKeywordPrompt,
-  buildProductTypePrompt,
   buildReviewPrompt,
 } from './prompts.js'
 
@@ -21,7 +20,7 @@ const RATE_LIMIT_WINDOW_MS = 60 * 1000
 const RATE_LIMIT_MAX_REQUESTS = 20
 const RATE_LIMIT_STORE = new Map()
 const DAILY_USAGE_MAX_REQUESTS = 20
-const DAILY_USAGE_ACTIONS = new Set(['product-types', 'keywords', 'review'])
+const DAILY_USAGE_ACTIONS = new Set(['keywords', 'review'])
 const DAILY_USAGE_STORE = new Map()
 const USAGE_STORE_KEY_PREFIX = 'auto-review-generator'
 const GOOGLE_OAUTH_CLIENT = new OAuth2Client()
@@ -33,11 +32,6 @@ const KEYWORDS_MAX_COUNT = 8
 const KEYWORD_LEN_MIN = 2
 const KEYWORD_LEN_MAX = 30
 const KEYWORDS_MAX_OUTPUT_TOKENS = 1024
-const PRODUCT_TYPES_MIN_COUNT = 3
-const PRODUCT_TYPES_MAX_COUNT = 6
-const PRODUCT_TYPE_LEN_MIN = 2
-const PRODUCT_TYPE_LEN_MAX = 18
-const PRODUCT_TYPES_MAX_OUTPUT_TOKENS = 512
 const REVIEW_MAX_OUTPUT_TOKENS = {
   short: 2048,
   medium: 3072,
@@ -610,32 +604,6 @@ function sanitizeKeywordsField(keywords) {
   return null
 }
 
-function sanitizeProductTypeArray(arr) {
-  if (!Array.isArray(arr)) return null
-  const cleaned = arr
-    .map((v) => (typeof v === 'string' ? v.replace(/\s+/g, ' ').trim() : ''))
-    .filter(
-      (s) =>
-        s.length >= PRODUCT_TYPE_LEN_MIN &&
-        s.length <= PRODUCT_TYPE_LEN_MAX &&
-        hasHangul(s) &&
-        !/^(상품|제품|물건|장소|기타|옵션)$/i.test(s),
-    )
-  return cleaned.length ? Array.from(new Set(cleaned)) : null
-}
-
-function sanitizeProductTypesField(productTypes) {
-  if (Array.isArray(productTypes)) return sanitizeProductTypeArray(productTypes)
-  if (typeof productTypes === 'string') {
-    const parts = productTypes
-      .split(/[,，\n|/]+/g)
-      .map((s) => s.trim())
-      .filter(Boolean)
-    return sanitizeProductTypeArray(parts)
-  }
-  return null
-}
-
 function stripEnglishJsonPreamble(str) {
   let s = str.trimStart()
   for (let i = 0; i < 3; i += 1) {
@@ -833,69 +801,9 @@ function parseKeywordsFromAny(data) {
   return { keywords: null, rawText: text }
 }
 
-function parseProductTypesFromText(text) {
-  if (typeof text !== 'string' || !text.trim()) return null
-  const raw = text.trim()
-  let normalized = raw
-    .replace(/^```json\s*/i, '')
-    .replace(/^```\s*/i, '')
-    .replace(/\s*```$/i, '')
-  normalized = stripEnglishJsonPreamble(normalized)
-  normalized = trimToJsonStart(normalized)
-  const loose = loosenJsonCommas(normalized)
 
-  const tryParse = (s) => {
-    try {
-      return JSON.parse(s)
-    } catch {
-      return null
-    }
-  }
 
-  for (const candidate of [normalized, loose]) {
-    const parsed = tryParse(candidate)
-    if (parsed) {
-      const fromObject = sanitizeProductTypesField(parsed?.productTypes)
-      if (fromObject) return fromObject
-      const fromArray = sanitizeProductTypeArray(parsed)
-      if (fromArray) return fromArray
-    }
-  }
 
-  const objSlice = sliceBalancedSegment(normalized, '{', '}')
-  if (objSlice) {
-    const parsed = tryParse(loosenJsonCommas(objSlice))
-    const fromObject = parsed
-      ? sanitizeProductTypesField(parsed?.productTypes)
-      : null
-    if (fromObject) return fromObject
-  }
-
-  const arraySlice = sliceBalancedSegment(normalized, '[', ']')
-  if (arraySlice) {
-    const parsed = tryParse(loosenJsonCommas(arraySlice))
-    const fromArray = parsed ? sanitizeProductTypeArray(parsed) : null
-    if (fromArray) return fromArray
-  }
-
-  return sanitizeProductTypeArray(
-    normalized
-      .split('\n')
-      .map((line) => line.replace(/^[\s\-*0-9.()]+/, '').trim())
-      .filter(Boolean),
-  )
-}
-
-function parseProductTypesFromAny(data) {
-  const text = gatherKeywordResponseText(data)
-  const productTypes = parseProductTypesFromText(text)
-  return {
-    productTypes: productTypes
-      ? productTypes.slice(0, PRODUCT_TYPES_MAX_COUNT)
-      : null,
-    rawText: text,
-  }
-}
 
 export function buildKeywordGenerationConfig() {
   return {
@@ -920,28 +828,6 @@ export function buildKeywordGenerationConfig() {
   }
 }
 
-export function buildProductTypeGenerationConfig() {
-  return {
-    temperature: 0.1,
-    maxOutputTokens: PRODUCT_TYPES_MAX_OUTPUT_TOKENS,
-    responseMimeType: 'application/json',
-    responseSchema: {
-      type: 'object',
-      properties: {
-        productTypes: {
-          type: 'array',
-          items: { type: 'string' },
-          minItems: PRODUCT_TYPES_MIN_COUNT,
-          maxItems: PRODUCT_TYPES_MAX_COUNT,
-        },
-      },
-      required: ['productTypes'],
-    },
-    thinkingConfig: {
-      thinkingBudget: 0,
-    },
-  }
-}
 
 export function buildReviewGenerationConfig(length) {
   return {
@@ -1276,86 +1162,6 @@ export default async function handler(req, res) {
     })
   }
 
-  if (body.action === 'product-types') {
-    const productUrl =
-      typeof body.productUrl === 'string' ? body.productUrl.trim() : ''
-    let productContext =
-      typeof body.productContext === 'string' ? body.productContext.trim() : ''
-    let imageInput = null
-
-    if (!productContext && productUrl) {
-      const productResult = await fetchProductAnalysis(productUrl)
-      if (!productResult.ok) {
-        return json(res, productResult.status, {
-          ok: false,
-          error: productResult.error,
-        })
-      }
-      productContext = productResult.productContext
-    }
-
-    if (!productContext) {
-      imageInput = validateImagesInput(
-        body.images,
-        body.imageBase64,
-        body.mimeType,
-      )
-
-      if (!imageInput.ok) {
-        return json(res, imageInput.status, {
-          ok: false,
-          error: imageInput.error,
-        })
-      }
-    }
-
-    if (await rejectDailyUsageLimit(res, rateKey, body.action)) return
-
-    const prompt = buildProductTypePrompt({
-      category: body.category,
-      imageCount: imageInput?.images?.length ?? 0,
-      productContext,
-      minTypeCount: PRODUCT_TYPES_MIN_COUNT,
-      maxTypeCount: PRODUCT_TYPES_MAX_COUNT,
-    })
-    const imageParts = imageInput ? buildImageParts(imageInput.images) : []
-    const result = await requestGemini({
-      key,
-      payload: {
-        contents: [
-          {
-            parts: [
-              ...imageParts,
-              { text: prompt },
-            ],
-          },
-        ],
-        generationConfig: buildProductTypeGenerationConfig(),
-      },
-    })
-    if (!result.ok) {
-      return json(res, toClientErrorStatus(result.status), result)
-    }
-
-    const parsed = parseProductTypesFromAny(result.data)
-    if (!parsed.productTypes || parsed.productTypes.length < PRODUCT_TYPES_MIN_COUNT) {
-      if (DEBUG_LOGS) {
-        console.warn('[gemini product-types] parse failed', {
-          ...summarizeKeywordDebug(result.data),
-        })
-      }
-      return json(res, 502, {
-        ok: false,
-        error: '상품 유형 후보 형식을 읽을 수 없습니다. 다시 시도해 주세요.',
-      })
-    }
-
-    return json(res, 200, {
-      ok: true,
-      productTypes: parsed.productTypes,
-      model: result.model,
-    })
-  }
 
   if (body.action === 'keywords') {
     const rawRating = Number.isFinite(Number(body.rating)) ? Number(body.rating) : 5
