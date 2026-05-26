@@ -292,6 +292,44 @@ test('fetchProductAnalysis falls back when product page returns non-ok response'
   )
 })
 
+test('fetchProductAnalysis uses reader fallback when direct product page is blocked', async () => {
+  const calls = []
+  await withFetch(
+    async (url) => {
+      calls.push(String(url))
+      if (String(url).startsWith('https://r.jina.ai/')) {
+        return new Response(
+          [
+            'Title: Noise Canceling Headphones - Black',
+            'URL Source: https://shop.example/products/noise-canceling-headphones',
+            'Markdown Content:',
+            'Wireless headphones with active noise canceling and long battery life.',
+          ].join('\n'),
+          { headers: { 'content-type': 'text/plain' } },
+        )
+      }
+      return new Response('blocked', { status: 403 })
+    },
+    async () => {
+      const { fetchProductAnalysis } = await import('./productContext.js')
+      const result = await fetchProductAnalysis(
+        'https://shop.example/products/noise-canceling-headphones',
+      )
+
+      assert.equal(result.ok, true)
+      assert.equal(result.optionGroups.length, 0)
+      assert.match(result.productContext, /Noise Canceling Headphones - Black/)
+      assert.match(result.productContext, /Wireless headphones/)
+      assert.match(result.productContext, /HTTP 403/)
+      assert.equal(calls.length, 2)
+      assert.equal(
+        calls[1],
+        'https://r.jina.ai/https://shop.example/products/noise-canceling-headphones',
+      )
+    },
+  )
+})
+
 test('validateImageInput rejects unsupported mime types', () => {
   const result = validateImageInput(png1x1Base64, 'image/gif')
 

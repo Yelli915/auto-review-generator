@@ -1,6 +1,8 @@
 const MAX_PRODUCT_URL_LENGTH = 2048
 const MAX_PRODUCT_PAGE_BYTES = 512 * 1024
 const PRODUCT_PAGE_TIMEOUT_MS = 6000
+const READER_PAGE_TIMEOUT_MS = 10000
+const READER_BASE_URL = 'https://r.jina.ai/'
 
 const PRODUCT_FETCH_HEADERS = {
   Accept:
@@ -10,6 +12,12 @@ const PRODUCT_FETCH_HEADERS = {
   'User-Agent':
     'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 ' +
     '(KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
+}
+
+const READER_FETCH_HEADERS = {
+  Accept: 'text/plain, text/markdown;q=0.9, */*;q=0.8',
+  'Accept-Language': 'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7',
+  'Cache-Control': 'no-cache',
 }
 
 function normalizeProductUrl(rawUrl) {
@@ -144,6 +152,78 @@ function buildFallbackProductContext(urlString, reason = '') {
     `링크: ${urlString}`,
   ].filter(Boolean)
   return parts.join('\n')
+}
+
+function buildReaderUrl(urlString) {
+  return `${READER_BASE_URL}${urlString}`
+}
+
+function cleanReaderText(text) {
+  return String(text || '')
+    .replace(/\r/g, '')
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .filter((line) => !/^URL Source:/i.test(line))
+    .filter((line) => !/^Markdown Content:/i.test(line))
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+}
+
+function extractReaderTitle(text) {
+  const titleLine = String(text || '')
+    .split('\n')
+    .map((line) => line.trim())
+    .find((line) => /^Title:\s*/i.test(line))
+  return titleLine ? titleLine.replace(/^Title:\s*/i, '').trim() : ''
+}
+
+function buildReaderProductContext(text, urlString, reason = '') {
+  const url = new URL(urlString)
+  const title = extractReaderTitle(text)
+  const cleaned = cleanReaderText(text)
+    .replace(/^Title:\s*.*$/im, '')
+    .trim()
+  const summary = cleaned.slice(0, 1800).trim()
+  const productName = productNameFromUrl(url)
+  const parts = [
+    `사이트: ${url.hostname}`,
+    title && `페이지 제목: ${title}`,
+    !title && productName && `상품명 추정: ${productName}`,
+    reason && `직접 읽기 상태: ${reason}`,
+    summary && `페이지 내용: ${summary}`,
+    `링크: ${urlString}`,
+  ].filter(Boolean)
+  return parts.join('\n')
+}
+
+async function fetchReaderProductAnalysis(urlString, reason = '') {
+  let response
+  try {
+    response = await fetch(buildReaderUrl(urlString), {
+      headers: READER_FETCH_HEADERS,
+      redirect: 'follow',
+      signal: AbortSignal.timeout(READER_PAGE_TIMEOUT_MS),
+    })
+  } catch {
+    return null
+  }
+
+  if (!response.ok) return null
+
+  try {
+    const text = await readResponseTextLimited(response)
+    if (!text.trim()) return null
+    return {
+      ok: true,
+      url: urlString,
+      productContext: buildReaderProductContext(text, urlString, reason),
+      optionGroups: [],
+    }
+  } catch {
+    return null
+  }
 }
 
 function normalizeOptionText(text) {
@@ -326,6 +406,12 @@ export async function fetchProductAnalysis(rawUrl) {
       signal: AbortSignal.timeout(PRODUCT_PAGE_TIMEOUT_MS),
     })
   } catch {
+    const readerAnalysis = await fetchReaderProductAnalysis(
+      normalized.url,
+      'direct fetch failed',
+    )
+    if (readerAnalysis) return readerAnalysis
+
     return {
       ok: true,
       url: normalized.url,
@@ -338,6 +424,12 @@ export async function fetchProductAnalysis(rawUrl) {
   }
 
   if (!response.ok) {
+    const readerAnalysis = await fetchReaderProductAnalysis(
+      normalized.url,
+      `HTTP ${response.status}`,
+    )
+    if (readerAnalysis) return readerAnalysis
+
     return {
       ok: true,
       url: normalized.url,
