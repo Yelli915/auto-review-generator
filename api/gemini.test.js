@@ -1,14 +1,15 @@
 /* global process */
 import assert from 'node:assert/strict'
 import { Buffer } from 'node:buffer'
+import { Readable } from 'node:stream'
 import test from 'node:test'
 import handler, {
   applyDailyUsageLimit,
   applyRateLimit,
+  appendKeywordRetryGuidance,
   buildImageParts,
   buildKeywordGenerationConfig,
   buildReviewGenerationConfig,
-  appendKeywordRetryGuidance,
   humanizeGeminiApiError,
   isSameKeywordSet,
   parseKeywordsFromText,
@@ -17,7 +18,6 @@ import handler, {
   validateImagesInput,
 } from './gemini.js'
 import { normalizeReviewCategory } from '../shared/reviewCategories.js'
-import { Readable } from 'node:stream'
 
 const png1x1Base64 =
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII='
@@ -50,6 +50,72 @@ function createMockResponse() {
   }
 }
 
+function withEnv(updates, fn) {
+  const previous = {}
+  for (const key of Object.keys(updates)) {
+    previous[key] = process.env[key]
+    const value = updates[key]
+    if (value == null) delete process.env[key]
+    else process.env[key] = value
+  }
+
+  return Promise.resolve()
+    .then(fn)
+    .finally(() => {
+      for (const [key, value] of Object.entries(previous)) {
+        if (value == null) delete process.env[key]
+        else process.env[key] = value
+      }
+    })
+}
+
+async function withFetch(mockFetch, fn) {
+  const oldFetch = globalThis.fetch
+  globalThis.fetch = mockFetch
+  try {
+    return await fn()
+  } finally {
+    globalThis.fetch = oldFetch
+  }
+}
+
+async function withFetchCalls(mockFetch, fn) {
+  const calls = []
+  return withFetch(
+    async (...args) => {
+      calls.push(String(args[0]))
+      return mockFetch(...args)
+    },
+    () => fn(calls),
+  )
+}
+
+function jsonResponse(body, status = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { 'Content-Type': 'application/json' },
+  })
+}
+
+function htmlResponse(html, status = 200) {
+  return new Response(html, {
+    status,
+    headers: { 'Content-Type': 'text/html; charset=utf-8' },
+  })
+}
+
+function geminiKeywordResponse(keywords) {
+  return jsonResponse({
+    candidates: [
+      {
+        content: {
+          parts: [{ text: JSON.stringify({ keywords }) }],
+        },
+      },
+    ],
+  })
+}
+
 test('validateImageInput accepts supported image content', () => {
   const result = validateImageInput(`\n${png1x1Base64}\n`, 'IMAGE/PNG')
 
@@ -59,220 +125,171 @@ test('validateImageInput accepts supported image content', () => {
 })
 
 test('handler ping works without auth or Gemini environment variables', async () => {
-  const oldGeminiKey = process.env.GEMINI_API_KEY
-  const oldGoogleClientId = process.env.GOOGLE_CLIENT_ID
-  const oldAllowedOrigins = process.env.ALLOWED_ORIGINS
-  delete process.env.GEMINI_API_KEY
-  delete process.env.GOOGLE_CLIENT_ID
-  delete process.env.ALLOWED_ORIGINS
+  await withEnv(
+    {
+      GEMINI_API_KEY: null,
+      GOOGLE_CLIENT_ID: null,
+      ALLOWED_ORIGINS: null,
+    },
+    async () => {
+      const req = createMockRequest({ action: 'ping' })
+      const res = createMockResponse()
 
-  const req = createMockRequest({ action: 'ping' })
-  const res = createMockResponse()
+      await handler(req, res)
 
-  try {
-    await handler(req, res)
-  } finally {
-    if (oldGeminiKey == null) delete process.env.GEMINI_API_KEY
-    else process.env.GEMINI_API_KEY = oldGeminiKey
-    if (oldGoogleClientId == null) delete process.env.GOOGLE_CLIENT_ID
-    else process.env.GOOGLE_CLIENT_ID = oldGoogleClientId
-    if (oldAllowedOrigins == null) delete process.env.ALLOWED_ORIGINS
-    else process.env.ALLOWED_ORIGINS = oldAllowedOrigins
-  }
-
-  assert.equal(res.statusCode, 200)
-  assert.equal(JSON.parse(res.body).ok, true)
+      assert.equal(res.statusCode, 200)
+      assert.equal(JSON.parse(res.body).ok, true)
+    },
+  )
 })
 
 test('handler treats missing previousKeywords as an empty list', async () => {
-  const oldGeminiKey = process.env.GEMINI_API_KEY
-  const oldGoogleClientId = process.env.GOOGLE_CLIENT_ID
-  const oldApiAuthToken = process.env.API_AUTH_TOKEN
-  const oldFetch = globalThis.fetch
-  process.env.GEMINI_API_KEY = 'test-key'
-  delete process.env.GOOGLE_CLIENT_ID
-  delete process.env.API_AUTH_TOKEN
-  globalThis.fetch = async () =>
-    new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: '{"keywords":["깔끔한 포장","빠른 배송","좋은 색감"]}' }] } }] }), {
-      status: 200,
-      headers: { 'Content-Type': 'application/json' },
-    })
+  await withEnv(
+    {
+      GEMINI_API_KEY: 'test-key',
+      GOOGLE_CLIENT_ID: null,
+      API_AUTH_TOKEN: null,
+    },
+    () =>
+      withFetch(
+        async () => geminiKeywordResponse(['포장 깔끔', '배송 빠름', '색감 좋음']),
+        async () => {
+          const req = createMockRequest({
+            action: 'keywords',
+            images: [{ imageBase64: png1x1Base64, mimeType: 'image/png' }],
+            rating: 5,
+            category: 'product',
+          })
+          const res = createMockResponse()
 
-  const req = createMockRequest({
-    action: 'keywords',
-    images: [{ imageBase64: png1x1Base64, mimeType: 'image/png' }],
-    rating: 5,
-    category: 'product',
-  })
-  const res = createMockResponse()
+          await handler(req, res)
 
-  try {
-    await handler(req, res)
-  } finally {
-    globalThis.fetch = oldFetch
-    if (oldGeminiKey == null) delete process.env.GEMINI_API_KEY
-    else process.env.GEMINI_API_KEY = oldGeminiKey
-    if (oldGoogleClientId == null) delete process.env.GOOGLE_CLIENT_ID
-    else process.env.GOOGLE_CLIENT_ID = oldGoogleClientId
-    if (oldApiAuthToken == null) delete process.env.API_AUTH_TOKEN
-    else process.env.API_AUTH_TOKEN = oldApiAuthToken
-  }
-
-  assert.equal(res.statusCode, 200)
-  assert.deepEqual(JSON.parse(res.body).keywords, ['깔끔한 포장', '빠른 배송', '좋은 색감'])
+          assert.equal(res.statusCode, 200)
+          assert.deepEqual(JSON.parse(res.body).keywords, ['포장 깔끔', '배송 빠름', '색감 좋음'])
+        },
+      ),
+  )
 })
 
 test('handler generates keywords from productUrl metadata', async () => {
-  const oldGeminiKey = process.env.GEMINI_API_KEY
-  const oldGoogleClientId = process.env.GOOGLE_CLIENT_ID
-  const oldApiAuthToken = process.env.API_AUTH_TOKEN
-  const oldFetch = globalThis.fetch
-  process.env.GEMINI_API_KEY = 'test-key'
-  delete process.env.GOOGLE_CLIENT_ID
-  delete process.env.API_AUTH_TOKEN
+  await withEnv(
+    {
+      GEMINI_API_KEY: 'test-key',
+      GOOGLE_CLIENT_ID: null,
+      API_AUTH_TOKEN: null,
+    },
+    () =>
+      withFetchCalls(
+        async (url) => {
+          if (String(url).startsWith('https://shop.example/product')) {
+            return htmlResponse(
+              '<html><head><title>가벼운 무선 키보드</title><meta name="description" content="조용한 타건감과 낮은 높이의 디자인"></head></html>',
+            )
+          }
+          return geminiKeywordResponse(['조용한 타건감', '낮은 디자인', '가벼운 무게'])
+        },
+        async (calls) => {
+          const req = createMockRequest({
+            action: 'keywords',
+            productUrl: 'https://shop.example/product/keyboard',
+            rating: 5,
+            category: 'product',
+          })
+          const res = createMockResponse()
 
-  const calls = []
-  globalThis.fetch = async (url) => {
-    calls.push(String(url))
-    if (String(url).startsWith('https://shop.example/product')) {
-      return new Response(
-        '<html><head><title>가벼운 무선 키보드</title><meta name="description" content="조용한 타건감과 얇은 디자인의 키보드"></head></html>',
-        { status: 200, headers: { 'Content-Type': 'text/html; charset=utf-8' } },
-      )
-    }
-    return new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: '{"keywords":["조용한 타건감","얇은 디자인","가벼운 무게"]}' }] } }] }), {
-      status: 200,
-      headers: { 'Content-Type': 'application/json' },
-    })
-  }
+          await handler(req, res)
 
-  const req = createMockRequest({
-    action: 'keywords',
-    productUrl: 'https://shop.example/product/keyboard',
-    rating: 5,
-    category: 'product',
-  })
-  const res = createMockResponse()
-
-  try {
-    await handler(req, res)
-  } finally {
-    globalThis.fetch = oldFetch
-    if (oldGeminiKey == null) delete process.env.GEMINI_API_KEY
-    else process.env.GEMINI_API_KEY = oldGeminiKey
-    if (oldGoogleClientId == null) delete process.env.GOOGLE_CLIENT_ID
-    else process.env.GOOGLE_CLIENT_ID = oldGoogleClientId
-    if (oldApiAuthToken == null) delete process.env.API_AUTH_TOKEN
-    else process.env.API_AUTH_TOKEN = oldApiAuthToken
-  }
-
-  assert.equal(res.statusCode, 200)
-  assert.deepEqual(JSON.parse(res.body).keywords, ['조용한 타건감', '얇은 디자인', '가벼운 무게'])
-  assert.equal(calls.length, 2)
+          assert.equal(res.statusCode, 200)
+          assert.deepEqual(JSON.parse(res.body).keywords, [
+            '조용한 타건감',
+            '낮은 디자인',
+            '가벼운 무게',
+          ])
+          assert.equal(calls.length, 2)
+        },
+      ),
+  )
 })
 
 test('handler analyzes product options from productUrl', async () => {
-  const oldApiAuthToken = process.env.API_AUTH_TOKEN
-  const oldFetch = globalThis.fetch
-  delete process.env.API_AUTH_TOKEN
+  await withEnv({ API_AUTH_TOKEN: null }, () =>
+    withFetch(
+      async (url) => {
+        if (String(url).startsWith('https://shop.example/product')) {
+          return htmlResponse(
+            '<html><head><title>테스트 상품</title></head><body><label for="color">색상</label><select id="color" name="color"><option value="">선택</option><option value="black">블랙</option><option value="white">화이트</option></select></body></html>',
+          )
+        }
+        return jsonResponse({})
+      },
+      async () => {
+        const req = createMockRequest({
+          action: 'analyze-product',
+          productUrl: 'https://shop.example/product/keyboard',
+        })
+        const res = createMockResponse()
 
-  globalThis.fetch = async (url) => {
-    if (String(url).startsWith('https://shop.example/product')) {
-      return new Response(
-        '<html><head><title>테스트 상품</title></head><body><label for="color">색상</label><select id="color" name="color"><option value="">선택</option><option value="black">블랙</option><option value="white">화이트</option></select></body></html>',
-        { status: 200, headers: { 'Content-Type': 'text/html; charset=utf-8' } },
-      )
-    }
-    return new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } })
-  }
+        await handler(req, res)
 
-  const req = createMockRequest({
-    action: 'analyze-product',
-    productUrl: 'https://shop.example/product/keyboard',
-  })
-  const res = createMockResponse()
-
-  try {
-    await handler(req, res)
-  } finally {
-    globalThis.fetch = oldFetch
-    if (oldApiAuthToken == null) delete process.env.API_AUTH_TOKEN
-    else process.env.API_AUTH_TOKEN = oldApiAuthToken
-  }
-
-  assert.equal(res.statusCode, 200)
-  const body = JSON.parse(res.body)
-  assert.equal(body.ok, true)
-  assert.equal(body.optionGroups.length, 1)
-  assert.equal(body.optionGroups[0].label, '색상')
-  assert.deepEqual(
-    body.optionGroups[0].options.map((option) => option.label),
-    ['블랙', '화이트'],
+        assert.equal(res.statusCode, 200)
+        const body = JSON.parse(res.body)
+        assert.equal(body.ok, true)
+        assert.equal(body.optionGroups.length, 1)
+        assert.equal(body.optionGroups[0].label, '색상')
+        assert.deepEqual(
+          body.optionGroups[0].options.map((option) => option.label),
+          ['블랙', '화이트'],
+        )
+      },
+    ),
   )
 })
 
 test('handler generates keywords from productContext without images', async () => {
-  const oldGeminiKey = process.env.GEMINI_API_KEY
-  const oldGoogleClientId = process.env.GOOGLE_CLIENT_ID
-  const oldApiAuthToken = process.env.API_AUTH_TOKEN
-  const oldFetch = globalThis.fetch
-  process.env.GEMINI_API_KEY = 'test-key'
-  delete process.env.GOOGLE_CLIENT_ID
-  delete process.env.API_AUTH_TOKEN
+  await withEnv(
+    {
+      GEMINI_API_KEY: 'test-key',
+      GOOGLE_CLIENT_ID: null,
+      API_AUTH_TOKEN: null,
+    },
+    () =>
+      withFetch(
+        async () => geminiKeywordResponse(['블랙 컬러', '무선 연결', '가벼운 무게']),
+        async () => {
+          const req = createMockRequest({
+            action: 'keywords',
+            productUrl: 'https://shop.example/product/keyboard',
+            productContext: '사이트: shop.example\n상품명: 테스트 키보드\n선택 옵션:\n색상: 블랙',
+            rating: 5,
+            category: 'product',
+            previousKeywords: [],
+          })
+          const res = createMockResponse()
 
-  const calls = []
-  globalThis.fetch = async (url) => {
-    calls.push(String(url))
-    return new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: '{"keywords":["블랙 컬러","무선 연결","가벼운 무게"]}' }] } }] }), {
-      status: 200,
-      headers: { 'Content-Type': 'application/json' },
-    })
-  }
+          await handler(req, res)
 
-  const req = createMockRequest({
-    action: 'keywords',
-    productUrl: 'https://shop.example/product/keyboard',
-    productContext: '사이트: shop.example\n상품명: 테스트 키보드\n선택 옵션:\n색상: 블랙',
-    rating: 5,
-    category: 'product',
-    previousKeywords: [],
-  })
-  const res = createMockResponse()
-
-  try {
-    await handler(req, res)
-  } finally {
-    globalThis.fetch = oldFetch
-    if (oldGeminiKey == null) delete process.env.GEMINI_API_KEY
-    else process.env.GEMINI_API_KEY = oldGeminiKey
-    if (oldGoogleClientId == null) delete process.env.GOOGLE_CLIENT_ID
-    else process.env.GOOGLE_CLIENT_ID = oldGoogleClientId
-    if (oldApiAuthToken == null) delete process.env.API_AUTH_TOKEN
-    else process.env.API_AUTH_TOKEN = oldApiAuthToken
-  }
-
-  assert.equal(res.statusCode, 200)
-  assert.deepEqual(JSON.parse(res.body).keywords, ['블랙 컬러', '무선 연결', '가벼운 무게'])
-  assert.equal(calls.length, 1)
+          assert.equal(res.statusCode, 200)
+          assert.deepEqual(JSON.parse(res.body).keywords, ['블랙 컬러', '무선 연결', '가벼운 무게'])
+        },
+      ),
+  )
 })
 
 test('fetchProductAnalysis falls back when product page returns non-ok response', async () => {
-  const oldFetch = globalThis.fetch
-  globalThis.fetch = async () => new Response('blocked', { status: 403 })
+  await withFetch(
+    async () => new Response('blocked', { status: 403 }),
+    async () => {
+      const { fetchProductAnalysis } = await import('./productContext.js')
+      const result = await fetchProductAnalysis(
+        'https://shop.example/products/noise-canceling-headphones',
+      )
 
-  try {
-    const { fetchProductAnalysis } = await import('./productContext.js')
-    const result = await fetchProductAnalysis(
-      'https://shop.example/products/noise-canceling-headphones',
-    )
-
-    assert.equal(result.ok, true)
-    assert.match(result.productContext, /shop\.example/)
-    assert.match(result.productContext, /noise canceling headphones/)
-    assert.match(result.productContext, /HTTP 403/)
-  } finally {
-    globalThis.fetch = oldFetch
-  }
+      assert.equal(result.ok, true)
+      assert.match(result.productContext, /shop\.example/)
+      assert.match(result.productContext, /noise canceling headphones/)
+      assert.match(result.productContext, /HTTP 403/)
+    },
+  )
 })
 
 test('validateImageInput rejects unsupported mime types', () => {
@@ -414,7 +431,7 @@ test('appendKeywordRetryGuidance includes rejected keyword sets', () => {
   assert.match(prompt, /금지된 이전 키워드 조합/)
   assert.match(prompt, /배송 빠름, 색감 좋음/)
   assert.match(prompt, /마감 깔끔, 포장 꼼꼼/)
-  assert.match(prompt, /완전히 같은 조합/)
+  assert.match(prompt, /같은 조합을 다시 내지 마/)
 })
 
 test('parseKeywordsFromText reads JSON keyword responses', () => {

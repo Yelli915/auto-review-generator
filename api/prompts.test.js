@@ -25,7 +25,26 @@ test('buildKeywordPrompt includes review category and multi-image context', () =
   assert.match(prompt, /실제 관찰 포인트/)
   assert.match(prompt, /공통 카테고리 문구/)
   assert.match(prompt, /사진 3장을 함께/)
+  assert.match(prompt, /이 장소 자체에서만 확인되는 구체 특성/)
   assert.match(prompt, /최소 3개, 최대 8개/)
+})
+
+test('buildKeywordPrompt includes product context from URL analysis', () => {
+  const prompt = buildKeywordPrompt({
+    rating: 5,
+    category: 'product',
+    productContext:
+      '사이트: shop.example\n상품명: 무선 키보드\n설명: 조용한 타건감\n선택 옵션:\n색상: 블랙',
+    minKeywordCount: 3,
+    maxKeywordCount: 8,
+  })
+
+  assert.match(prompt, /상품\/장소에서 수집한 실제 정보/)
+  assert.match(prompt, /상품명: 무선 키보드/)
+  assert.match(prompt, /선택 옵션/)
+  assert.match(prompt, /상품명, 설명, 선택 옵션/)
+  assert.match(prompt, /추측은 배제/)
+  assert.match(prompt, /이 상품 자체에서만 확인되는 구체 특성/)
 })
 
 test('buildKeywordPrompt asks for variation from previous keywords', () => {
@@ -35,17 +54,17 @@ test('buildKeywordPrompt asks for variation from previous keywords', () => {
     imageCount: 1,
     minKeywordCount: 3,
     maxKeywordCount: 8,
-    previousKeywords: ['배송 좋음', '포장 깔끔', '마감 훌륭'],
+    previousKeywords: ['배송 빠름', '포장 깔끔', '마감 탄탄'],
   })
 
   assert.match(prompt, /직전 조합/)
-  assert.match(prompt, /최소 1개 이상은 완전히 다른 관찰 포인트/)
+  assert.match(prompt, /최소 1개 이상은 이전과 다른 관찰 포인트/)
 })
 
 test('buildReviewPrompt includes review category context', () => {
   const { prompt, safeLength, minReviewChars } = buildReviewPrompt({
     rating: 5,
-    keywords: ['조명 편함', '동선 넓음'],
+    keywords: ['조명 은은함', '동선 편함'],
     length: 'long',
     tone: 'formal',
     category: 'place',
@@ -54,17 +73,17 @@ test('buildReviewPrompt includes review category context', () => {
   assert.equal(safeLength, 'long')
   assert.equal(minReviewChars, 90)
   assert.match(prompt, /대상: 장소/)
-  assert.match(prompt, /실제 대상의 특징만/)
+  assert.match(prompt, /실제 대상의 특징/)
   assert.match(prompt, /위치, 동선, 좌석/)
   assert.match(prompt, /다른 상품이나 장소에도 그대로 쓸 수 있는 말/)
   assert.match(prompt, /90자 이상/)
-  assert.match(prompt, /실제 경험한 디테일/)
+  assert.match(prompt, /실제 경험의 디테일/)
 })
 
 test('buildReviewPrompt guides sparse long reviews without blocking them', () => {
   const { prompt, safeLength, minReviewChars } = buildReviewPrompt({
     rating: 4,
-    keywords: ['배송 좋음'],
+    keywords: ['배송 빠름'],
     length: 'long',
     tone: 'neutral',
     category: 'product',
@@ -72,7 +91,7 @@ test('buildReviewPrompt guides sparse long reviews without blocking them', () =>
 
   assert.equal(safeLength, 'long')
   assert.equal(minReviewChars, 90)
-  assert.match(prompt, /선택한 키워드가 적어서 길게 쓰면 흔한 말로 흐를 수 있으니/)
-  assert.match(prompt, /카테고리 공통문장/)
-  assert.match(prompt, /실제 대상에서 확인된 구체 요소/)
+  assert.match(prompt, /선택한 키워드가 적어도 길게 쓸 때/)
+  assert.match(prompt, /카테고리 공통 문장/)
+  assert.match(prompt, /실제 대상에서 확인한 구체 요소/)
 })

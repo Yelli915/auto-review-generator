@@ -139,7 +139,7 @@ function buildFallbackProductContext(urlString, reason = '') {
   const productName = productNameFromUrl(url)
   const parts = [
     `사이트: ${url.hostname}`,
-    productName && `상품명 단서: ${productName}`,
+    productName && `상품명 추정: ${productName}`,
     reason && `페이지 수집 상태: ${reason}`,
     `링크: ${urlString}`,
   ].filter(Boolean)
@@ -176,7 +176,7 @@ function extractAssociatedLabel(html, inputId) {
 function simplifyGroupLabel(rawLabel, fallback) {
   const text = normalizeOptionText(rawLabel || fallback)
   if (!text) return ''
-  return text.replace(/\s*[:|·-]\s*$/, '').trim()
+  return text.replace(/\s*[:|·.-]\s*$/, '').trim()
 }
 
 function extractSelectOptionGroups(html) {

@@ -21,7 +21,7 @@ export const REVIEW_LENGTH_OPTIONS = [
     value: 'long',
     label: '길게',
     controlLabel: '길게 (최소 90자)',
-    promptLabel: '90자 이상으로 상세하게',
+    promptLabel: '90자 이상으로 자세하게',
     minChars: 90,
   },
 ]
@@ -49,12 +49,12 @@ export const REVIEW_TONE_OPTIONS = [
   },
 ]
 
-export const REVIEW_LENGTH_MAP = REVIEW_LENGTH_OPTIONS.reduce((acc, option) => {
+const REVIEW_LENGTH_MAP = REVIEW_LENGTH_OPTIONS.reduce((acc, option) => {
   acc[option.value] = option
   return acc
 }, {})
 
-export const REVIEW_TONE_MAP = REVIEW_TONE_OPTIONS.reduce((acc, option) => {
+const REVIEW_TONE_MAP = REVIEW_TONE_OPTIONS.reduce((acc, option) => {
   acc[option.value] = option
   return acc
 }, {})
