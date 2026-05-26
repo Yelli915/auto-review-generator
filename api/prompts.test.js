@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import {
   buildKeywordPrompt,
+  buildProductTypePrompt,
   buildReviewPrompt,
   keywordSentimentGuide,
 } from './prompts.js'
@@ -59,6 +60,20 @@ test('buildKeywordPrompt asks for variation from previous keywords', () => {
 
   assert.match(prompt, /직전 조합/)
   assert.match(prompt, /최소 1개 이상은 이전과 다른 관찰 포인트/)
+})
+
+test('buildProductTypePrompt asks for focused product type candidates', () => {
+  const prompt = buildProductTypePrompt({
+    category: 'product',
+    productContext: '상품명: 데일리 러닝화\n설명: 쿠션감 좋은 운동화',
+    minTypeCount: 3,
+    maxTypeCount: 6,
+  })
+
+  assert.match(prompt, /상품 유형 후보/)
+  assert.match(prompt, /브랜드명, 모델명, 색상, 용량/)
+  assert.match(prompt, /productTypes/)
+  assert.match(prompt, /3~6/)
 })
 
 test('buildReviewPrompt includes review category context', () => {

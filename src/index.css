@@ -615,6 +615,49 @@ body {
   word-break: break-word;
 }
 
+.product-type-list {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.product-type-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text-h);
+  cursor: pointer;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.product-type-option:hover {
+  border-color: var(--accent-border);
+  background: var(--surface-subtle);
+}
+
+.product-type-option.is-active {
+  border-color: var(--accent);
+  background: var(--accent-bg);
+  box-shadow: var(--shadow-sm);
+}
+
+.product-type-option input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--accent);
+}
+
 .upload-row {
   display: grid;
   grid-template-columns: 1fr;
