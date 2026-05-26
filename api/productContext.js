@@ -85,13 +85,16 @@ function decodeHtmlEntities(text) {
 }
 
 function extractMetaContent(html, selector) {
-  const escapedSelector = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-  const re = new RegExp(
-    `<meta\\b(?=[^>]*(?:name|property)=["']${escapedSelector}["'])(?=[^>]*content=["']([^"']+)["'])[^>]*>`,
-    'i',
-  )
-  const match = html.match(re)
-  return match ? decodeHtmlEntities(match[1]) : ''
+  const metaRe = /<meta\b([^>]*)>/gi
+  let match
+  while ((match = metaRe.exec(html)) !== null) {
+    const attrs = parseAttributes(match[1] || '')
+    const key = attrs.property || attrs.name
+    if (key?.toLowerCase() === selector.toLowerCase() && attrs.content) {
+      return decodeHtmlEntities(attrs.content)
+    }
+  }
+  return ''
 }
 
 function extractTitle(html) {
@@ -101,18 +104,92 @@ function extractTitle(html) {
   return decodeHtmlEntities(title || '')
 }
 
+function firstString(...values) {
+  return values.find((value) => typeof value === 'string' && value.trim())?.trim() || ''
+}
+
+function normalizeJsonLdType(type) {
+  if (Array.isArray(type)) return type.map((value) => String(value).toLowerCase())
+  if (type) return [String(type).toLowerCase()]
+  return []
+}
+
+function collectJsonLdNodes(value, nodes = []) {
+  if (!value || typeof value !== 'object') return nodes
+  if (Array.isArray(value)) {
+    value.forEach((item) => collectJsonLdNodes(item, nodes))
+    return nodes
+  }
+
+  nodes.push(value)
+  collectJsonLdNodes(value['@graph'], nodes)
+  return nodes
+}
+
+function parseJsonLdBlocks(html) {
+  const blocks = []
+  const scriptRe =
+    /<script\b(?=[^>]*type=["']application\/ld\+json["'])[^>]*>([\s\S]*?)<\/script>/gi
+  let match
+  while ((match = scriptRe.exec(html)) !== null) {
+    const rawJson = decodeHtmlEntities(match[1] || '')
+    if (!rawJson.trim()) continue
+    try {
+      blocks.push(JSON.parse(rawJson))
+    } catch {
+      void 0
+    }
+  }
+  return blocks
+}
+
+function extractOfferPrice(offers) {
+  const offerList = Array.isArray(offers) ? offers : [offers]
+  for (const offer of offerList) {
+    if (!offer || typeof offer !== 'object') continue
+    const price = firstString(offer.price, offer.lowPrice, offer.highPrice)
+    const currency = firstString(offer.priceCurrency)
+    if (price && currency) return `${price} ${currency}`
+    if (price) return price
+  }
+  return ''
+}
+
+function extractStructuredProductData(html) {
+  const nodes = parseJsonLdBlocks(html).flatMap((block) => collectJsonLdNodes(block))
+  const product = nodes.find((node) =>
+    normalizeJsonLdType(node?.['@type']).includes('product'),
+  )
+  if (!product) return {}
+
+  const brand =
+    typeof product.brand === 'string'
+      ? product.brand
+      : firstString(product.brand?.name)
+  return {
+    name: firstString(product.name),
+    description: firstString(product.description),
+    brand,
+    price: extractOfferPrice(product.offers),
+  }
+}
+
 function extractProductContextFromHtml(html, url) {
-  const title = extractTitle(html)
+  const structured = extractStructuredProductData(html)
+  const title = extractTitle(html) || structured.name
   const description =
     extractMetaContent(html, 'og:description') ||
-    extractMetaContent(html, 'description')
+    extractMetaContent(html, 'description') ||
+    structured.description
   const site = extractMetaContent(html, 'og:site_name')
   const price =
     extractMetaContent(html, 'product:price:amount') ||
-    extractMetaContent(html, 'twitter:data1')
+    extractMetaContent(html, 'twitter:data1') ||
+    structured.price
   const parts = [
     site && `사이트: ${site}`,
     title && `상품명: ${title}`,
+    structured.brand && `브랜드: ${structured.brand}`,
     description && `설명: ${description}`,
     price && `가격 정보: ${price}`,
     `링크: ${url}`,

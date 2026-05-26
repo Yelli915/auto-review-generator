@@ -245,6 +245,77 @@ test('handler analyzes product options from productUrl', async () => {
   )
 })
 
+test('handler analyzes metadata when meta attributes are not in a fixed order', async () => {
+  await withEnv({ API_AUTH_TOKEN: null }, () =>
+    withFetch(
+      async (url) => {
+        if (String(url).startsWith('https://shop.example/product')) {
+          return htmlResponse(
+            '<html><head><meta content="속성 순서가 다른 상품명" property="og:title"><meta content="순서와 관계없이 읽어야 하는 설명" name="description"></head></html>',
+          )
+        }
+        return jsonResponse({})
+      },
+      async () => {
+        const req = createMockRequest({
+          action: 'analyze-product',
+          productUrl: 'https://shop.example/product/order',
+        })
+        const res = createMockResponse()
+
+        await handler(req, res)
+
+        assert.equal(res.statusCode, 200)
+        const body = JSON.parse(res.body)
+        assert.match(body.productContext, /속성 순서가 다른 상품명/)
+        assert.match(body.productContext, /순서와 관계없이 읽어야 하는 설명/)
+      },
+    ),
+  )
+})
+
+test('handler analyzes product JSON-LD metadata when page meta tags are missing', async () => {
+  await withEnv({ API_AUTH_TOKEN: null }, () =>
+    withFetch(
+      async (url) => {
+        if (String(url).startsWith('https://shop.example/product')) {
+          return htmlResponse(
+            [
+              '<html><head><script type="application/ld+json">',
+              JSON.stringify({
+                '@context': 'https://schema.org',
+                '@type': 'Product',
+                name: 'JSON-LD 무선 마우스',
+                description: '저소음 클릭과 긴 배터리 수명',
+                brand: { '@type': 'Brand', name: 'Test Brand' },
+                offers: { '@type': 'Offer', price: '39000', priceCurrency: 'KRW' },
+              }),
+              '</script></head></html>',
+            ].join(''),
+          )
+        }
+        return jsonResponse({})
+      },
+      async () => {
+        const req = createMockRequest({
+          action: 'analyze-product',
+          productUrl: 'https://shop.example/product/json-ld',
+        })
+        const res = createMockResponse()
+
+        await handler(req, res)
+
+        assert.equal(res.statusCode, 200)
+        const body = JSON.parse(res.body)
+        assert.match(body.productContext, /JSON-LD 무선 마우스/)
+        assert.match(body.productContext, /저소음 클릭과 긴 배터리 수명/)
+        assert.match(body.productContext, /Test Brand/)
+        assert.match(body.productContext, /39000 KRW/)
+      },
+    ),
+  )
+})
+
 test('handler generates keywords from productContext without images', async () => {
   await withEnv(
     {
