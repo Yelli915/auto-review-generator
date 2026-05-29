@@ -316,6 +316,57 @@ test('handler analyzes product JSON-LD metadata when page meta tags are missing'
   )
 })
 
+test('handler analyzes product data embedded for client-side rendering', async () => {
+  await withEnv({ API_AUTH_TOKEN: null }, () =>
+    withFetch(
+      async (url) => {
+        if (String(url).startsWith('https://shop.example/product')) {
+          return htmlResponse(
+            [
+              '<html><head><title>Loading...</title></head><body>',
+              '<div id="root"></div>',
+              '<script>',
+              'window.__INITIAL_STATE__ = ',
+              JSON.stringify({
+                page: {
+                  goods: {
+                    goodsNm: '로딩 후 표시되는 세럼',
+                    brandNm: '동적 브랜드',
+                    goodsImgUrl: '/images/serum.jpg',
+                    salePrc: 21900,
+                    goodsDesc: '수분감이 오래가는 상품',
+                  },
+                },
+              }),
+              '</script>',
+              '</body></html>',
+            ].join(''),
+          )
+        }
+        return jsonResponse({})
+      },
+      async () => {
+        const req = createMockRequest({
+          action: 'analyze-product',
+          productUrl: 'https://shop.example/product/detail?goodsNo=A0001',
+        })
+        const res = createMockResponse()
+
+        await handler(req, res)
+
+        assert.equal(res.statusCode, 200)
+        const body = JSON.parse(res.body)
+        assert.equal(body.product.name, '로딩 후 표시되는 세럼')
+        assert.equal(body.product.brand, '동적 브랜드')
+        assert.equal(body.product.price, '21900')
+        assert.equal(body.product.imageUrl, 'https://shop.example/images/serum.jpg')
+        assert.match(body.productContext, /로딩 후 표시되는 세럼/)
+        assert.match(body.productContext, /동적 브랜드/)
+      },
+    ),
+  )
+})
+
 test('handler generates keywords from productContext without images', async () => {
   await withEnv(
     {

@@ -38,6 +38,72 @@ const READER_FETCH_HEADERS = {
   'Cache-Control': 'no-cache',
 }
 
+const EMBEDDED_JSON_SCRIPT_IDS = new Set([
+  '__NEXT_DATA__',
+  '__NUXT_DATA__',
+  '__remixContext',
+  '__APOLLO_STATE__',
+])
+
+const EMBEDDED_JSON_ASSIGNMENT_RE =
+  /(?:window\.|globalThis\.|self\.)?(?:__INITIAL_STATE__|__PRELOADED_STATE__|__NEXT_DATA__|__NUXT__|__APOLLO_STATE__|__PRODUCT_DATA__|__GOODS_DATA__)\s*=\s*/gi
+
+const PRODUCT_KEYWORDS_RE = /product|goods|item|prd|sku|상품|goodsNo/i
+
+const PRODUCT_FIELD_KEYS = {
+  name: [
+    'goodsNm',
+    'goodsName',
+    'goodsDispNm',
+    'productName',
+    'prdNm',
+    'itemName',
+    'dispGoodsNm',
+    'name',
+    'title',
+  ],
+  brand: [
+    'brandNm',
+    'brandName',
+    'brndNm',
+    'brndName',
+    'brandKorNm',
+    'brand',
+    'makerName',
+  ],
+  imageUrl: [
+    'imageUrl',
+    'imgUrl',
+    'mainImg',
+    'mainImgUrl',
+    'goodsImg',
+    'goodsImgUrl',
+    'productImage',
+    'repImage',
+    'thumbnail',
+    'thumbUrl',
+  ],
+  price: [
+    'price',
+    'salePrice',
+    'finalPrice',
+    'goodsPrice',
+    'originalPrice',
+    'listPrice',
+    'salePrc',
+    'goodsPrc',
+    'lowPrice',
+  ],
+  description: [
+    'description',
+    'desc',
+    'goodsDesc',
+    'productDesc',
+    'summary',
+    'shortDescription',
+  ],
+}
+
 function normalizeProductUrl(rawUrl) {
   if (typeof rawUrl !== 'string' || !rawUrl.trim()) {
     return { ok: false, status: 400, error: '상품 링크를 입력해 주세요.' }
@@ -126,6 +192,45 @@ function firstString(...values) {
   return values.find((value) => typeof value === 'string' && value.trim())?.trim() || ''
 }
 
+function firstValueByKeys(source, keys) {
+  if (!source || typeof source !== 'object') return ''
+  for (const key of keys) {
+    const value = source[key]
+    if (typeof value === 'string' && value.trim()) return value.trim()
+    if (typeof value === 'number' && Number.isFinite(value)) return String(value)
+  }
+  return ''
+}
+
+function firstImageValue(value) {
+  if (typeof value === 'string' && value.trim()) return value.trim()
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const image = firstImageValue(item)
+      if (image) return image
+    }
+    return ''
+  }
+  if (!value || typeof value !== 'object') return ''
+  return firstValueByKeys(value, [
+    'url',
+    'src',
+    'imageUrl',
+    'imgUrl',
+    'mainImgUrl',
+    'thumbnail',
+  ])
+}
+
+function normalizeImageUrl(imageUrl, pageUrl) {
+  if (typeof imageUrl !== 'string' || !imageUrl.trim()) return ''
+  try {
+    return new URL(imageUrl.trim(), pageUrl).toString()
+  } catch {
+    return imageUrl.trim()
+  }
+}
+
 function normalizeProductField(value) {
   return typeof value === 'string' && value.trim() ? value.trim() : null
 }
@@ -160,6 +265,44 @@ function normalizeJsonLdType(type) {
   return []
 }
 
+function sliceBalancedJsonLike(text, startIndex) {
+  const openCh = text[startIndex]
+  const closeCh = openCh === '{' ? '}' : openCh === '[' ? ']' : ''
+  if (!closeCh) return ''
+
+  let depth = 0
+  let inString = false
+  let quote = ''
+  let escaped = false
+
+  for (let i = startIndex; i < text.length; i += 1) {
+    const ch = text[i]
+    if (inString) {
+      if (escaped) {
+        escaped = false
+      } else if (ch === '\\') {
+        escaped = true
+      } else if (ch === quote) {
+        inString = false
+        quote = ''
+      }
+      continue
+    }
+
+    if (ch === '"' || ch === "'") {
+      inString = true
+      quote = ch
+      continue
+    }
+    if (ch === openCh) depth += 1
+    if (ch === closeCh) {
+      depth -= 1
+      if (depth === 0) return text.slice(startIndex, i + 1)
+    }
+  }
+  return ''
+}
+
 function collectJsonLdNodes(value, nodes = []) {
   if (!value || typeof value !== 'object') return nodes
   if (Array.isArray(value)) {
@@ -187,6 +330,124 @@ function parseJsonLdBlocks(html) {
     }
   }
   return blocks
+}
+
+function collectScriptPayloads(html) {
+  const payloads = []
+  const scriptRe = /<script\b([^>]*)>([\s\S]*?)<\/script>/gi
+  let match
+  while ((match = scriptRe.exec(html)) !== null) {
+    const attrs = parseAttributes(match[1] || '')
+    if ('src' in attrs) continue
+    const body = decodeHtmlEntities(match[2] || '').trim()
+    if (!body) continue
+    const type = String(attrs.type || '').toLowerCase()
+    const id = String(attrs.id || '')
+    if (
+      type.includes('json') ||
+      EMBEDDED_JSON_SCRIPT_IDS.has(id) ||
+      PRODUCT_KEYWORDS_RE.test(id)
+    ) {
+      payloads.push(body)
+    }
+
+    EMBEDDED_JSON_ASSIGNMENT_RE.lastIndex = 0
+    let assignment
+    while ((assignment = EMBEDDED_JSON_ASSIGNMENT_RE.exec(body)) !== null) {
+      const start = body.slice(assignment.index + assignment[0].length).search(/[\[{]/)
+      if (start < 0) continue
+      const jsonStart = assignment.index + assignment[0].length + start
+      const jsonLike = sliceBalancedJsonLike(body, jsonStart)
+      if (jsonLike) payloads.push(jsonLike)
+    }
+  }
+  return payloads
+}
+
+function parseEmbeddedJsonPayload(payload) {
+  if (typeof payload !== 'string' || !payload.trim()) return null
+  const trimmed = payload.trim()
+  const start = trimmed.search(/[\[{]/)
+  if (start < 0) return null
+  const jsonLike = sliceBalancedJsonLike(trimmed, start)
+  if (!jsonLike) return null
+
+  try {
+    return JSON.parse(jsonLike)
+  } catch {
+    return null
+  }
+}
+
+function scoreProductCandidate(product, keyPath = '') {
+  let score = 0
+  if (product.name) score += 4
+  if (product.brand) score += 2
+  if (product.imageUrl) score += 2
+  if (product.price) score += 2
+  if (product.description) score += 1
+  if (PRODUCT_KEYWORDS_RE.test(keyPath)) score += 2
+  return score
+}
+
+function productInfoFromObject(value, pageUrl) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+
+  const imageRaw =
+    firstImageValue(firstValueByKeys(value, PRODUCT_FIELD_KEYS.imageUrl)) ||
+    firstImageValue(value.image) ||
+    firstImageValue(value.images) ||
+    firstImageValue(value.imageList) ||
+    firstImageValue(value.goodsImages)
+  const brandRaw =
+    firstValueByKeys(value, PRODUCT_FIELD_KEYS.brand) ||
+    firstValueByKeys(value.brand, ['name', 'brandName', 'brandNm'])
+
+  return buildProductInfo({
+    name: firstValueByKeys(value, PRODUCT_FIELD_KEYS.name),
+    brand: brandRaw,
+    imageUrl: normalizeImageUrl(imageRaw, pageUrl),
+    price: firstValueByKeys(value, PRODUCT_FIELD_KEYS.price),
+    description: firstValueByKeys(value, PRODUCT_FIELD_KEYS.description),
+    url: pageUrl,
+  })
+}
+
+function findBestEmbeddedProduct(value, pageUrl, keyPath = '', state = { best: null }) {
+  if (!value || typeof value !== 'object') return state.best
+
+  if (Array.isArray(value)) {
+    value.slice(0, 80).forEach((item, index) => {
+      findBestEmbeddedProduct(item, pageUrl, `${keyPath}[${index}]`, state)
+    })
+    return state.best
+  }
+
+  const product = productInfoFromObject(value, pageUrl)
+  const score = scoreProductCandidate(product, keyPath)
+  if (score > (state.best?.score || 0)) {
+    state.best = { score, product }
+  }
+
+  for (const [key, child] of Object.entries(value)) {
+    if (!child || typeof child !== 'object') continue
+    findBestEmbeddedProduct(child, pageUrl, keyPath ? `${keyPath}.${key}` : key, state)
+  }
+
+  return state.best
+}
+
+function extractEmbeddedProductData(html, pageUrl) {
+  let best = null
+  for (const payload of collectScriptPayloads(html)) {
+    const parsed = parseEmbeddedJsonPayload(payload)
+    if (!parsed) continue
+    const candidate = findBestEmbeddedProduct(parsed, pageUrl)
+    if (candidate && candidate.score > (best?.score || 0)) {
+      best = candidate
+    }
+  }
+  return best?.score >= 4 ? best.product : {}
 }
 
 function extractOfferPrice(offers) {
@@ -227,25 +488,29 @@ function extractStructuredProductData(html) {
 
 function extractProductInfoFromHtml(html, url) {
   const structured = extractStructuredProductData(html)
-  const title = extractTitle(html) || structured.name
+  const embedded = extractEmbeddedProductData(html, url)
+  const title = firstString(structured.name, embedded.name, extractTitle(html))
   const description =
     extractMetaContent(html, 'og:description') ||
     extractMetaContent(html, 'description') ||
-    structured.description
+    structured.description ||
+    embedded.description
   const site = extractMetaContent(html, 'og:site_name')
   const imageUrl =
     extractMetaContent(html, 'og:image') ||
     extractMetaContent(html, 'twitter:image') ||
-    structured.imageUrl
+    structured.imageUrl ||
+    embedded.imageUrl
   const price =
     extractMetaContent(html, 'product:price:amount') ||
     extractMetaContent(html, 'og:price:amount') ||
     extractMetaContent(html, 'twitter:data1') ||
-    structured.price
+    structured.price ||
+    embedded.price
   return buildProductInfo({
     name: title,
-    brand: structured.brand,
-    imageUrl,
+    brand: firstString(structured.brand, embedded.brand),
+    imageUrl: normalizeImageUrl(imageUrl, url),
     price,
     description,
     site,
