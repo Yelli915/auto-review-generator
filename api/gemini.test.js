@@ -398,19 +398,21 @@ test('handler generates keywords from productContext without images', async () =
 })
 
 test('fetchProductAnalysis falls back when product page returns non-ok response', async () => {
-  await withFetch(
-    async () => new Response('blocked', { status: 403 }),
-    async () => {
-      const { fetchProductAnalysis } = await import('./productContext.js')
-      const result = await fetchProductAnalysis(
-        'https://shop.example/products/noise-canceling-headphones',
-      )
+  await withEnv({ DISABLE_RENDERED_PRODUCT_FETCH: '1' }, () =>
+    withFetch(
+      async () => new Response('blocked', { status: 403 }),
+      async () => {
+        const { fetchProductAnalysis } = await import('./productContext.js')
+        const result = await fetchProductAnalysis(
+          'https://shop.example/products/noise-canceling-headphones',
+        )
 
-      assert.equal(result.ok, true)
-      assert.match(result.productContext, /shop\.example/)
-      assert.match(result.productContext, /noise canceling headphones/)
-      assert.match(result.productContext, /HTTP 403/)
-    },
+        assert.equal(result.ok, true)
+        assert.match(result.productContext, /shop\.example/)
+        assert.match(result.productContext, /noise canceling headphones/)
+        assert.match(result.productContext, /HTTP 403/)
+      },
+    ),
   )
 })
 

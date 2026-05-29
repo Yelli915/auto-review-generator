@@ -1,3 +1,5 @@
+import { fetchRenderedProductInfo } from './renderedProductContext.js'
+
 const MAX_PRODUCT_URL_LENGTH = 2048
 const MAX_PRODUCT_PAGE_BYTES = 512 * 1024
 const PRODUCT_PAGE_TIMEOUT_MS = 6000
@@ -20,6 +22,8 @@ const FALLBACK_WARNINGS = {
     '페이지에서 상품 메타 정보를 찾지 못했습니다. 필요한 정보를 직접 입력해 주세요.',
   readFailed:
     '상품 페이지를 읽는 중 문제가 생겼습니다. URL에서 추정한 값 또는 직접 입력한 정보를 사용합니다.',
+  rendered:
+    '상품 페이지가 로딩 후 표시되는 구조라 브라우저 렌더링 결과에서 정보를 가져왔습니다.',
 }
 
 const PRODUCT_FETCH_HEADERS = {
@@ -663,6 +667,33 @@ async function fetchReaderProductAnalysis(urlString, reason = '') {
   }
 }
 
+async function fetchRenderedProductAnalysis(urlString) {
+  const product = await fetchRenderedProductInfo(
+    urlString,
+    PRODUCT_FETCH_HEADERS['User-Agent'],
+  )
+  if (!product) return null
+  const normalizedProduct = buildProductInfo({
+    ...product,
+    imageUrl: normalizeImageUrl(product.imageUrl, urlString),
+    url: urlString,
+  })
+  if (!hasUsefulProductInfo(normalizedProduct)) return null
+  return buildAnalysisResult({
+    url: urlString,
+    product: normalizedProduct,
+    productContext: buildProductContext(normalizedProduct, urlString),
+    optionGroups: [],
+    analysisStatus: 'rendered',
+    warning: FALLBACK_WARNINGS.rendered,
+  })
+}
+
+async function cacheRenderedProductAnalysis(urlString) {
+  const renderedAnalysis = await fetchRenderedProductAnalysis(urlString)
+  return renderedAnalysis ? cacheProductAnalysis(urlString, renderedAnalysis) : null
+}
+
 function normalizeOptionText(text) {
   return decodeHtmlEntities(String(text || ''))
     .replace(/<[^>]*>/g, ' ')
@@ -918,6 +949,11 @@ export async function fetchProductAnalysis(rawUrl) {
       return cacheProductAnalysis(normalized.url, readerAnalysis)
     }
 
+    const renderedAnalysis = await cacheRenderedProductAnalysis(normalized.url)
+    if (renderedAnalysis) {
+      return renderedAnalysis
+    }
+
     return cacheProductAnalysis(
       normalized.url,
       buildFallbackAnalysis(
@@ -937,6 +973,11 @@ export async function fetchProductAnalysis(rawUrl) {
       return cacheProductAnalysis(normalized.url, readerAnalysis)
     }
 
+    const renderedAnalysis = await cacheRenderedProductAnalysis(normalized.url)
+    if (renderedAnalysis) {
+      return renderedAnalysis
+    }
+
     return cacheProductAnalysis(
       normalized.url,
       buildFallbackAnalysis(
@@ -949,6 +990,11 @@ export async function fetchProductAnalysis(rawUrl) {
 
   const contentType = response.headers.get('content-type') || ''
   if (contentType && !/text\/html|application\/xhtml\+xml/i.test(contentType)) {
+    const renderedAnalysis = await cacheRenderedProductAnalysis(normalized.url)
+    if (renderedAnalysis) {
+      return renderedAnalysis
+    }
+
     return cacheProductAnalysis(
       normalized.url,
       buildFallbackAnalysis(
@@ -964,6 +1010,12 @@ export async function fetchProductAnalysis(rawUrl) {
     const product = extractProductInfoFromHtml(html, normalized.url)
     const productContext = buildProductContext(product, normalized.url)
     const hasInfo = hasUsefulProductInfo(product)
+    if (!hasInfo) {
+      const renderedAnalysis = await cacheRenderedProductAnalysis(normalized.url)
+      if (renderedAnalysis) {
+        return renderedAnalysis
+      }
+    }
     return cacheProductAnalysis(
       normalized.url,
       buildAnalysisResult({
@@ -981,6 +1033,11 @@ export async function fetchProductAnalysis(rawUrl) {
       }),
     )
   } catch (err) {
+    const renderedAnalysis = await cacheRenderedProductAnalysis(normalized.url)
+    if (renderedAnalysis) {
+      return renderedAnalysis
+    }
+
     return cacheProductAnalysis(
       normalized.url,
       buildFallbackAnalysis(
