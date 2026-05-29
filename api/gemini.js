@@ -1146,8 +1146,12 @@ export default async function handler(req, res) {
     return json(res, 200, {
       ok: true,
       url: analysis.url,
+      product: analysis.product,
       productContext: analysis.productContext,
       optionGroups: analysis.optionGroups,
+      analysisStatus: analysis.analysisStatus,
+      warning: analysis.warning,
+      needsManualInput: analysis.needsManualInput,
     })
   }
 

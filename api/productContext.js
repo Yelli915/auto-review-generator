@@ -3,6 +3,24 @@ const MAX_PRODUCT_PAGE_BYTES = 512 * 1024
 const PRODUCT_PAGE_TIMEOUT_MS = 6000
 const READER_PAGE_TIMEOUT_MS = 10000
 const READER_BASE_URL = 'https://r.jina.ai/'
+const PRODUCT_ANALYSIS_CACHE_TTL_MS = 10 * 60 * 1000
+const PRODUCT_ANALYSIS_CACHE_MAX = 80
+
+const productAnalysisCache = new Map()
+const fetchCacheScopes = new WeakMap()
+let nextFetchCacheScope = 1
+
+const FALLBACK_WARNINGS = {
+  fetchFailed:
+    '이 사이트는 본문 읽기가 제한되어 URL에서 추정한 정보만 사용합니다. 부족한 상품 정보는 직접 입력해 주세요.',
+  httpBlocked:
+    '상품 페이지 접근이 제한되어 URL에서 추정한 정보만 사용합니다. 부족한 상품 정보는 직접 입력해 주세요.',
+  nonHtml: '상품 HTML을 읽을 수 없어 URL에서 추정한 정보만 사용합니다.',
+  noMetadata:
+    '페이지에서 상품 메타 정보를 찾지 못했습니다. 필요한 정보를 직접 입력해 주세요.',
+  readFailed:
+    '상품 페이지를 읽는 중 문제가 생겼습니다. URL에서 추정한 값 또는 직접 입력한 정보를 사용합니다.',
+}
 
 const PRODUCT_FETCH_HEADERS = {
   Accept:
@@ -108,6 +126,34 @@ function firstString(...values) {
   return values.find((value) => typeof value === 'string' && value.trim())?.trim() || ''
 }
 
+function normalizeProductField(value) {
+  return typeof value === 'string' && value.trim() ? value.trim() : null
+}
+
+function buildProductInfo({
+  name = '',
+  brand = '',
+  imageUrl = '',
+  price = '',
+  description = '',
+  site = '',
+  url = '',
+} = {}) {
+  return {
+    name: normalizeProductField(name),
+    brand: normalizeProductField(brand),
+    imageUrl: normalizeProductField(imageUrl),
+    price: normalizeProductField(price),
+    description: normalizeProductField(description),
+    site: normalizeProductField(site),
+    url: normalizeProductField(url),
+  }
+}
+
+function hasUsefulProductInfo(product) {
+  return Boolean(product?.name || product?.brand || product?.imageUrl || product?.price)
+}
+
 function normalizeJsonLdType(type) {
   if (Array.isArray(type)) return type.map((value) => String(value).toLowerCase())
   if (type) return [String(type).toLowerCase()]
@@ -170,11 +216,16 @@ function extractStructuredProductData(html) {
     name: firstString(product.name),
     description: firstString(product.description),
     brand,
+    imageUrl: firstString(
+      typeof product.image === 'string' ? product.image : '',
+      product.image?.url,
+      Array.isArray(product.image) ? product.image[0] : '',
+    ),
     price: extractOfferPrice(product.offers),
   }
 }
 
-function extractProductContextFromHtml(html, url) {
+function extractProductInfoFromHtml(html, url) {
   const structured = extractStructuredProductData(html)
   const title = extractTitle(html) || structured.name
   const description =
@@ -182,16 +233,33 @@ function extractProductContextFromHtml(html, url) {
     extractMetaContent(html, 'description') ||
     structured.description
   const site = extractMetaContent(html, 'og:site_name')
+  const imageUrl =
+    extractMetaContent(html, 'og:image') ||
+    extractMetaContent(html, 'twitter:image') ||
+    structured.imageUrl
   const price =
     extractMetaContent(html, 'product:price:amount') ||
+    extractMetaContent(html, 'og:price:amount') ||
     extractMetaContent(html, 'twitter:data1') ||
     structured.price
+  return buildProductInfo({
+    name: title,
+    brand: structured.brand,
+    imageUrl,
+    price,
+    description,
+    site,
+    url,
+  })
+}
+
+function buildProductContext(product, url) {
   const parts = [
-    site && `사이트: ${site}`,
-    title && `상품명: ${title}`,
-    structured.brand && `브랜드: ${structured.brand}`,
-    description && `설명: ${description}`,
-    price && `가격 정보: ${price}`,
+    product?.site && `사이트: ${product.site}`,
+    product?.name && `상품명: ${product.name}`,
+    product?.brand && `브랜드: ${product.brand}`,
+    product?.description && `설명: ${product.description}`,
+    product?.price && `가격 정보: ${product.price}`,
     `링크: ${url}`,
   ].filter(Boolean)
   return parts.join('\n')
@@ -229,6 +297,15 @@ function buildFallbackProductContext(urlString, reason = '') {
     `링크: ${urlString}`,
   ].filter(Boolean)
   return parts.join('\n')
+}
+
+function buildFallbackProductInfo(urlString) {
+  const url = new URL(urlString)
+  return buildProductInfo({
+    name: productNameFromUrl(url),
+    site: url.hostname,
+    url: urlString,
+  })
 }
 
 function buildReaderUrl(urlString) {
@@ -275,6 +352,19 @@ function buildReaderProductContext(text, urlString, reason = '') {
   return parts.join('\n')
 }
 
+function buildReaderProductInfo(text, urlString) {
+  const url = new URL(urlString)
+  return buildProductInfo({
+    name: extractReaderTitle(text) || productNameFromUrl(url),
+    site: url.hostname,
+    description: cleanReaderText(text)
+      .replace(/^Title:\s*.*$/im, '')
+      .trim()
+      .slice(0, 600),
+    url: urlString,
+  })
+}
+
 async function fetchReaderProductAnalysis(urlString, reason = '') {
   let response
   try {
@@ -295,6 +385,11 @@ async function fetchReaderProductAnalysis(urlString, reason = '') {
     return {
       ok: true,
       url: urlString,
+      product: buildReaderProductInfo(text, urlString),
+      analysisStatus: 'reader',
+      warning: reason
+        ? '상품 페이지 본문을 직접 읽지 못해 보조 읽기 방식으로 정보를 가져왔습니다.'
+        : '',
       productContext: buildReaderProductContext(text, urlString, reason),
       optionGroups: [],
     }
@@ -471,9 +566,76 @@ async function readResponseTextLimited(response) {
   return new TextDecoder().decode(bytes)
 }
 
+function getProductAnalysisCacheKey(urlString) {
+  const fetchImpl = globalThis.fetch
+  if (typeof fetchImpl !== 'function') return urlString
+  let scope = fetchCacheScopes.get(fetchImpl)
+  if (!scope) {
+    scope = nextFetchCacheScope
+    nextFetchCacheScope += 1
+    fetchCacheScopes.set(fetchImpl, scope)
+  }
+  return `${scope}:${urlString}`
+}
+
+function getCachedProductAnalysis(urlString) {
+  const cacheKey = getProductAnalysisCacheKey(urlString)
+  const cached = productAnalysisCache.get(cacheKey)
+  if (!cached) return null
+  if (Date.now() - cached.createdAt > PRODUCT_ANALYSIS_CACHE_TTL_MS) {
+    productAnalysisCache.delete(cacheKey)
+    return null
+  }
+  return cached.value
+}
+
+function cacheProductAnalysis(urlString, value) {
+  productAnalysisCache.set(getProductAnalysisCacheKey(urlString), {
+    createdAt: Date.now(),
+    value,
+  })
+  if (productAnalysisCache.size > PRODUCT_ANALYSIS_CACHE_MAX) {
+    const firstKey = productAnalysisCache.keys().next().value
+    if (firstKey) productAnalysisCache.delete(firstKey)
+  }
+  return value
+}
+
+function buildAnalysisResult({
+  url,
+  product,
+  productContext,
+  optionGroups = [],
+  analysisStatus = 'ok',
+  warning = '',
+}) {
+  return {
+    ok: true,
+    url,
+    product,
+    productContext,
+    optionGroups,
+    analysisStatus,
+    warning,
+    needsManualInput: !hasUsefulProductInfo(product),
+  }
+}
+
+function buildFallbackAnalysis(url, reason, warning) {
+  return buildAnalysisResult({
+    url,
+    product: buildFallbackProductInfo(url),
+    productContext: buildFallbackProductContext(url, reason),
+    analysisStatus: 'fallback',
+    warning,
+  })
+}
+
 export async function fetchProductAnalysis(rawUrl) {
   const normalized = normalizeProductUrl(rawUrl)
   if (!normalized.ok) return normalized
+  const cached = getCachedProductAnalysis(normalized.url)
+  if (cached) return cached
 
   let response
   try {
@@ -487,17 +649,18 @@ export async function fetchProductAnalysis(rawUrl) {
       normalized.url,
       'direct fetch failed',
     )
-    if (readerAnalysis) return readerAnalysis
+    if (readerAnalysis) {
+      return cacheProductAnalysis(normalized.url, readerAnalysis)
+    }
 
-    return {
-      ok: true,
-      url: normalized.url,
-      productContext: buildFallbackProductContext(
+    return cacheProductAnalysis(
+      normalized.url,
+      buildFallbackAnalysis(
         normalized.url,
         '서버에서 페이지를 직접 읽지 못했습니다.',
+        FALLBACK_WARNINGS.fetchFailed,
       ),
-      optionGroups: [],
-    }
+    )
   }
 
   if (!response.ok) {
@@ -505,55 +668,61 @@ export async function fetchProductAnalysis(rawUrl) {
       normalized.url,
       `HTTP ${response.status}`,
     )
-    if (readerAnalysis) return readerAnalysis
+    if (readerAnalysis) {
+      return cacheProductAnalysis(normalized.url, readerAnalysis)
+    }
 
-    return {
-      ok: true,
-      url: normalized.url,
-      productContext: buildFallbackProductContext(
+    return cacheProductAnalysis(
+      normalized.url,
+      buildFallbackAnalysis(
         normalized.url,
         `HTTP ${response.status} 응답으로 페이지 본문을 읽지 못했습니다.`,
+        FALLBACK_WARNINGS.httpBlocked,
       ),
-      optionGroups: [],
-    }
+    )
   }
 
   const contentType = response.headers.get('content-type') || ''
   if (contentType && !/text\/html|application\/xhtml\+xml/i.test(contentType)) {
-    return {
-      ok: true,
-      url: normalized.url,
-      productContext: buildFallbackProductContext(
+    return cacheProductAnalysis(
+      normalized.url,
+      buildFallbackAnalysis(
         normalized.url,
         'HTML 페이지가 아닌 응답입니다.',
+        FALLBACK_WARNINGS.nonHtml,
       ),
-      optionGroups: [],
-    }
+    )
   }
 
   try {
     const html = await readResponseTextLimited(response)
-    const productContext = extractProductContextFromHtml(html, normalized.url)
-    return {
-      ok: true,
-      url: normalized.url,
-      productContext:
-        productContext.trim() ||
-        buildFallbackProductContext(
-          normalized.url,
-          '페이지에서 상품 메타 정보를 찾지 못했습니다.',
-        ),
-      optionGroups: extractProductOptionGroupsFromHtml(html),
-    }
+    const product = extractProductInfoFromHtml(html, normalized.url)
+    const productContext = buildProductContext(product, normalized.url)
+    const hasInfo = hasUsefulProductInfo(product)
+    return cacheProductAnalysis(
+      normalized.url,
+      buildAnalysisResult({
+        url: normalized.url,
+        product: hasInfo ? product : buildFallbackProductInfo(normalized.url),
+        productContext:
+          productContext.trim() ||
+          buildFallbackProductContext(
+            normalized.url,
+            '페이지에서 상품 메타 정보를 찾지 못했습니다.',
+          ),
+        optionGroups: extractProductOptionGroupsFromHtml(html),
+        analysisStatus: hasInfo ? 'ok' : 'fallback',
+        warning: hasInfo ? '' : FALLBACK_WARNINGS.noMetadata,
+      }),
+    )
   } catch (err) {
-    return {
-      ok: true,
-      url: normalized.url,
-      productContext: buildFallbackProductContext(
+    return cacheProductAnalysis(
+      normalized.url,
+      buildFallbackAnalysis(
         normalized.url,
         err instanceof Error ? err.message : '상품 정보를 읽지 못했습니다.',
+        FALLBACK_WARNINGS.readFailed,
       ),
-      optionGroups: [],
-    }
+    )
   }
 }

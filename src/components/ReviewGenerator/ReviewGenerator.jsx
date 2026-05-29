@@ -113,19 +113,58 @@ function normalizeSourceData(data, fallbackCategory) {
   }
 }
 
-function normalizeProductAnalysis(analysis, fallbackUrl) {
+function normalizeProductInfo(product, fallbackUrl = '') {
+  if (!product || typeof product !== 'object') return null
   return {
-    url: analysis.url || fallbackUrl,
-    productContext: analysis.productContext || '',
-    optionGroups: Array.isArray(analysis.optionGroups) ? analysis.optionGroups : [],
+    name: product.name || '',
+    brand: product.brand || '',
+    imageUrl: product.imageUrl || '',
+    price: product.price || '',
+    description: product.description || '',
+    site: product.site || '',
+    url: product.url || fallbackUrl,
   }
 }
 
-function appendOptionContext(sourceData, selectionSummary) {
-  if (!selectionSummary) return sourceData
+function normalizeProductAnalysis(analysis, fallbackUrl) {
+  const url = analysis.url || fallbackUrl
+  return {
+    url,
+    product: normalizeProductInfo(analysis.product, url),
+    productContext: analysis.productContext || '',
+    optionGroups: Array.isArray(analysis.optionGroups) ? analysis.optionGroups : [],
+    analysisStatus: analysis.analysisStatus || 'ok',
+    warning: analysis.warning || '',
+    needsManualInput: Boolean(analysis.needsManualInput),
+  }
+}
+
+function buildProductInfoContext(product) {
+  if (!product || typeof product !== 'object') return ''
+  return [
+    product.name && `상품명: ${product.name}`,
+    product.brand && `브랜드: ${product.brand}`,
+    product.price && `가격 정보: ${product.price}`,
+    product.description && `설명: ${product.description}`,
+    product.url && `링크: ${product.url}`,
+  ]
+    .filter(Boolean)
+    .join('\n')
+}
+
+function appendProductContext(sourceData, product, selectionSummary) {
+  const productInfoContext = buildProductInfoContext(product)
+  const baseContext = productInfoContext
+    ? `확인한 상품 정보:\n${productInfoContext}`
+    : sourceData.productContext
+  const contextParts = [
+    baseContext,
+    selectionSummary && `선택 옵션:\n${selectionSummary}`,
+  ].filter(Boolean)
+  if (!contextParts.length) return sourceData
   return {
     ...sourceData,
-    productContext: `${sourceData.productContext}\n\n\uC120\uD0DD \uC635\uC158:\n${selectionSummary}`,
+    productContext: contextParts.join('\n\n'),
   }
 }
 
@@ -215,7 +254,7 @@ export default function ReviewGenerator({ onReviewComplete }) {
 
     setSourceData(baseSource)
 
-    if (optionGroups.length > 0) {
+    if (analysis?.url) {
       setProductOptionSelections(getDefaultSelections(optionGroups))
       setStep(STEPS.PRODUCT_OPTIONS)
       return
@@ -225,7 +264,7 @@ export default function ReviewGenerator({ onReviewComplete }) {
   }
 
 
-  const handleProductOptionNext = async (selectedSelections) => {
+  const handleProductOptionNext = async (selectedSelections, confirmedProduct) => {
     if (!productAnalysis || !sourceData?.productUrl) return
     const optionGroups = Array.isArray(productAnalysis.optionGroups)
       ? productAnalysis.optionGroups
@@ -234,7 +273,11 @@ export default function ReviewGenerator({ onReviewComplete }) {
       ? selectedSelections
       : getDefaultSelections(optionGroups)
     const selectionSummary = buildOptionSummary(optionGroups, safeSelections)
-    const nextSource = appendOptionContext(sourceData, selectionSummary)
+    const nextSource = appendProductContext(
+      sourceData,
+      confirmedProduct || productAnalysis.product,
+      selectionSummary,
+    )
 
     setProductOptionSelections(safeSelections)
     setSourceData(nextSource)

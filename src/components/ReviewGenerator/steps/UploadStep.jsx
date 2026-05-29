@@ -329,7 +329,7 @@ export default function UploadStep({
             disabled={busy}
           />
           <p className="field__hint">
-            공개 상품 페이지의 제목과 설명을 읽어 리뷰 키워드를 생성합니다.
+            공개 상품 페이지의 상품명, 브랜드, 이미지, 가격을 자동 인식합니다. 읽을 수 없는 사이트는 다음 단계에서 직접 보완할 수 있습니다.
           </p>
           {status.text && (
             <p className={`field__hint ${status.isError ? 'field__hint--error' : ''}`}>
