@@ -53,13 +53,19 @@ export function keywordSentimentGuide(rating) {
 function buildSpecificityGuide(category) {
   return category === 'place'
     ? '장소라면 위치, 동선, 좌석, 조명, 소음, 청결, 응대, 예약/대기, 시설 상태 같은 실제 체험 요소를 꼭 넣어.'
-    : '상품이라면 디자인, 색상, 소재, 무게, 크기, 마감, 사용감, 옵션, 배송, 포장 같은 실제 상품 요소를 꼭 넣어.'
+    : '상품이라면 내용물의 형태, 색상, 질감, 양, 향, 상태, 사용감, 디자인, 소재, 무게, 크기, 마감, 옵션, 배송 같은 실제 상품 요소를 꼭 넣어.'
 }
 
 function buildSubjectiveReviewGuide(category) {
   return category === 'place'
     ? '리뷰는 객관 설명문이 아니라 실제 방문자가 느낀 주관적 후기처럼 써. 공간을 이용하며 편했던 점, 아쉬웠던 점, 다시 방문할 때 고려할 점처럼 체감 중심으로 풀어.'
     : '리뷰는 객관 설명문이 아니라 실제 사용자가 느낀 주관적 후기처럼 써. 사용하면서 좋았던 점과 아쉬웠던 점, 내 기준에서 만족한 이유를 체감 중심으로 풀어.'
+}
+
+function buildProductContentsPriorityGuide(category) {
+  return category === 'product'
+    ? '상품 리뷰에서는 포장 용기나 케이스 설명을 최대한 후순위로 두고, 실제 내용물의 모양, 색, 질감, 양, 향, 상태, 사용감을 먼저 설명해. 포장이나 용기는 파손, 밀봉, 보관 편의, 위생처럼 리뷰 판단에 직접 영향을 주는 경우에만 짧게 뒤쪽에 언급해.'
+    : ''
 }
 
 function buildFoodEvaluationGuide(category) {
@@ -113,6 +119,7 @@ export function buildKeywordPrompt({
   const safeProductContext =
     typeof productContext === 'string' ? productContext.trim().slice(0, 2800) : ''
   const foodEvaluationGuide = buildFoodEvaluationGuide(safeCategory)
+  const productContentsPriorityGuide = buildProductContentsPriorityGuide(safeCategory)
   const cosmeticEvaluationGuide = isCosmeticReviewContext(safeCategory, [safeProductContext])
     ? buildCosmeticEvaluationGuide(safeCategory)
     : ''
@@ -127,6 +134,7 @@ export function buildKeywordPrompt({
     `${categoryMeta.label} 리뷰용 키워드를 만들어. 뻔한 광고 문구는 금지하고 실제 관찰 포인트만 사용해. `,
     sourceGuide,
     foodEvaluationGuide && safeProductContext ? `${foodEvaluationGuide} ` : '',
+    productContentsPriorityGuide ? `${productContentsPriorityGuide} ` : '',
     cosmeticEvaluationGuide ? `${cosmeticEvaluationGuide} ` : '',
     variationGuide,
     '이미지나 상품 페이지에서 직접 확인되지 않은 내용은 넣지 말고, 추측은 배제해. ',
@@ -153,6 +161,7 @@ export function buildReviewPrompt({ rating, keywords, length, tone, category }) 
   const specificityGuide = buildSpecificityGuide(safeCategory)
   const genericBan = buildCategoryGenericBan(safeCategory)
   const foodEvaluationGuide = buildFoodEvaluationGuide(safeCategory)
+  const productContentsPriorityGuide = buildProductContentsPriorityGuide(safeCategory)
   const subjectiveReviewGuide = buildSubjectiveReviewGuide(safeCategory)
   const cosmeticEvaluationGuide = isCosmeticReviewContext(safeCategory, safeKeywords)
     ? buildCosmeticEvaluationGuide(safeCategory)
@@ -165,6 +174,7 @@ export function buildReviewPrompt({ rating, keywords, length, tone, category }) 
       `${subjectiveReviewGuide} `,
       `${specificityGuide} `,
       foodEvaluationGuide ? `${foodEvaluationGuide} ` : '',
+      productContentsPriorityGuide ? `${productContentsPriorityGuide} ` : '',
       cosmeticEvaluationGuide ? `${cosmeticEvaluationGuide} ` : '',
       `다음 키워드는 반드시 반영해: ${safeKeywords.join(', ')}. 하지만 키워드를 그대로 나열하지 말고, 키워드가 가리키는 구체 요소를 중심으로 자연스럽게 풀어 써. `,
       `${categoryMeta.focus}에 맞는 사실만 사용하고, ${categoryMeta.avoid}. `,

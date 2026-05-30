@@ -106,6 +106,20 @@ test('buildReviewPrompt asks for subjective experience-based writing', () => {
   assert.match(prompt, /좋았던 점과 아쉬웠던 점/)
 })
 
+test('buildReviewPrompt prioritizes product contents over packaging containers', () => {
+  const { prompt } = buildReviewPrompt({
+    rating: 5,
+    keywords: ['내용물 색감 선명함', '용기 밀봉 깔끔함'],
+    length: 'medium',
+    tone: 'friendly',
+    category: 'product',
+  })
+
+  assert.match(prompt, /포장 용기나 케이스 설명을 최대한 후순위/)
+  assert.match(prompt, /실제 내용물의 모양, 색, 질감, 양, 향, 상태, 사용감/)
+  assert.match(prompt, /짧게 뒤쪽에 언급/)
+})
+
 test('buildReviewPrompt guides food appearance and taste for place reviews', () => {
   const { prompt } = buildReviewPrompt({
     rating: 5,
@@ -179,6 +193,20 @@ test('buildKeywordPrompt omits cosmetics guide for unrelated product context', (
   assert.doesNotMatch(prompt, /화장품/)
   assert.doesNotMatch(prompt, /발림성/)
   assert.doesNotMatch(prompt, /피부 타입/)
+})
+
+test('buildKeywordPrompt prioritizes product contents over packaging containers', () => {
+  const prompt = buildKeywordPrompt({
+    rating: 5,
+    category: 'product',
+    imageCount: 1,
+    minKeywordCount: 3,
+    maxKeywordCount: 8,
+  })
+
+  assert.match(prompt, /실제 내용물의 모양, 색, 질감, 양, 향, 상태, 사용감/)
+  assert.match(prompt, /포장 용기나 케이스 설명을 최대한 후순위/)
+  assert.match(prompt, /리뷰 판단에 직접 영향을 주는 경우/)
 })
 
 test('buildReviewPrompt guides sparse long reviews without blocking them', () => {

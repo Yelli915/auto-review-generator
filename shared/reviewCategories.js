@@ -11,7 +11,7 @@ export const REVIEW_CATEGORY_OPTIONS = [
   {
     value: 'product',
     label: '상품',
-    focus: '재질, 디자인, 사용감, 마감, 구성, 옵션, 포장, 가성비 중심',
+    focus: '내용물 상태, 색감, 질감, 양, 향, 사용감, 재질, 디자인, 마감, 구성, 옵션 중심',
     avoid: '실제 사용 기간, 배송 속도, 브랜드명, 가격은 확인되지 않으면 만들지 말 것',
   },
 ]
