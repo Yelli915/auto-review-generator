@@ -92,6 +92,20 @@ test('buildReviewPrompt includes review category context', () => {
   assert.match(prompt, /90/)
 })
 
+test('buildReviewPrompt asks for subjective experience-based writing', () => {
+  const { prompt } = buildReviewPrompt({
+    rating: 4,
+    keywords: ['마감 탄탄함', '사용감 편함'],
+    length: 'medium',
+    tone: 'friendly',
+    category: 'product',
+  })
+
+  assert.match(prompt, /주관적 후기/)
+  assert.match(prompt, /체감 중심/)
+  assert.match(prompt, /좋았던 점과 아쉬웠던 점/)
+})
+
 test('buildReviewPrompt guides food appearance and taste for place reviews', () => {
   const { prompt } = buildReviewPrompt({
     rating: 5,
@@ -104,6 +118,67 @@ test('buildReviewPrompt guides food appearance and taste for place reviews', () 
   assert.match(prompt, /음식의 모양과 맛 평가/)
   assert.match(prompt, /식감/)
   assert.match(prompt, /간/)
+})
+
+test('buildReviewPrompt guides cosmetics with matching review criteria', () => {
+  const { prompt } = buildReviewPrompt({
+    rating: 5,
+    keywords: ['은은한 향', '부드러운 발림성', '오래가는 지속력'],
+    length: 'medium',
+    tone: 'friendly',
+    category: 'product',
+  })
+
+  assert.match(prompt, /화장품/)
+  assert.match(prompt, /향/)
+  assert.match(prompt, /발림성/)
+  assert.match(prompt, /지속력/)
+  assert.match(prompt, /피부 타입/)
+})
+
+test('buildReviewPrompt omits cosmetics guide for unrelated product reviews', () => {
+  const { prompt } = buildReviewPrompt({
+    rating: 4,
+    keywords: ['마감 탄탄함', '각도 조절 편함'],
+    length: 'medium',
+    tone: 'friendly',
+    category: 'product',
+  })
+
+  assert.doesNotMatch(prompt, /화장품/)
+  assert.doesNotMatch(prompt, /발림성/)
+  assert.doesNotMatch(prompt, /피부 타입/)
+})
+
+test('buildKeywordPrompt guides cosmetics keyword criteria for product reviews', () => {
+  const prompt = buildKeywordPrompt({
+    rating: 5,
+    category: 'product',
+    productContext:
+      '상품명: 수분 크림\n설명: 건조한 피부를 위한 데일리 보습 크림\n선택 옵션:\n용량: 50ml',
+    minKeywordCount: 3,
+    maxKeywordCount: 8,
+  })
+
+  assert.match(prompt, /화장품/)
+  assert.match(prompt, /향/)
+  assert.match(prompt, /발림성/)
+  assert.match(prompt, /보습감/)
+})
+
+test('buildKeywordPrompt omits cosmetics guide for unrelated product context', () => {
+  const prompt = buildKeywordPrompt({
+    rating: 5,
+    category: 'product',
+    productContext:
+      '상품명: 무선 키보드\n설명: 조용한 타건감의 사무용 키보드\n선택 옵션:\n색상: 블랙',
+    minKeywordCount: 3,
+    maxKeywordCount: 8,
+  })
+
+  assert.doesNotMatch(prompt, /화장품/)
+  assert.doesNotMatch(prompt, /발림성/)
+  assert.doesNotMatch(prompt, /피부 타입/)
 })
 
 test('buildReviewPrompt guides sparse long reviews without blocking them', () => {

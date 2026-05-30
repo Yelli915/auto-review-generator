@@ -18,6 +18,12 @@ function getExtensionFromMimeType(type) {
   return 'jpg'
 }
 
+function isImageFile(file) {
+  if (!file) return false
+  if (file.type?.startsWith('image/')) return true
+  return /\.(avif|gif|jpe?g|png|webp)$/i.test(file.name || '')
+}
+
 function nameClipboardImage(file, index) {
   if (file.name) return file
   const extension = getExtensionFromMimeType(file.type)
@@ -32,13 +38,11 @@ function getClipboardImageFiles(clipboardData) {
   const itemFiles = Array.from(clipboardData.items || [])
     .filter((item) => item.kind === 'file' && item.type.startsWith('image/'))
     .map((item) => item.getAsFile())
-    .filter(Boolean)
+    .filter(isImageFile)
 
   const files = itemFiles.length
     ? itemFiles
-    : Array.from(clipboardData.files || []).filter((file) =>
-        file.type.startsWith('image/'),
-      )
+    : Array.from(clipboardData.files || []).filter(isImageFile)
 
   return files.map(nameClipboardImage)
 }
@@ -58,7 +62,7 @@ function validateSelectedFiles(files) {
   if (files.length > MAX_REVIEW_IMAGE_COUNT) {
     return `이미지는 최대 ${MAX_REVIEW_IMAGE_COUNT}장까지 업로드할 수 있습니다.`
   }
-  const invalidType = files.find((file) => !file.type.startsWith('image/'))
+  const invalidType = files.find((file) => !isImageFile(file))
   if (invalidType) return '이미지 파일(JPG, PNG 등)만 업로드할 수 있습니다.'
   const oversized = files.find((file) => file.size > MAX_FILE_SIZE_MB * 1024 * 1024)
   if (oversized) return `파일 크기는 각 ${MAX_FILE_SIZE_MB}MB 이하여야 합니다.`
@@ -312,18 +316,21 @@ export default function UploadStep({
   const isLinkMode = canUseLink && inputMode === 'link'
 
   const handlePaste = useCallback((e) => {
-    if (busy || isLinkMode || isTextEditingTarget(e.target)) return
+    if (busy) return
     const pastedFiles = getClipboardImageFiles(e.clipboardData)
-    if (!pastedFiles.length) return
+    if (!pastedFiles.length) {
+      if (isTextEditingTarget(e.target)) return
+      return
+    }
     e.preventDefault()
+    if (isLinkMode) setInputMode('image')
     processFiles(pastedFiles, '붙여넣음')
   }, [busy, isLinkMode, processFiles])
 
   useEffect(() => {
-    if (isLinkMode) return undefined
     document.addEventListener('paste', handlePaste)
     return () => document.removeEventListener('paste', handlePaste)
-  }, [handlePaste, isLinkMode])
+  }, [handlePaste])
 
   return (
     <section className="step-card step-card--enter">
