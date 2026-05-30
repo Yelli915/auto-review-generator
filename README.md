@@ -192,14 +192,14 @@ UPSTASH_REDIS_REST_TOKEN=
 
 ```bash
 npm install
-cp .env.example .env
-npm run dev
+vercel env pull .env.local
+npm run dev:vercel
 ```
 
-Windows PowerShell에서는 다음 명령으로 `.env` 파일을 준비할 수 있습니다.
+Windows PowerShell에서는 다음 명령으로 Vercel 값을 `.env.local`에 가져올 수 있습니다.
 
 ```powershell
-Copy-Item .env.example .env
+vercel env pull .env.local
 ```
 
 Vercel 서버리스 함수까지 로컬에서 확인하려면 다음 명령을 사용합니다.
@@ -246,3 +246,21 @@ npm audit --audit-level=moderate
 ## License
 
 MIT
+
+## Vercel Environment Management
+
+Environment variables are managed in Vercel. See
+`docs/vercel-environment.md` for the required Production, Preview, and
+Development values.
+
+For local Vercel-compatible development, pull values from Vercel instead of
+hand-writing a local `.env` file:
+
+```bash
+vercel env pull .env.local
+npm run dev:vercel
+```
+
+The build now validates required variables during Vercel builds so missing
+values fail deployment before the app can return HTTP 500 for missing server
+configuration.

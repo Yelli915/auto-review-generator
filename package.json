@@ -10,6 +10,7 @@
   "scripts": {
     "dev": "vite",
     "dev:vercel": "vercel dev",
+    "prebuild": "node scripts/verify-vercel-env.js",
     "build": "vite build",
     "lint": "eslint .",
     "test": "node --test",
