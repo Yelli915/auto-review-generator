@@ -21,12 +21,37 @@ const PRODUCT_FIELDS = [
     label: '이미지 URL',
     placeholder: 'https://...',
   },
+  {
+    key: 'description',
+    label: '상품 특징',
+    placeholder: '예: 촉촉함, 향, 용량, 색상, 사용감 등',
+  },
 ]
+
+const MANUAL_ANALYSIS_STATUSES = new Set(['fallback', 'reader'])
 
 function getDefaultSelections(optionGroups) {
   return Array.isArray(optionGroups)
     ? optionGroups.map((group) => group?.options?.[0]?.value || '')
     : []
+}
+
+function needsManualProductInfo(analysis) {
+  return (
+    Boolean(analysis?.needsManualInput) ||
+    MANUAL_ANALYSIS_STATUSES.has(analysis?.analysisStatus)
+  )
+}
+
+function hasConfirmedProductInfo(product) {
+  return Boolean(product?.name?.trim()) || Boolean(product?.description?.trim())
+}
+
+function hasValidOptionSelections(optionGroups, selections) {
+  return (
+    optionGroups.length === 0 ||
+    optionGroups.every((group, index) => selections[index] && group?.options?.length)
+  )
 }
 
 function normalizeEditableProduct(product, fallbackUrl = '') {
@@ -158,9 +183,11 @@ export default function ProductOptionStep({
     },
   )
 
+  const requiresManualProductInfo = needsManualProductInfo(analysis)
+  const hasManualProductInfo = hasConfirmedProductInfo(product)
   const canContinue =
-    optionGroups.length === 0 ||
-    optionGroups.every((group, index) => selections[index] && group?.options?.length)
+    (!requiresManualProductInfo || hasManualProductInfo) &&
+    hasValidOptionSelections(optionGroups, selections)
 
   const updateProduct = (field, value) => {
     setProduct((prev) => ({ ...prev, [field]: value }))
@@ -191,6 +218,17 @@ export default function ProductOptionStep({
         <div className="product-analysis product-analysis--warning" role="status">
           <p className="product-analysis__label">자동 인식 안내</p>
           <p className="product-analysis__text">{analysis.warning}</p>
+        </div>
+      )}
+
+      {requiresManualProductInfo && (
+        <div className="product-analysis product-analysis--warning" role="status">
+          <p className="product-analysis__label">Manual input required</p>
+          <p className="product-analysis__text">
+            The product page could not be read reliably. Enter the product name
+            or product notes below, and keywords will be generated from that
+            confirmed information.
+          </p>
         </div>
       )}
 
@@ -238,6 +276,11 @@ export default function ProductOptionStep({
           </button>
         )}
       </div>
+      {requiresManualProductInfo && !hasManualProductInfo && (
+        <p className="field__hint field__hint--error">
+          Enter a product name or product notes to continue.
+        </p>
+      )}
     </section>
   )
 }

@@ -1,3 +1,4 @@
+import { isAccessChallengeText } from './accessChallenge.js'
 import { fetchRenderedProductInfo } from './renderedProductContext.js'
 
 const MAX_PRODUCT_URL_LENGTH = 2048
@@ -7,7 +8,6 @@ const READER_PAGE_TIMEOUT_MS = 10000
 const READER_BASE_URL = 'https://r.jina.ai/'
 const PRODUCT_ANALYSIS_CACHE_TTL_MS = 10 * 60 * 1000
 const PRODUCT_ANALYSIS_CACHE_MAX = 80
-
 const productAnalysisCache = new Map()
 const fetchCacheScopes = new WeakMap()
 let nextFetchCacheScope = 1
@@ -260,7 +260,20 @@ function buildProductInfo({
 }
 
 function hasUsefulProductInfo(product) {
+  if (isAccessChallengeProduct(product)) return false
   return Boolean(product?.name || product?.brand || product?.imageUrl || product?.price)
+}
+
+function isAccessChallengeProduct(product) {
+  if (!product) return false
+  return isAccessChallengeText(
+    [product.name, product.brand, product.description, product.site].filter(Boolean).join(' '),
+  )
+}
+
+function isAccessChallengeHtml(html) {
+  if (typeof html !== 'string' || !html.trim()) return false
+  return isAccessChallengeText(`${extractTitle(html)} ${html.slice(0, 6000)}`)
 }
 
 function normalizeJsonLdType(type) {
@@ -491,6 +504,13 @@ function extractStructuredProductData(html) {
 }
 
 function extractProductInfoFromHtml(html, url) {
+  if (isAccessChallengeHtml(html)) {
+    return buildProductInfo({
+      site: new URL(url).hostname,
+      url,
+    })
+  }
+
   const structured = extractStructuredProductData(html)
   const embedded = extractEmbeddedProductData(html, url)
   const title = firstString(structured.name, embedded.name, extractTitle(html))
@@ -651,6 +671,7 @@ async function fetchReaderProductAnalysis(urlString, reason = '') {
   try {
     const text = await readResponseTextLimited(response)
     if (!text.trim()) return null
+    if (isAccessChallengeText(text)) return null
     return {
       ok: true,
       url: urlString,
@@ -661,6 +682,7 @@ async function fetchReaderProductAnalysis(urlString, reason = '') {
         : '',
       productContext: buildReaderProductContext(text, urlString, reason),
       optionGroups: [],
+      needsManualInput: isAccessChallengeText(reason),
     }
   } catch {
     return null
@@ -904,6 +926,7 @@ function buildAnalysisResult({
   optionGroups = [],
   analysisStatus = 'ok',
   warning = '',
+  needsManualInput,
 }) {
   return {
     ok: true,
@@ -913,7 +936,10 @@ function buildAnalysisResult({
     optionGroups,
     analysisStatus,
     warning,
-    needsManualInput: !hasUsefulProductInfo(product),
+    needsManualInput:
+      typeof needsManualInput === 'boolean'
+        ? needsManualInput
+        : !hasUsefulProductInfo(product),
   }
 }
 
@@ -924,6 +950,7 @@ function buildFallbackAnalysis(url, reason, warning) {
     productContext: buildFallbackProductContext(url, reason),
     analysisStatus: 'fallback',
     warning,
+    needsManualInput: true,
   })
 }
 
@@ -1007,6 +1034,30 @@ export async function fetchProductAnalysis(rawUrl) {
 
   try {
     const html = await readResponseTextLimited(response)
+    if (isAccessChallengeHtml(html)) {
+      const readerAnalysis = await fetchReaderProductAnalysis(
+        normalized.url,
+        'access challenge page',
+      )
+      if (readerAnalysis) {
+        return cacheProductAnalysis(normalized.url, readerAnalysis)
+      }
+
+      const renderedAnalysis = await cacheRenderedProductAnalysis(normalized.url)
+      if (renderedAnalysis) {
+        return renderedAnalysis
+      }
+
+      return cacheProductAnalysis(
+        normalized.url,
+        buildFallbackAnalysis(
+          normalized.url,
+          'Access challenge page returned instead of product content.',
+          FALLBACK_WARNINGS.httpBlocked,
+        ),
+      )
+    }
+
     const product = extractProductInfoFromHtml(html, normalized.url)
     const productContext = buildProductContext(product, normalized.url)
     const hasInfo = hasUsefulProductInfo(product)
@@ -1030,6 +1081,7 @@ export async function fetchProductAnalysis(rawUrl) {
         optionGroups: extractProductOptionGroupsFromHtml(html),
         analysisStatus: hasInfo ? 'ok' : 'fallback',
         warning: hasInfo ? '' : FALLBACK_WARNINGS.noMetadata,
+        needsManualInput: !hasInfo,
       }),
     )
   } catch (err) {

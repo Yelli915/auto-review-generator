@@ -171,6 +171,40 @@ test('handler treats missing previousKeywords as an empty list', async () => {
   )
 })
 
+test('handler maps upstream Gemini 500 during keyword generation to a client-safe error', async () => {
+  await withEnv(
+    {
+      GEMINI_API_KEY: 'test-key',
+      GOOGLE_CLIENT_ID: null,
+      API_AUTH_TOKEN: null,
+    },
+    () =>
+      withFetch(
+        async () =>
+          jsonResponse(
+            { error: { message: 'internal server error' } },
+            500,
+          ),
+        async () => {
+          const req = createMockRequest({
+            action: 'keywords',
+            images: [{ imageBase64: png1x1Base64, mimeType: 'image/png' }],
+            rating: 5,
+            category: 'product',
+          })
+          const res = createMockResponse()
+
+          await handler(req, res)
+
+          const body = JSON.parse(res.body)
+          assert.equal(res.statusCode, 502)
+          assert.equal(body.ok, false)
+          assert.match(body.error, /Gemini API/)
+        },
+      ),
+  )
+})
+
 test('handler generates keywords from productUrl metadata', async () => {
   await withEnv(
     {
@@ -454,6 +488,42 @@ test('fetchProductAnalysis uses reader fallback when direct product page is bloc
   )
 })
 
+test('fetchProductAnalysis ignores access challenge pages as product content', async () => {
+  const challengeHtml = [
+    '<html><head><title>Just a moment...</title></head>',
+    '<body>',
+    '<h1>Just a moment...</h1>',
+    '<p>Verification successful. Waiting for www.oliveyoung.co.kr to respond</p>',
+    '<p>RAY_ID a03b1a941a3ce44c</p>',
+    '</body></html>',
+  ].join('')
+
+  await withEnv({ DISABLE_RENDERED_PRODUCT_FETCH: '1' }, () =>
+    withFetch(
+      async (url) => {
+        if (String(url).startsWith('https://r.jina.ai/')) {
+          return new Response('Title: Just a moment...\nHTTP 403 Forbidden', {
+            headers: { 'content-type': 'text/plain' },
+          })
+        }
+        return htmlResponse(challengeHtml)
+      },
+      async () => {
+        const { fetchProductAnalysis } = await import('./productContext.js')
+        const result = await fetchProductAnalysis(
+          'https://www.oliveyoung.co.kr/store/goods/getGoodsDetail.do?goodsNo=A000000223414',
+        )
+
+        assert.equal(result.ok, true)
+        assert.equal(result.analysisStatus, 'fallback')
+        assert.equal(result.needsManualInput, true)
+        assert.notEqual(result.product.name, 'Just a moment...')
+        assert.match(result.productContext, /Access challenge page/)
+      },
+    ),
+  )
+})
+
 test('validateImageInput rejects unsupported mime types', () => {
   const result = validateImageInput(png1x1Base64, 'image/gif')
 
@@ -641,6 +711,13 @@ test('humanizeGeminiApiError returns rate-limit guidance for quota errors', () =
 
   assert.match(message, /Gemini API/)
   assert.match(message, /ai\.google\.dev/)
+})
+
+test('humanizeGeminiApiError returns retry guidance for transient upstream failures', () => {
+  const message = humanizeGeminiApiError(500, 'internal server error')
+
+  assert.match(message, /Gemini API/)
+  assert.doesNotMatch(message, /HTTP 500/)
 })
 
 test('normalizeReviewCategory accepts known categories and falls back safely', () => {

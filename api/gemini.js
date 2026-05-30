@@ -1,4 +1,4 @@
-﻿/* global Buffer, process */
+/* global Buffer, process */
 import { OAuth2Client } from 'google-auth-library'
 import { createJsonHeaders, readJsonSafely } from '../shared/httpJson.js'
 import { MAX_REVIEW_IMAGE_COUNT } from '../shared/reviewCategories.js'
@@ -154,7 +154,7 @@ async function callSharedUsageStore(config, commands) {
   })
   const data = await readJsonSafely(response)
   if (!response.ok || !Array.isArray(data)) {
-    throw new Error('怨듭쑀 ?ъ슜????μ냼???묎렐?????놁뒿?덈떎.')
+    throw new Error('공유 사용량 저장소에 접근할 수 없습니다.')
   }
   return data
 }
@@ -172,7 +172,7 @@ async function incrementSharedUsageLimit({
   ])
   const count = Number(results[0]?.result)
   if (!Number.isFinite(count)) {
-    throw new Error('怨듭쑀 ?ъ슜????μ냼 ?묐떟???쎌쓣 ???놁뒿?덈떎.')
+    throw new Error('공유 사용량 저장소 응답을 읽을 수 없습니다.')
   }
   if (count > limit) {
     return { ok: false, retryAfterSec, limit }
@@ -325,11 +325,11 @@ export function validateImageInput(imageBase64, rawMimeType) {
     return {
       ok: false,
       status: 415,
-      error: '吏?먰븯吏 ?딅뒗 ?대?吏 ?뺤떇?낅땲?? JPG, PNG, WEBP留??낅줈?쒗빐 二쇱꽭??',
+      error: '지원하지 않는 이미지 형식입니다. JPG, PNG, WEBP만 업로드해 주세요.',
     }
   }
   if (typeof imageBase64 !== 'string' || !imageBase64.trim()) {
-    return { ok: false, status: 400, error: 'imageBase64媛 ?꾩슂?⑸땲??' }
+    return { ok: false, status: 400, error: 'imageBase64가 필요합니다.' }
   }
 
   const data = imageBase64.trim().replace(/\s+/g, '')
@@ -341,7 +341,7 @@ export function validateImageInput(imageBase64, rawMimeType) {
     return {
       ok: false,
       status: 400,
-      error: '?대?吏 ?곗씠?곌? ?щ컮瑜?base64 ?뺤떇???꾨떃?덈떎.',
+      error: '이미지 데이터가 올바른 base64 형식이 아닙니다.',
     }
   }
 
@@ -350,21 +350,21 @@ export function validateImageInput(imageBase64, rawMimeType) {
     return {
       ok: false,
       status: 400,
-      error: '?대?吏 ?곗씠?곕? ?쎌쓣 ???놁뒿?덈떎.',
+      error: '이미지 데이터를 읽을 수 없습니다.',
     }
   }
   if (decoded.length > MAX_IMAGE_BYTES) {
     return {
       ok: false,
       status: 413,
-      error: '?대?吏 ?ш린媛 ?덈Т ?쎈땲?? ???묒? ?대?吏濡??ㅼ떆 ?쒕룄??二쇱꽭??',
+      error: '이미지 크기가 너무 큽니다. 더 작은 이미지로 다시 시도해 주세요.',
     }
   }
   if (!hasExpectedImageSignature(decoded, mimeType)) {
     return {
       ok: false,
       status: 400,
-      error: '?대?吏 ?뺤떇怨??ㅼ젣 ?뚯씪 ?댁슜???쇱튂?섏? ?딆뒿?덈떎.',
+      error: '이미지 형식과 실제 파일 내용이 일치하지 않습니다.',
     }
   }
 
@@ -376,13 +376,13 @@ export function validateImagesInput(images, fallbackImageBase64, fallbackMimeTyp
     ? images
     : [{ imageBase64: fallbackImageBase64, mimeType: fallbackMimeType }]
   if (list.length < 1) {
-    return { ok: false, status: 400, error: '?대?吏瑜?1???댁긽 ?좏깮??二쇱꽭??' }
+    return { ok: false, status: 400, error: '이미지를 1개 이상 선택해 주세요.' }
   }
   if (list.length > MAX_REVIEW_IMAGE_COUNT) {
     return {
       ok: false,
       status: 400,
-      error: `?대?吏??理쒕? ${MAX_REVIEW_IMAGE_COUNT}?κ퉴吏 ?낅줈?쒗븷 ???덉뒿?덈떎.`,
+      error: `이미지는 최대 ${MAX_REVIEW_IMAGE_COUNT}개까지 업로드할 수 있습니다.`,
     }
   }
 
@@ -462,7 +462,7 @@ async function verifyGoogleToken(idToken) {
     return {
       ok: false,
       status: 500,
-      error: '?쒕쾭 ?ㅼ젙 ?ㅻ쪟: GOOGLE_CLIENT_ID媛 ?놁뒿?덈떎.',
+      error: '서버 설정 오류: GOOGLE_CLIENT_ID가 없습니다.',
     }
   }
   try {
@@ -472,11 +472,11 @@ async function verifyGoogleToken(idToken) {
     })
     const payload = ticket.getPayload()
     if (!payload?.sub) {
-      return { ok: false, status: 401, error: '?좏슚?섏? ?딆? 濡쒓렇???좏겙?낅땲??' }
+      return { ok: false, status: 401, error: '유효하지 않은 로그인 토큰입니다.' }
     }
     return { ok: true, userId: payload.sub }
   } catch {
-    return { ok: false, status: 401, error: '濡쒓렇?몄씠 留뚮즺?섏뿀嫄곕굹 ?좏슚?섏? ?딆뒿?덈떎.' }
+    return { ok: false, status: 401, error: '로그인이 만료되었거나 유효하지 않습니다.' }
   }
 }
 
@@ -488,14 +488,14 @@ async function authorizeRequest(req) {
       return {
         ok: false,
         status: 500,
-        error: '?쒕쾭 ?ㅼ젙 ?ㅻ쪟: ?댁쁺 ?섍꼍?먮뒗 GOOGLE_CLIENT_ID媛 ?꾩슂?⑸땲??',
+        error: '서버 설정 오류: 운영 환경에는 GOOGLE_CLIENT_ID가 필요합니다.',
       }
     }
     if (!hasConfiguredAllowOrigins()) {
       return {
         ok: false,
         status: 500,
-        error: '?쒕쾭 ?ㅼ젙 ?ㅻ쪟: ?댁쁺 ?섍꼍?먮뒗 ALLOWED_ORIGINS媛 ?꾩슂?⑸땲??',
+        error: '서버 설정 오류: 운영 환경에는 ALLOWED_ORIGINS가 필요합니다.',
       }
     }
   }
@@ -503,12 +503,12 @@ async function authorizeRequest(req) {
   const bearer = getBearerToken(req)
   if (googleClientId && bearer) {
     if (!bearer) {
-      return { ok: false, status: 401, error: 'Google 濡쒓렇?몄씠 ?꾩슂?⑸땲??' }
+      return { ok: false, status: 401, error: 'Google 로그인이 필요합니다.' }
     }
     const verified = await verifyGoogleToken(bearer)
     if (!verified.ok) return verified
     if (process.env.NODE_ENV === 'production' && !isTrustedOrigin(req)) {
-      return { ok: false, status: 403, error: '?덉슜?섏? ?딆? 異쒖쿂(origin)?낅땲??' }
+      return { ok: false, status: 403, error: '허용되지 않은 출처(origin)입니다.' }
     }
     return { ok: true, userId: verified.userId }
   }
@@ -516,14 +516,14 @@ async function authorizeRequest(req) {
   if (appAuthToken) {
     const headerToken = req.headers?.['x-api-auth-token']
     if (typeof headerToken !== 'string' || headerToken.trim() !== appAuthToken) {
-      return { ok: false, status: 401, error: '?몄쬆?섏? ?딆? ?붿껌?낅땲??' }
+      return { ok: false, status: 401, error: '인증되지 않은 요청입니다.' }
     }
   }
   if (googleClientId && !appAuthToken) {
-    return { ok: false, status: 401, error: 'Google 濡쒓렇?몄씠 ?꾩슂?⑸땲??' }
+    return { ok: false, status: 401, error: 'Google 로그인이 필요합니다.' }
   }
   if (process.env.NODE_ENV === 'production' && !isTrustedOrigin(req)) {
-    return { ok: false, status: 403, error: '?덉슜?섏? ?딆? 異쒖쿂(origin)?낅땲??' }
+    return { ok: false, status: 403, error: '허용되지 않은 출처(origin)입니다.' }
   }
   return { ok: true, userId: null }
 }
@@ -558,7 +558,10 @@ function isTemporaryHighDemandMessage(message) {
 export function humanizeGeminiApiError(status, rawMessage) {
   const msg = typeof rawMessage === 'string' ? rawMessage : ''
   if (isTemporaryHighDemandMessage(msg)) {
-    return '?꾩옱 紐⑤뜽 ?붿껌??紐곕젮 ?쇱떆?곸쑝濡?泥섎━ 吏??以묒엯?덈떎. ?좎떆 ???ㅼ떆 ?쒕룄??二쇱꽭??'
+    return '현재 모델 요청이 몰려 일시적으로 처리가 지연 중입니다. 잠시 후 다시 시도해 주세요.'
+  }
+  if (RETRYABLE_STATUS.has(status)) {
+    return 'Gemini API 응답이 일시적으로 불안정합니다. 잠시 후 다시 키워드를 생성해 주세요.'
   }
   const quotaLike =
     status === 429 ||
@@ -566,15 +569,15 @@ export function humanizeGeminiApiError(status, rawMessage) {
       msg,
     )
   if (!quotaLike) {
-    return msg || `?붿껌 ?ㅽ뙣 (HTTP ${status})`
+    return msg || `요청 실패 (HTTP ${status})`
   }
   const waitSec = parseGeminiRetryAfterSeconds(msg)
   const waitHint =
-    waitSec != null ? ` ??${waitSec}珥??ㅼ뿉 ?ㅼ떆 ?쒕룄??蹂댁꽭??` : ''
+    waitSec != null ? ` 약 ${waitSec}초 후에 다시 시도해 보세요.` : ''
   return (
-    `Gemini API ?몄텧 ?쒕룄??嫄몃졇?듬땲??${waitHint} ` +
-    `Google AI Studio?먯꽌 API ?ㅼ쓽 寃곗젣/?뚮옖 ?곌껐 ?곹깭? ?꾨줈?앺듃 ?ㅼ젙???뺤씤?섏꽭?? ` +
-    `https://ai.google.dev/gemini-api/docs/rate-limits 쨌 https://ai.dev/rate-limit`
+    `Gemini API 호출 한도에 걸렸습니다.${waitHint} ` +
+    `Google AI Studio에서 API 키의 결제/플랜 연결 상태와 프로젝트 설정을 확인하세요. ` +
+    `https://ai.google.dev/gemini-api/docs/rate-limits · https://ai.dev/rate-limit`
   )
 }
 
@@ -596,7 +599,7 @@ function sanitizeKeywordsField(keywords) {
   if (Array.isArray(keywords)) return sanitizeKeywordArray(keywords)
   if (typeof keywords === 'string') {
     const parts = keywords
-      .split(/[,?곻펽\n|/]+/g)
+      .split(/[,\s\n|/]+/g)
       .map((s) => s.trim())
       .filter(Boolean)
     return sanitizeKeywordArray(parts)
@@ -783,7 +786,7 @@ function parseKeywordsFromAny(data) {
 
   const tokenized = text
     .replace(/^(?:keywords|keyword|키워드)\s*:?\s*/i, '')
-    .split(/[,?곻펽\n|/]+/g)
+    .split(/[,\s\n|/]+/g)
     .map((v) => v.replace(/^[\s\-*0-9.()]+/, '').trim())
     .filter(Boolean)
   const cleaned = Array.from(new Set(tokenized)).filter(
@@ -852,17 +855,17 @@ function summarizeKeywordDebug(data) {
 function describeKeywordGeminiIssue(data, extractedText) {
   const blockReason = data?.promptFeedback?.blockReason
   if (blockReason) {
-    return '?낅젰???뺤콉???섑빐 李⑤떒?섏뿀?듬땲?? ?ㅻⅨ ?대?吏濡??쒕룄??二쇱꽭??'
+    return '입력이 안전 정책으로 인해 차단되었습니다. 다른 이미지로 시도해 주세요.'
   }
   const cand = data?.candidates?.[0]
   if (!cand) {
-    return '紐⑤뜽???묐떟 ?꾨낫瑜?諛섑솚?섏? ?딆븯?듬땲?? ?좎떆 ???ㅼ떆 ?쒕룄??二쇱꽭??'
+    return '모델이 응답 후보를 반환하지 않았습니다. 잠시 후 다시 시도해 주세요.'
   }
   const hasText =
     typeof extractedText === 'string' && extractedText.trim().length > 0
   const fr = cand.finishReason
   if (fr === 'MAX_TOKENS') {
-    return '?묐떟??以묎컙???섎졇?듬땲?? ?ㅼ썙???ㅼ떆 ?앹꽦???뚮윭 二쇱꽭??'
+    return '응답이 중간에 잘렸습니다. 키워드를 다시 생성해 주세요.'
   }
   if (!hasText) {
     if (
@@ -871,15 +874,15 @@ function describeKeywordGeminiIssue(data, extractedText) {
       fr === 'IMAGE_SAFETY' ||
       fr === 'IMAGE_PROHIBITED_CONTENT'
     ) {
-      return '?덉쟾 ?뺤콉?쇰줈 ?명빐 ?ㅼ썙?쒕? ?앹꽦?????놁뒿?덈떎. ?ㅻⅨ ?대?吏濡??쒕룄??二쇱꽭??'
+      return '안전 정책으로 인해 키워드를 생성할 수 없습니다. 다른 이미지로 시도해 주세요.'
     }
     if (fr === 'RECITATION') {
-      return '??묎텒 ?뺤콉?쇰줈 ?명빐 ?묐떟???앹꽦?????놁뒿?덈떎.'
+      return '저작권 정책으로 인해 응답을 생성할 수 없습니다.'
     }
     if (fr && fr !== 'STOP') {
-      return `紐⑤뜽???띿뒪???묐떟??留뚮뱾吏 紐삵뻽?듬땲?? (${fr})`
+      return `모델이 텍스트 응답을 만들지 못했습니다. (${fr})`
     }
-    return '紐⑤뜽??鍮??묐떟??諛섑솚?덉뒿?덈떎. ?ㅼ떆 ?쒕룄??二쇱꽭??'
+    return '모델이 빈 응답을 반환했습니다. 다시 시도해 주세요.'
   }
   return null
 }
@@ -901,7 +904,7 @@ async function requestGemini({ key, payload, maxRetries = MAX_RETRIES }) {
       if (response.ok) return { ok: true, data, model: MODEL }
 
       const rawMessage =
-        data?.error?.message ?? `?붿껌 ?ㅽ뙣 (HTTP ${response.status})`
+        data?.error?.message ?? `요청 실패 (HTTP ${response.status})`
       const message = humanizeGeminiApiError(response.status, rawMessage)
       if (response.status === 429) {
         const highDemand = isTemporaryHighDemandMessage(rawMessage)
@@ -923,7 +926,7 @@ async function requestGemini({ key, payload, maxRetries = MAX_RETRIES }) {
     }
   }
   const message =
-    lastError instanceof Error ? lastError.message : '?ㅽ듃?뚰겕 ?먮뒗 ?????녿뒗 ?ㅻ쪟'
+    lastError instanceof Error ? lastError.message : '네트워크 또는 알 수 없는 오류'
   return { ok: false, error: message }
 }
 
@@ -955,11 +958,11 @@ async function streamGeminiReview({
 
   if (!response.ok) {
     const data = await readJsonSafely(response)
-    const raw = data?.error?.message || '由щ럭 ?앹꽦 ?ㅽ뙣'
+    const raw = data?.error?.message || '리뷰 생성 실패'
     throw new Error(humanizeGeminiApiError(response.status, raw))
   }
   if (!response.body) {
-    throw new Error('?ㅽ듃由щ컢 ?묐떟 蹂몃Ц???놁뒿?덈떎.')
+    throw new Error('스트리밍 응답 본문이 없습니다.')
   }
 
   res.statusCode = 200
@@ -1013,7 +1016,7 @@ async function streamGeminiReview({
     }
   } catch (err) {
     writeJsonLine({
-      error: err instanceof Error ? err.message : '?ㅽ듃由щ컢 ?묐떟???쎌? 紐삵뻽?듬땲??',
+      error: err instanceof Error ? err.message : '스트리밍 응답을 읽지 못했습니다.',
     })
     return res.end()
   }
@@ -1021,12 +1024,12 @@ async function streamGeminiReview({
   const normalizedReview = normalizeReviewText(fullText)
   if (finishReason === 'MAX_TOKENS') {
     writeJsonLine({
-      error: '由щ럭媛 以묎컙???섎졇?듬땲?? 湲?먯닔蹂대떎 ?꾩꽦??由щ럭瑜??곗꽑???ㅼ떆 ?앹꽦??二쇱꽭??',
+      error: '리뷰가 중간에 잘렸습니다. 글자수보다 완성된 리뷰를 우선해 다시 생성해 주세요.',
     })
     return res.end()
   }
   if (normalizedReview.length < minReviewChars) {
-    writeJsonLine({ error: '由щ럭媛 ?덈Т 吏㏐쾶 ?앹꽦?섏뿀?듬땲?? ?ㅼ떆 ?앹꽦??二쇱꽭??' })
+    writeJsonLine({ error: '리뷰가 너무 짧게 생성되었습니다. 다시 생성해 주세요.' })
     return res.end()
   }
   writeJsonLine({ done: true, finishReason })
@@ -1035,6 +1038,7 @@ async function streamGeminiReview({
 
 function toClientErrorStatus(status) {
   if (!Number.isInteger(status)) return 502
+  if (RETRYABLE_STATUS.has(status)) return 502
   if (status >= 400 && status <= 599) return status
   return 502
 }
@@ -1068,7 +1072,7 @@ async function rejectDailyUsageLimit(res, identifier, action) {
   } catch {
     json(res, 503, {
       ok: false,
-      error: '?ъ슜???쒗븳 ??μ냼瑜??뺤씤?????놁뒿?덈떎. ?좎떆 ???ㅼ떆 ?쒕룄??二쇱꽭??',
+      error: '사용량 제한 저장소를 확인할 수 없습니다. 잠시 후 다시 시도해 주세요.',
     })
     return true
   }
@@ -1077,7 +1081,7 @@ async function rejectDailyUsageLimit(res, identifier, action) {
   res.setHeader('Retry-After', String(dailyUsage.retryAfterSec))
   json(res, 429, {
     ok: false,
-    error: `?쇱씪 ?붿껌 ?쒕룄(${dailyUsage.limit}??瑜?珥덇낵?덉뒿?덈떎. ?댁씪 ?ㅼ떆 ?쒕룄??二쇱꽭??`,
+    error: `일일 요청 한도(${dailyUsage.limit}회)를 초과했습니다. 내일 다시 시도해 주세요.`,
   })
   return true
 }
@@ -1091,11 +1095,11 @@ export default async function handler(req, res) {
   if (body?.tooLarge) {
     return json(res, 413, {
       ok: false,
-      error: '?붿껌 蹂몃Ц???덈Т ?쎈땲?? ?대?吏 ?ш린瑜?以꾩뿬 ?ㅼ떆 ?쒕룄??二쇱꽭??',
+      error: '요청 본문이 너무 큽니다. 이미지 크기를 줄여 다시 시도해 주세요.',
     })
   }
   if (!body) {
-    return json(res, 400, { ok: false, error: '?섎せ??JSON 蹂몃Ц?낅땲??' })
+    return json(res, 400, { ok: false, error: '잘못된 JSON 본문입니다.' })
   }
 
   if (body.action === 'ping') {
@@ -1116,14 +1120,14 @@ export default async function handler(req, res) {
   } catch {
     return json(res, 503, {
       ok: false,
-      error: '?붿껌 ?쒗븳 ??μ냼瑜??뺤씤?????놁뒿?덈떎. ?좎떆 ???ㅼ떆 ?쒕룄??二쇱꽭??',
+      error: '요청 제한 저장소를 확인할 수 없습니다. 잠시 후 다시 시도해 주세요.',
     })
   }
   if (!rate.ok) {
     res.setHeader('Retry-After', String(rate.retryAfterSec))
     return json(res, 429, {
       ok: false,
-      error: '?붿껌???덈Т 留롮뒿?덈떎. ?좎떆 ???ㅼ떆 ?쒕룄??二쇱꽭??',
+      error: '요청이 너무 많습니다. 잠시 후 다시 시도해 주세요.',
     })
   }
 
@@ -1162,7 +1166,7 @@ export default async function handler(req, res) {
   if (!key) {
     return json(res, 500, {
       ok: false,
-      error: '?쒕쾭 ?섍꼍蹂??GEMINI_API_KEY媛 ?놁뒿?덈떎.',
+      error: '서버 환경변수 GEMINI_API_KEY가 없습니다.',
     })
   }
 
@@ -1276,14 +1280,14 @@ export default async function handler(req, res) {
       }
       return json(res, 502, {
         ok: false,
-        error: `?ㅼ썙?쒓? ${n}媛쒕퓧?낅땲?? 理쒖냼 ${KEYWORDS_MIN_COUNT}媛?沅뚯옣 4~8媛?媛 ?꾩슂?⑸땲?? ?ㅼ떆 ?앹꽦??二쇱꽭??`,
+        error: `키워드가 ${n}개뿐입니다. 최소 ${KEYWORDS_MIN_COUNT}개, 권장 4~8개가 필요합니다. 다시 생성해 주세요.`,
       })
     }
 
     if (sawDuplicate) {
       return json(res, 502, {
         ok: false,
-        error: '?댁쟾怨?媛숈? ?ㅼ썙?쒕쭔 諛섎났 ?앹꽦?섏뿀?듬땲?? ?ㅼ떆 ?쒕룄??二쇱꽭??',
+        error: '이전과 같은 키워드만 반복 생성되었습니다. 다시 시도해 주세요.',
       })
     }
 
@@ -1298,7 +1302,7 @@ export default async function handler(req, res) {
       ok: false,
       error:
         apiIssue ??
-        '?ㅼ썙???뺤떇???쎌쓣 ???놁뒿?덈떎. ?ㅼ썙???ㅼ떆 ?앹꽦???뚮윭 二쇱꽭??',
+        '키워드 형식을 읽을 수 없습니다. 키워드를 다시 생성해 주세요.',
     })
   }
 
@@ -1320,10 +1324,10 @@ export default async function handler(req, res) {
     } catch (err) {
       return json(res, 502, {
         ok: false,
-        error: err instanceof Error ? err.message : '由щ럭 ?앹꽦 ?ㅽ뙣',
+        error: err instanceof Error ? err.message : '리뷰 생성 실패',
       })
     }
   }
 
-  return json(res, 400, { ok: false, error: '吏?먰븯吏 ?딅뒗 action?낅땲??' })
+  return json(res, 400, { ok: false, error: '지원하지 않는 action입니다.' })
 }

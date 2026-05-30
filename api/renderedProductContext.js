@@ -1,3 +1,5 @@
+import { ACCESS_CHALLENGE_PATTERN } from './accessChallenge.js'
+
 const RENDERED_PAGE_TIMEOUT_MS = 18000
 const RENDERED_STABILIZE_MS = 1800
 
@@ -54,7 +56,8 @@ export async function fetchRenderedProductInfo(urlString, userAgent) {
       .catch(() => {})
     await page.waitForTimeout(RENDERED_STABILIZE_MS)
 
-    return page.evaluate(() => {
+    return page.evaluate((accessChallengePattern) => {
+      const accessChallengeRe = new RegExp(accessChallengePattern, 'i')
       const clean = (value) =>
         typeof value === 'string' ? value.replace(/\s+/g, ' ').trim() : ''
       const firstText = (selectors) => {
@@ -104,6 +107,11 @@ export async function fetchRenderedProductInfo(urlString, userAgent) {
         )
       }
 
+      const challengeText = clean(
+        `${document.title} ${document.body?.innerText || ''}`.slice(0, 6000),
+      )
+      if (accessChallengeRe.test(challengeText)) return null
+
       const name =
         firstText([
           '[data-testid*="product" i][data-testid*="name" i]',
@@ -151,7 +159,7 @@ export async function fetchRenderedProductInfo(urlString, userAgent) {
           clean(location.hostname),
         url: location.href,
       }
-    })
+    }, ACCESS_CHALLENGE_PATTERN)
   } catch {
     return null
   } finally {
