@@ -1,3 +1,4 @@
+/* global process */
 import { ACCESS_CHALLENGE_PATTERN } from './accessChallenge.js'
 
 const RENDERED_PAGE_TIMEOUT_MS = 18000

@@ -61,6 +61,20 @@ test('buildKeywordPrompt asks for variation from previous keywords', () => {
 })
 
 
+test('buildKeywordPrompt guides food appearance and taste for place reviews', () => {
+  const prompt = buildKeywordPrompt({
+    rating: 5,
+    category: 'place',
+    imageCount: 1,
+    minKeywordCount: 3,
+    maxKeywordCount: 8,
+  })
+
+  assert.match(prompt, /음식의 모양과 맛 평가/)
+  assert.match(prompt, /플레이팅/)
+  assert.match(prompt, /추측하지 마/)
+})
+
 test('buildReviewPrompt includes review category context', () => {
   const { prompt, safeLength, minReviewChars } = buildReviewPrompt({
     rating: 5,
@@ -76,6 +90,20 @@ test('buildReviewPrompt includes review category context', () => {
   assert.match(prompt, /조명 은은함/)
   assert.match(prompt, /동선 편함/)
   assert.match(prompt, /90/)
+})
+
+test('buildReviewPrompt guides food appearance and taste for place reviews', () => {
+  const { prompt } = buildReviewPrompt({
+    rating: 5,
+    keywords: ['플레이팅 색감', '간이 잘 맞음'],
+    length: 'medium',
+    tone: 'friendly',
+    category: 'place',
+  })
+
+  assert.match(prompt, /음식의 모양과 맛 평가/)
+  assert.match(prompt, /식감/)
+  assert.match(prompt, /간/)
 })
 
 test('buildReviewPrompt guides sparse long reviews without blocking them', () => {

@@ -371,7 +371,7 @@ function collectScriptPayloads(html) {
     EMBEDDED_JSON_ASSIGNMENT_RE.lastIndex = 0
     let assignment
     while ((assignment = EMBEDDED_JSON_ASSIGNMENT_RE.exec(body)) !== null) {
-      const start = body.slice(assignment.index + assignment[0].length).search(/[\[{]/)
+      const start = body.slice(assignment.index + assignment[0].length).search(/[[{]/)
       if (start < 0) continue
       const jsonStart = assignment.index + assignment[0].length + start
       const jsonLike = sliceBalancedJsonLike(body, jsonStart)
@@ -384,7 +384,7 @@ function collectScriptPayloads(html) {
 function parseEmbeddedJsonPayload(payload) {
   if (typeof payload !== 'string' || !payload.trim()) return null
   const trimmed = payload.trim()
-  const start = trimmed.search(/[\[{]/)
+  const start = trimmed.search(/[[{]/)
   if (start < 0) return null
   const jsonLike = sliceBalancedJsonLike(trimmed, start)
   if (!jsonLike) return null

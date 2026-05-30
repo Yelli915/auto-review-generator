@@ -155,7 +155,7 @@ function buildProductInfoContext(product) {
 function appendProductContext(sourceData, product, selectionSummary) {
   const productInfoContext = buildProductInfoContext(product)
   const baseContext = productInfoContext
-    ? `확인한 상품 정보:\n${productInfoContext}`
+    ? `확인된 상품 정보:\n${productInfoContext}`
     : sourceData.productContext
   const contextParts = [
     baseContext,
@@ -197,13 +197,22 @@ export default function ReviewGenerator({ onReviewComplete }) {
     setStep(STEPS.UPLOAD)
   }
 
+  const runLoadingTask = async (task, fallbackMessage) => {
+    setError(null)
+    setIsLoading(true)
+    try {
+      await task()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : fallbackMessage)
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
   const handleUploadNext = async (data) => {
     const normalizedData = normalizeSourceData(data, reviewCategory)
 
-    setError(null)
-    setIsLoading(true)
-
-    try {
+    await runLoadingTask(async () => {
       if (normalizedData.productUrl) {
         const analysis = await analyzeProductUrl(normalizedData.productUrl)
         if (!analysis?.ok) {
@@ -231,11 +240,7 @@ export default function ReviewGenerator({ onReviewComplete }) {
       setProductOptionSelections([])
 
       await continueAfterProductOptions(nextSource, null)
-    } catch (e) {
-      setError(e instanceof Error ? e.message : '키워드 생성에 실패했습니다.')
-    } finally {
-      setIsLoading(false)
-    }
+    }, '키워드 생성에 실패했습니다.')
   }
 
   const loadKeywordsAndAdvance = async (nextSource) => {
@@ -279,18 +284,11 @@ export default function ReviewGenerator({ onReviewComplete }) {
       selectionSummary,
     )
 
-    setProductOptionSelections(safeSelections)
-    setSourceData(nextSource)
-    setError(null)
-    setIsLoading(true)
-
-    try {
+    await runLoadingTask(async () => {
+      setProductOptionSelections(safeSelections)
+      setSourceData(nextSource)
       await loadKeywordsAndAdvance(nextSource)
-    } catch (e) {
-      setError(e instanceof Error ? e.message : '키워드 생성에 실패했습니다.')
-    } finally {
-      setIsLoading(false)
-    }
+    }, '키워드 생성에 실패했습니다.')
   }
 
   const handleRegenerate = () => {
@@ -304,16 +302,10 @@ export default function ReviewGenerator({ onReviewComplete }) {
 
   const handleRefresh = async () => {
     if (!sourceData || isLoading) return
-    setError(null)
-    setIsLoading(true)
-    try {
+    await runLoadingTask(async () => {
       const nextKeywords = await loadKeywordsFromSource(sourceData, keywords)
       setKeywords(nextKeywords)
-    } catch (e) {
-      setError(e instanceof Error ? e.message : '키워드 재생성에 실패했습니다.')
-    } finally {
-      setIsLoading(false)
-    }
+    }, '키워드 재생성에 실패했습니다.')
   }
 
   const handleBackToUpload = () => {

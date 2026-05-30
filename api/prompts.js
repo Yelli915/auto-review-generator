@@ -53,6 +53,12 @@ function buildSpecificityGuide(category) {
     : '상품이라면 디자인, 색상, 소재, 무게, 크기, 마감, 사용감, 옵션, 배송, 포장 같은 실제 상품 요소를 꼭 넣어.'
 }
 
+function buildFoodEvaluationGuide(category) {
+  return category === 'place'
+    ? '음식이나 메뉴가 사진, 장소 정보, 키워드에서 확인되면 음식의 모양과 맛 평가를 반드시 반영해. 플레이팅, 색감, 양, 재료 신선도, 익힘 정도, 식감, 간, 풍미처럼 실제로 보이거나 입력된 근거가 있는 요소만 사용하고, 확인되지 않은 메뉴명이나 맛은 추측하지 마.'
+    : ''
+}
+
 function buildCategoryGenericBan(category) {
   return category === 'place'
     ? '"분위기 좋음", "깔끔함", "만족", "가성비", "무난함"처럼 어떤 장소에나 붙는 문구는 피하고 실제 장소 특징만 써.'
@@ -87,16 +93,18 @@ export function buildKeywordPrompt({
 
   const safeProductContext =
     typeof productContext === 'string' ? productContext.trim().slice(0, 2800) : ''
+  const foodEvaluationGuide = buildFoodEvaluationGuide(safeCategory)
   const sourceGuide = safeProductContext
     ? `상품/장소에서 수집한 실제 정보:\n${safeProductContext}\n\n` +
       '위 정보의 상품명, 설명, 선택 옵션, 가격, 페이지 수집 상태, 링크 경로에서 확인되는 구체 항목을 근거로 키워드를 만들어. ' +
       `${buildCategoryGenericBan(safeCategory)} ` +
       `${buildSpecificityGuide(safeCategory)} `
-    : imageGuide
+    : imageGuide + (foodEvaluationGuide ? `${foodEvaluationGuide} ` : '')
 
   return joinPromptParts(
     `${categoryMeta.label} 리뷰용 키워드를 만들어. 뻔한 광고 문구는 금지하고 실제 관찰 포인트만 사용해. `,
     sourceGuide,
+    foodEvaluationGuide && safeProductContext ? `${foodEvaluationGuide} ` : '',
     variationGuide,
     '이미지나 상품 페이지에서 직접 확인되지 않은 내용은 넣지 말고, 추측은 배제해. ',
     `별점 ${rating}점의 감정 톤은 ${keywordSentimentGuide(rating)}를 반영하되, 문구 자체는 ${categoryMeta.focus}에 맞춰 구체적으로 써. `,
@@ -121,12 +129,14 @@ export function buildReviewPrompt({ rating, keywords, length, tone, category }) 
     : ''
   const specificityGuide = buildSpecificityGuide(safeCategory)
   const genericBan = buildCategoryGenericBan(safeCategory)
+  const foodEvaluationGuide = buildFoodEvaluationGuide(safeCategory)
 
   return {
     prompt: joinPromptParts(
       `대상: ${categoryMeta.label}\n키워드: ${safeKeywords.join(', ')}\n별점: ${rating}점\n길이: ${getReviewLengthPrompt(safeLength)}\n톤: ${REVIEW_TONE_PROMPT_MAP[safeTone]}\n\n`,
       `${categoryMeta.label} 리뷰를 쓰되, 누구에게나 붙는 흔한 표현은 빼고 실제 대상의 특징만 드러내. `,
       `${specificityGuide} `,
+      foodEvaluationGuide ? `${foodEvaluationGuide} ` : '',
       `다음 키워드는 반드시 반영해: ${safeKeywords.join(', ')}. 하지만 키워드를 그대로 나열하지 말고, 키워드가 가리키는 구체 요소를 중심으로 자연스럽게 풀어 써. `,
       `${categoryMeta.focus}에 맞는 사실만 사용하고, ${categoryMeta.avoid}. `,
       `${genericBan} `,

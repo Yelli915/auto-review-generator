@@ -1,4 +1,4 @@
-﻿import { useEffect, useId, useRef, useState } from 'react'
+﻿import { useCallback, useEffect, useId, useRef, useState } from 'react'
 import ImageEditPanel from './ImageEditPanel'
 import ImagePreviewGrid from './ImagePreviewGrid'
 import {
@@ -12,6 +12,59 @@ import {
 const MAX_FILE_SIZE_MB = 15
 const IMAGE_RESIZE_OPTIONS = { maxEdge: 448, quality: 0.68 }
 
+function getExtensionFromMimeType(type) {
+  if (type === 'image/png') return 'png'
+  if (type === 'image/webp') return 'webp'
+  return 'jpg'
+}
+
+function nameClipboardImage(file, index) {
+  if (file.name) return file
+  const extension = getExtensionFromMimeType(file.type)
+  return new File([file], `pasted-image-${index + 1}.${extension}`, {
+    type: file.type || 'image/jpeg',
+    lastModified: Date.now(),
+  })
+}
+
+function getClipboardImageFiles(clipboardData) {
+  if (!clipboardData) return []
+  const itemFiles = Array.from(clipboardData.items || [])
+    .filter((item) => item.kind === 'file' && item.type.startsWith('image/'))
+    .map((item) => item.getAsFile())
+    .filter(Boolean)
+
+  const files = itemFiles.length
+    ? itemFiles
+    : Array.from(clipboardData.files || []).filter((file) =>
+        file.type.startsWith('image/'),
+      )
+
+  return files.map(nameClipboardImage)
+}
+
+function isTextEditingTarget(target) {
+  if (!(target instanceof HTMLElement)) return false
+  return (
+    target.isContentEditable ||
+    target.tagName === 'INPUT' ||
+    target.tagName === 'TEXTAREA' ||
+    target.tagName === 'SELECT'
+  )
+}
+
+function validateSelectedFiles(files) {
+  if (!files.length) return '이미지를 1장 이상 선택해 주세요.'
+  if (files.length > MAX_REVIEW_IMAGE_COUNT) {
+    return `이미지는 최대 ${MAX_REVIEW_IMAGE_COUNT}장까지 업로드할 수 있습니다.`
+  }
+  const invalidType = files.find((file) => !file.type.startsWith('image/'))
+  if (invalidType) return '이미지 파일(JPG, PNG 등)만 업로드할 수 있습니다.'
+  const oversized = files.find((file) => file.size > MAX_FILE_SIZE_MB * 1024 * 1024)
+  if (oversized) return `파일 크기는 각 ${MAX_FILE_SIZE_MB}MB 이하여야 합니다.`
+  return ''
+}
+
 function revokeObjectUrls(urls) {
   urls.forEach((url) => URL.revokeObjectURL(url))
 }
@@ -24,6 +77,10 @@ function getImageObjectUrls(images) {
 
 function getImageFileNames(images) {
   return images.map((image) => image.file.name).join(', ')
+}
+
+function buildImageStatus(images, fallback = '') {
+  return images.length ? getImageFileNames(images) : fallback
 }
 
 async function createReviewImage(file, previewUrl) {
@@ -101,25 +158,13 @@ export default function UploadStep({
     }
   }, [category, inputMode])
 
-  function replaceImages(nextImages) {
-    revokeObjectUrls(objectUrlsRef.current)
+  const setTrackedImages = useCallback((nextImages, { revokePrevious = false } = {}) => {
+    if (revokePrevious) revokeObjectUrls(objectUrlsRef.current)
     objectUrlsRef.current = getImageObjectUrls(nextImages)
     setImages(nextImages)
-  }
+  }, [])
 
-  function validateSelectedFiles(files) {
-    if (!files.length) return '이미지를 1장 이상 선택해 주세요.'
-    if (files.length > MAX_REVIEW_IMAGE_COUNT) {
-      return `이미지는 최대 ${MAX_REVIEW_IMAGE_COUNT}장까지 업로드할 수 있습니다.`
-    }
-    const invalidType = files.find((file) => !file.type.startsWith('image/'))
-    if (invalidType) return '이미지 파일(JPG, PNG 등)만 업로드할 수 있습니다.'
-    const oversized = files.find((file) => file.size > MAX_FILE_SIZE_MB * 1024 * 1024)
-    if (oversized) return `파일 크기는 각 ${MAX_FILE_SIZE_MB}MB 이하여야 합니다.`
-    return ''
-  }
-
-  function processFiles(fileList) {
+  const processFiles = useCallback((fileList, sourceLabel = '선택됨') => {
     const token = processTokenRef.current + 1
     processTokenRef.current = token
     const files = Array.from(fileList || [])
@@ -131,7 +176,7 @@ export default function UploadStep({
     }
 
     const nextPreviewUrls = files.map((file) => URL.createObjectURL(file))
-    replaceImages([])
+    setTrackedImages([], { revokePrevious: true })
     objectUrlsRef.current = nextPreviewUrls
     setEditingIndex(null)
     setIsProcessing(true)
@@ -144,23 +189,22 @@ export default function UploadStep({
     )
       .then((nextImages) => {
         if (processTokenRef.current !== token) return
-        objectUrlsRef.current = getImageObjectUrls(nextImages)
-        setImages(nextImages)
+        setTrackedImages(nextImages)
         setStatus({
-          text: `${nextImages.length}장 선택됨 · ${getImageFileNames(nextImages)}`,
+          text: `${nextImages.length}장 ${sourceLabel} · ${getImageFileNames(nextImages)}`,
           isError: false,
         })
       })
       .catch(() => {
         if (processTokenRef.current !== token) return
-        replaceImages([])
+        setTrackedImages([], { revokePrevious: true })
         setStatus({ text: '이미지 변환에 실패했습니다.', isError: true })
       })
       .finally(() => {
         if (processTokenRef.current !== token) return
         setIsProcessing(false)
       })
-  }
+  }, [setTrackedImages])
 
   function handleFileChange(e) {
     processFiles(e.target.files)
@@ -186,15 +230,14 @@ export default function UploadStep({
     if (busy) return
     const nextImages = images.filter((_, i) => i !== index)
     revokeObjectUrls(getImageObjectUrls([images[index]]))
-    objectUrlsRef.current = getImageObjectUrls(nextImages)
-    setImages(nextImages)
+    setTrackedImages(nextImages)
     setEditingIndex((prev) => {
       if (prev == null) return null
       if (prev === index) return null
       return prev > index ? prev - 1 : prev
     })
     setStatus({
-      text: nextImages.length ? getImageFileNames(nextImages) : '',
+      text: buildImageStatus(nextImages),
       isError: false,
     })
   }
@@ -222,8 +265,7 @@ export default function UploadStep({
             }
           : item,
       )
-      objectUrlsRef.current = getImageObjectUrls(nextImages)
-      setImages(nextImages)
+      setTrackedImages(nextImages)
       setStatus({ text: `${index + 1}번째 이미지 편집을 적용했습니다.`, isError: false })
     } catch {
       setStatus({ text: '이미지 편집 적용에 실패했습니다.', isError: true })
@@ -268,6 +310,20 @@ export default function UploadStep({
   const busy = isLoading || isProcessing
   const canUseLink = category === 'product'
   const isLinkMode = canUseLink && inputMode === 'link'
+
+  const handlePaste = useCallback((e) => {
+    if (busy || isLinkMode || isTextEditingTarget(e.target)) return
+    const pastedFiles = getClipboardImageFiles(e.clipboardData)
+    if (!pastedFiles.length) return
+    e.preventDefault()
+    processFiles(pastedFiles, '붙여넣음')
+  }, [busy, isLinkMode, processFiles])
+
+  useEffect(() => {
+    if (isLinkMode) return undefined
+    document.addEventListener('paste', handlePaste)
+    return () => document.removeEventListener('paste', handlePaste)
+  }, [handlePaste, isLinkMode])
 
   return (
     <section className="step-card step-card--enter">
@@ -370,7 +426,7 @@ export default function UploadStep({
                   {images.length ? '이미지를 더 추가하거나 다시 선택하세요' : '이미지를 추가하세요'}
                 </p>
                 <p className="file-drop__sub">
-                  클릭 또는 드래그 앤 드롭 · 최대 {MAX_REVIEW_IMAGE_COUNT}장 · 각 {MAX_FILE_SIZE_MB}MB
+                  클릭, 붙여넣기(Ctrl+V) 또는 드래그 앤 드롭 · 최대 {MAX_REVIEW_IMAGE_COUNT}장 · 각 {MAX_FILE_SIZE_MB}MB
                 </p>
               </>
             )}

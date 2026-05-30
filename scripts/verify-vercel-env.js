@@ -1,3 +1,4 @@
+/* global process */
 const REQUIRED_VERCEL_ENV = [
   'GEMINI_API_KEY',
   'GOOGLE_CLIENT_ID',
