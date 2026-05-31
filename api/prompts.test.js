@@ -150,6 +150,8 @@ test('buildReviewPrompt guides cosmetics with matching review criteria', () => {
   assert.match(prompt, /발림성/)
   assert.match(prompt, /지속력/)
   assert.match(prompt, /피부 타입/)
+  assert.match(prompt, /건조함 완화/)
+  assert.match(prompt, /사용자가 바로 느낄 수 있는 피부 체감 효과/)
 })
 
 test('buildReviewPrompt omits cosmetics guide for unrelated product reviews', () => {
@@ -180,6 +182,9 @@ test('buildKeywordPrompt guides cosmetics keyword criteria for product reviews',
   assert.match(prompt, /향/)
   assert.match(prompt, /발림성/)
   assert.match(prompt, /보습감/)
+  assert.match(prompt, /피부에 어떤 체감 효과/)
+  assert.match(prompt, /건조함 완화/)
+  assert.match(prompt, /기능성·의학적·장기 효과/)
 })
 
 test('buildKeywordPrompt prioritizes cosmetic contents over containers', () => {
@@ -194,6 +199,7 @@ test('buildKeywordPrompt prioritizes cosmetic contents over containers', () => {
   assert.match(prompt, /화장품이나 뷰티 제품의 키워드/)
   assert.match(prompt, /용기 표현을 키워드의 중심으로 쓰지 말고/)
   assert.match(prompt, /내용물의 제형, 색감, 광택, 농도, 향/)
+  assert.match(prompt, /사용 직후 느낄 수 있는 피부 반응/)
   assert.match(prompt, /누수, 파손, 펌프 불량, 위생, 휴대성/)
 })
 
