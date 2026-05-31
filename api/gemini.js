@@ -38,6 +38,12 @@ const REVIEW_MAX_OUTPUT_TOKENS = {
   long: 4096,
 }
 const KEYWORD_RETRY_LIMIT = 3
+const COSMETIC_CONTEXT_RE =
+  /화장품|뷰티|스킨|로션|크림|수분|보습|앰플|세럼|에센스|토너|선크림|자외선|클렌징|쿠션|파운데이션|컨실러|립|틴트|마스카라|아이섀도|블러셔|향|발림성|흡수|밀착|끈적임|마무리감|지속력|피부/
+const CONTAINER_CENTERED_KEYWORD_RE =
+  /용기|케이스|패키지|패키징|포장|병|튜브|펌프|캡|뚜껑|스포이드|콤팩트|리필통/
+const CONTAINER_REVIEW_EXCEPTION_RE =
+  /누수|샘|흐름|파손|깨짐|불량|고장|위생|휴대|밀봉|보관|잠금|리필|소분/
 
 function normalizeKeywordSet(keywords) {
   const normalized = Array.isArray(keywords)
@@ -605,6 +611,65 @@ function sanitizeKeywordsField(keywords) {
     return sanitizeKeywordArray(parts)
   }
   return null
+}
+
+function isProductCategory(category) {
+  return String(category || '').trim() === 'product'
+}
+
+function shouldFilterCosmeticContainerKeywords({
+  category,
+  productContext,
+  keywords,
+}) {
+  if (!isProductCategory(category)) return false
+  if (typeof productContext === 'string' && COSMETIC_CONTEXT_RE.test(productContext)) {
+    return true
+  }
+  if (Array.isArray(keywords) && keywords.some((keyword) => COSMETIC_CONTEXT_RE.test(keyword))) {
+    return true
+  }
+  return false
+}
+
+export function isCosmeticContainerOnlyKeyword(keyword) {
+  if (typeof keyword !== 'string') return false
+  if (!CONTAINER_CENTERED_KEYWORD_RE.test(keyword)) return false
+  return !CONTAINER_REVIEW_EXCEPTION_RE.test(keyword)
+}
+
+export function filterCosmeticContainerKeywords(keywords, options = {}) {
+  const normalized = normalizeKeywordSet(keywords)
+  if (!normalized.length) return { keywords: null, removed: [] }
+  if (!shouldFilterCosmeticContainerKeywords({ ...options, keywords: normalized })) {
+    return { keywords: normalized, removed: [] }
+  }
+
+  const filtered = []
+  const removed = []
+  for (const keyword of normalized) {
+    if (isCosmeticContainerOnlyKeyword(keyword)) {
+      removed.push(keyword)
+    } else {
+      filtered.push(keyword)
+    }
+  }
+  return {
+    keywords: filtered.length ? filtered : null,
+    removed,
+  }
+}
+
+function appendContainerKeywordRetryGuidance(prompt, removedKeywords) {
+  const removed = normalizeKeywordSet(removedKeywords)
+  if (!removed.length) return prompt
+  return (
+    `${prompt}\n\n` +
+    `제외된 용기 중심 키워드: ${removed.join(', ')}\n` +
+    '화장품으로 보이는 상품은 용기, 케이스, 패키지, 병, 튜브, 펌프, 캡 중심 키워드를 다시 내지 마. ' +
+    '내용물의 제형, 색감, 농도, 향, 발림성, 흡수감, 보습감, 밀착감, 마무리감 중심으로 대체해. ' +
+    '단, 누수, 파손, 펌프 불량, 위생, 휴대성처럼 사용 판단에 직접 영향이 있는 용기 문제만 예외로 허용해.'
+  )
 }
 
 function stripEnglishJsonPreamble(str) {
@@ -1232,15 +1297,21 @@ export default async function handler(req, res) {
     })
 
     const rejectedKeywordSets = previousKeywords.length ? [previousKeywords] : []
+    const removedContainerKeywords = []
     let result = null
     let parsed = null
     let sawDuplicate = false
+    let sawContainerOnlyKeyword = false
 
     for (let attempt = 0; attempt < KEYWORD_RETRY_LIMIT; attempt += 1) {
-      const promptForAttempt =
+      const duplicateAwarePrompt =
         attempt === 0
           ? prompt
           : appendKeywordRetryGuidance(prompt, rejectedKeywordSets)
+      const promptForAttempt = appendContainerKeywordRetryGuidance(
+        duplicateAwarePrompt,
+        removedContainerKeywords,
+      )
 
       result = await requestGemini({
         key,
@@ -1253,6 +1324,29 @@ export default async function handler(req, res) {
       parsed = parseKeywordsFromAny(result.data)
       if (!parsed.keywords || parsed.keywords.length < KEYWORDS_MIN_COUNT) {
         break
+      }
+
+      const filtered = filterCosmeticContainerKeywords(parsed.keywords, {
+        category: body.category,
+        productContext,
+      })
+      if (filtered.removed.length) {
+        sawContainerOnlyKeyword = true
+        removedContainerKeywords.push(...filtered.removed)
+        rejectedKeywordSets.push(parsed.keywords)
+        if (!filtered.keywords || filtered.keywords.length < KEYWORDS_MIN_COUNT) {
+          parsed = {
+            ...parsed,
+            keywords: null,
+            tooFew: true,
+            partial: filtered.keywords || [],
+          }
+          continue
+        }
+        parsed = {
+          ...parsed,
+          keywords: filtered.keywords,
+        }
       }
 
       const isDuplicate = rejectedKeywordSets.some((set) =>
@@ -1288,6 +1382,14 @@ export default async function handler(req, res) {
       return json(res, 502, {
         ok: false,
         error: '이전과 같은 키워드만 반복 생성되었습니다. 다시 시도해 주세요.',
+      })
+    }
+
+    if (sawContainerOnlyKeyword) {
+      return json(res, 502, {
+        ok: false,
+        error:
+          '용기나 패키지 중심 키워드만 생성되었습니다. 내용물의 제형, 색감, 향, 발림성, 흡수감 중심으로 다시 생성해 주세요.',
       })
     }
 

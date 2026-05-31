@@ -102,6 +102,8 @@ test('buildReviewPrompt asks for subjective experience-based writing', () => {
   })
 
   assert.match(prompt, /주관적 후기/)
+  assert.match(prompt, /직접 써보고/)
+  assert.match(prompt, /"제가", "저는", "직접 써보니", "느꼈어요"/)
   assert.match(prompt, /체감 중심/)
   assert.match(prompt, /좋았던 점과 아쉬웠던 점/)
 })
