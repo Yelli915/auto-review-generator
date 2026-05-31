@@ -180,7 +180,22 @@ test('buildKeywordPrompt guides cosmetics keyword criteria for product reviews',
   assert.match(prompt, /보습감/)
 })
 
-test('buildKeywordPrompt omits cosmetics guide for unrelated product context', () => {
+test('buildKeywordPrompt prioritizes cosmetic contents over containers', () => {
+  const prompt = buildKeywordPrompt({
+    rating: 5,
+    category: 'product',
+    imageCount: 1,
+    minKeywordCount: 3,
+    maxKeywordCount: 8,
+  })
+
+  assert.match(prompt, /화장품이나 뷰티 제품의 키워드/)
+  assert.match(prompt, /용기 표현을 키워드의 중심으로 쓰지 말고/)
+  assert.match(prompt, /내용물의 제형, 색감, 광택, 농도, 향/)
+  assert.match(prompt, /누수, 파손, 펌프 불량, 위생, 휴대성/)
+})
+
+test('buildKeywordPrompt omits cosmetic review criteria for unrelated product context', () => {
   const prompt = buildKeywordPrompt({
     rating: 5,
     category: 'product',
@@ -190,9 +205,8 @@ test('buildKeywordPrompt omits cosmetics guide for unrelated product context', (
     maxKeywordCount: 8,
   })
 
-  assert.doesNotMatch(prompt, /화장품/)
-  assert.doesNotMatch(prompt, /발림성/)
   assert.doesNotMatch(prompt, /피부 타입/)
+  assert.doesNotMatch(prompt, /성분 효과/)
 })
 
 test('buildKeywordPrompt prioritizes product contents over packaging containers', () => {

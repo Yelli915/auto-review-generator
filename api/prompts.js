@@ -80,6 +80,12 @@ function buildCosmeticEvaluationGuide(category) {
     : ''
 }
 
+function buildCosmeticKeywordContentsGuide(category) {
+  return category === 'product'
+    ? '화장품이나 뷰티 제품의 키워드를 만들 때는 병, 튜브, 펌프, 캡, 케이스, 패키지 같은 용기 표현을 키워드의 중심으로 쓰지 말고, 내용물의 제형, 색감, 광택, 농도, 향, 발림성, 흡수감, 보습감, 밀착감, 마무리감을 우선 키워드로 뽑아. 용기 관련 키워드는 누수, 파손, 펌프 불량, 위생, 휴대성처럼 실제 사용 판단에 직접 영향을 주는 경우에만 예외적으로 써.'
+    : ''
+}
+
 function isCosmeticReviewContext(category, values) {
   return category === 'product' && values.some((value) => COSMETIC_REVIEW_PATTERN.test(value))
 }
@@ -120,6 +126,7 @@ export function buildKeywordPrompt({
     typeof productContext === 'string' ? productContext.trim().slice(0, 2800) : ''
   const foodEvaluationGuide = buildFoodEvaluationGuide(safeCategory)
   const productContentsPriorityGuide = buildProductContentsPriorityGuide(safeCategory)
+  const cosmeticKeywordContentsGuide = buildCosmeticKeywordContentsGuide(safeCategory)
   const cosmeticEvaluationGuide = isCosmeticReviewContext(safeCategory, [safeProductContext])
     ? buildCosmeticEvaluationGuide(safeCategory)
     : ''
@@ -135,6 +142,7 @@ export function buildKeywordPrompt({
     sourceGuide,
     foodEvaluationGuide && safeProductContext ? `${foodEvaluationGuide} ` : '',
     productContentsPriorityGuide ? `${productContentsPriorityGuide} ` : '',
+    cosmeticKeywordContentsGuide ? `${cosmeticKeywordContentsGuide} ` : '',
     cosmeticEvaluationGuide ? `${cosmeticEvaluationGuide} ` : '',
     variationGuide,
     '이미지나 상품 페이지에서 직접 확인되지 않은 내용은 넣지 말고, 추측은 배제해. ',
