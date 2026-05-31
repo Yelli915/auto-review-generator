@@ -1,5 +1,13 @@
 import { useRef, useState } from 'react'
-import { CROP_MODES, DEFAULT_IMAGE_EDIT, normalizeRotation } from '../utils/imageUtils'
+import {
+  CROP_MODES,
+  DEFAULT_FREE_CROP_RECT,
+  DEFAULT_IMAGE_EDIT,
+  MIN_INTERACTIVE_CROP_SIZE,
+  cropRectKey,
+  normalizeInteractiveCropRect,
+  normalizeRotation,
+} from '../utils/imageUtils'
 
 const CROP_OPTIONS = [
   { value: CROP_MODES.original, label: '원본' },
@@ -8,36 +16,10 @@ const CROP_OPTIONS = [
   { value: CROP_MODES.free, label: '자유' },
 ]
 
-const DEFAULT_FREE_CROP_RECT = {
-  x: 0.08,
-  y: 0.08,
-  width: 0.84,
-  height: 0.84,
-}
-
 const CROP_HANDLES = ['nw', 'ne', 'sw', 'se']
-const MIN_CROP_SIZE = 0.1
 
 function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value))
-}
-
-function normalizeCropRect(rect) {
-  const x = clamp(rect.x, 0, 1 - MIN_CROP_SIZE)
-  const y = clamp(rect.y, 0, 1 - MIN_CROP_SIZE)
-  return {
-    x,
-    y,
-    width: clamp(rect.width, MIN_CROP_SIZE, 1 - x),
-    height: clamp(rect.height, MIN_CROP_SIZE, 1 - y),
-  }
-}
-
-function cropRectKey(rect) {
-  const safeRect = rect || DEFAULT_FREE_CROP_RECT
-  return ['x', 'y', 'width', 'height']
-    .map((key) => Math.round(safeRect[key] * 100))
-    .join(':')
 }
 
 export default function ImageEditPanel({
@@ -112,7 +94,7 @@ export default function ImageEditPanel({
     const rect = drag.startRect
 
     if (drag.action === 'move') {
-      setCropRect(normalizeCropRect({
+      setCropRect(normalizeInteractiveCropRect({
         ...rect,
         x: clamp(rect.x + dx, 0, 1 - rect.width),
         y: clamp(rect.y + dy, 0, 1 - rect.height),
@@ -122,22 +104,38 @@ export default function ImageEditPanel({
 
     const next = { ...rect }
     if (drag.action.includes('w')) {
-      const nextX = clamp(rect.x + dx, 0, rect.x + rect.width - MIN_CROP_SIZE)
+      const nextX = clamp(
+        rect.x + dx,
+        0,
+        rect.x + rect.width - MIN_INTERACTIVE_CROP_SIZE,
+      )
       next.width = rect.width + rect.x - nextX
       next.x = nextX
     }
     if (drag.action.includes('e')) {
-      next.width = clamp(rect.width + dx, MIN_CROP_SIZE, 1 - rect.x)
+      next.width = clamp(
+        rect.width + dx,
+        MIN_INTERACTIVE_CROP_SIZE,
+        1 - rect.x,
+      )
     }
     if (drag.action.includes('n')) {
-      const nextY = clamp(rect.y + dy, 0, rect.y + rect.height - MIN_CROP_SIZE)
+      const nextY = clamp(
+        rect.y + dy,
+        0,
+        rect.y + rect.height - MIN_INTERACTIVE_CROP_SIZE,
+      )
       next.height = rect.height + rect.y - nextY
       next.y = nextY
     }
     if (drag.action.includes('s')) {
-      next.height = clamp(rect.height + dy, MIN_CROP_SIZE, 1 - rect.y)
+      next.height = clamp(
+        rect.height + dy,
+        MIN_INTERACTIVE_CROP_SIZE,
+        1 - rect.y,
+      )
     }
-    setCropRect(normalizeCropRect(next))
+    setCropRect(normalizeInteractiveCropRect(next))
   }
 
   const endCropDrag = (event) => {

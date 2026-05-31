@@ -10,6 +10,10 @@ import {
   generateReview,
 } from './api/geminiService'
 import {
+  getDefaultOptionSelections as getDefaultSelections,
+  normalizeProductInfo,
+} from './utils/productOptions'
+import {
   DEFAULT_REVIEW_CATEGORY,
   normalizeReviewCategory,
 } from '../../../shared/reviewCategories'
@@ -96,12 +100,6 @@ function buildOptionSummary(optionGroups, selections) {
 }
 
 
-function getDefaultSelections(optionGroups) {
-  return Array.isArray(optionGroups)
-    ? optionGroups.map((group) => group?.options?.[0]?.value || '')
-    : []
-}
-
 function normalizeSourceData(data, fallbackCategory) {
   return {
     images: Array.isArray(data?.images) ? data.images : [],
@@ -110,19 +108,6 @@ function normalizeSourceData(data, fallbackCategory) {
       typeof data?.productContext === 'string' ? data.productContext.trim() : '',
     rating: normalizeReviewRating(data?.rating),
     category: normalizeReviewCategory(data?.category ?? fallbackCategory),
-  }
-}
-
-function normalizeProductInfo(product, fallbackUrl = '') {
-  if (!product || typeof product !== 'object') return null
-  return {
-    name: product.name || '',
-    brand: product.brand || '',
-    imageUrl: product.imageUrl || '',
-    price: product.price || '',
-    description: product.description || '',
-    site: product.site || '',
-    url: product.url || fallbackUrl,
   }
 }
 

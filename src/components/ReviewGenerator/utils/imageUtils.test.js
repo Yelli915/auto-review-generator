@@ -4,6 +4,8 @@ import {
   CROP_MODES,
   calculateCanvasSize,
   calculateCropRect,
+  cropRectKey,
+  normalizeInteractiveCropRect,
   normalizeRotation,
 } from './imageUtils.js'
 
@@ -80,4 +82,33 @@ test('calculateCanvasSize swaps dimensions for sideways rotation', () => {
     width: 1200,
     height: 800,
   })
+})
+
+test('normalizeInteractiveCropRect clamps editor crop state', () => {
+  assert.deepEqual(
+    normalizeInteractiveCropRect({
+      x: 0.95,
+      y: -0.2,
+      width: 0.02,
+      height: 2,
+    }),
+    {
+      x: 0.9,
+      y: 0,
+      width: 0.1,
+      height: 1,
+    },
+  )
+})
+
+test('cropRectKey creates a stable percentage signature', () => {
+  assert.equal(
+    cropRectKey({
+      x: 0.081,
+      y: 0.084,
+      width: 0.836,
+      height: 0.842,
+    }),
+    '8:8:84:84',
+  )
 })

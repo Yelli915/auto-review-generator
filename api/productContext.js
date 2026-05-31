@@ -1,10 +1,12 @@
 import { isAccessChallengeText } from './accessChallenge.js'
+import { validatePublicHttpUrl } from './publicUrlGuard.js'
 import { fetchRenderedProductInfo } from './renderedProductContext.js'
 
 const MAX_PRODUCT_URL_LENGTH = 2048
 const MAX_PRODUCT_PAGE_BYTES = 512 * 1024
 const PRODUCT_PAGE_TIMEOUT_MS = 6000
 const READER_PAGE_TIMEOUT_MS = 10000
+const MAX_PRODUCT_REDIRECTS = 3
 const READER_BASE_URL = 'https://r.jina.ai/'
 const PRODUCT_ANALYSIS_CACHE_TTL_MS = 10 * 60 * 1000
 const PRODUCT_ANALYSIS_CACHE_MAX = 80

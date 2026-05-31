@@ -11,6 +11,15 @@ export const DEFAULT_IMAGE_EDIT = {
   cropRect: null,
 }
 
+export const DEFAULT_FREE_CROP_RECT = {
+  x: 0.08,
+  y: 0.08,
+  width: 0.84,
+  height: 0.84,
+}
+
+export const MIN_INTERACTIVE_CROP_SIZE = 0.1
+
 function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value))
 }
@@ -36,6 +45,33 @@ function normalizeFreeCropRect(cropRect) {
     width: clamp(Number(cropRect.width) || maxWidth, 0.05, maxWidth),
     height: clamp(Number(cropRect.height) || maxHeight, 0.05, maxHeight),
   }
+}
+
+export function normalizeInteractiveCropRect(rect) {
+  const source = rect || DEFAULT_FREE_CROP_RECT
+  const x = clamp(Number(source.x) || 0, 0, 1 - MIN_INTERACTIVE_CROP_SIZE)
+  const y = clamp(Number(source.y) || 0, 0, 1 - MIN_INTERACTIVE_CROP_SIZE)
+  return {
+    x,
+    y,
+    width: clamp(
+      Number(source.width) || MIN_INTERACTIVE_CROP_SIZE,
+      MIN_INTERACTIVE_CROP_SIZE,
+      1 - x,
+    ),
+    height: clamp(
+      Number(source.height) || MIN_INTERACTIVE_CROP_SIZE,
+      MIN_INTERACTIVE_CROP_SIZE,
+      1 - y,
+    ),
+  }
+}
+
+export function cropRectKey(rect) {
+  const safeRect = normalizeInteractiveCropRect(rect)
+  return ['x', 'y', 'width', 'height']
+    .map((key) => Math.round(safeRect[key] * 100))
+    .join(':')
 }
 
 export function calculateCropRect(

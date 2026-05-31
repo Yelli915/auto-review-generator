@@ -1,4 +1,9 @@
 import { useMemo, useState } from 'react'
+import {
+  getDefaultOptionSelections,
+  hasValidOptionSelections,
+  normalizeProductInfo,
+} from '../utils/productOptions'
 
 const PRODUCT_FIELDS = [
   {
@@ -30,12 +35,6 @@ const PRODUCT_FIELDS = [
 
 const MANUAL_ANALYSIS_STATUSES = new Set(['fallback', 'reader'])
 
-function getDefaultSelections(optionGroups) {
-  return Array.isArray(optionGroups)
-    ? optionGroups.map((group) => group?.options?.[0]?.value || '')
-    : []
-}
-
 function needsManualProductInfo(analysis) {
   return (
     Boolean(analysis?.needsManualInput) ||
@@ -45,26 +44,6 @@ function needsManualProductInfo(analysis) {
 
 function hasConfirmedProductInfo(product) {
   return Boolean(product?.name?.trim()) || Boolean(product?.description?.trim())
-}
-
-function hasValidOptionSelections(optionGroups, selections) {
-  return (
-    optionGroups.length === 0 ||
-    optionGroups.every((group, index) => selections[index] && group?.options?.length)
-  )
-}
-
-function normalizeEditableProduct(product, fallbackUrl = '') {
-  const source = product && typeof product === 'object' ? product : {}
-  return {
-    name: source.name || '',
-    brand: source.brand || '',
-    imageUrl: source.imageUrl || '',
-    price: source.price || '',
-    description: source.description || '',
-    site: source.site || '',
-    url: source.url || fallbackUrl,
-  }
 }
 
 function ProductInfoCard({ product }) {
@@ -164,11 +143,11 @@ export default function ProductOptionStep({
     [analysis],
   )
   const [product, setProduct] = useState(() => ({
-    ...normalizeEditableProduct(analysis?.product, analysis?.url || ''),
+    ...normalizeProductInfo(analysis?.product, analysis?.url || ''),
   }))
   const [selections, setSelections] = useState(
     () => {
-      const defaults = getDefaultSelections(optionGroups)
+      const defaults = getDefaultOptionSelections(optionGroups)
       if (Array.isArray(initialSelections) && initialSelections.length) {
         return defaults.map((value, index) => {
           const candidate = initialSelections[index]
