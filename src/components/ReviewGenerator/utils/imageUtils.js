@@ -20,7 +20,7 @@ export const DEFAULT_FREE_CROP_RECT = {
 
 export const MIN_INTERACTIVE_CROP_SIZE = 0.1
 
-function clamp(value, min, max) {
+export function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value))
 }
 

@@ -4,6 +4,7 @@ import {
   DEFAULT_FREE_CROP_RECT,
   DEFAULT_IMAGE_EDIT,
   MIN_INTERACTIVE_CROP_SIZE,
+  clamp,
   cropRectKey,
   normalizeInteractiveCropRect,
   normalizeRotation,
@@ -17,10 +18,6 @@ const CROP_OPTIONS = [
 ]
 
 const CROP_HANDLES = ['nw', 'ne', 'sw', 'se']
-
-function clamp(value, min, max) {
-  return Math.max(min, Math.min(max, value))
-}
 
 export default function ImageEditPanel({
   image,

@@ -1,5 +1,6 @@
 /* global process */
 import { ACCESS_CHALLENGE_PATTERN } from './accessChallenge.js'
+import { validateRenderedRequestUrl } from './product/publicFetch.js'
 
 const RENDERED_PAGE_TIMEOUT_MS = 18000
 const RENDERED_STABILIZE_MS = 1800
@@ -43,6 +44,13 @@ export async function fetchRenderedProductInfo(urlString, userAgent) {
       locale: 'ko-KR',
       userAgent,
       viewport: { width: 1365, height: 1800 },
+    })
+    const requestUrlCache = new Map()
+    await page.route('**/*', async (route) => {
+      if (await validateRenderedRequestUrl(route.request().url(), requestUrlCache)) {
+        return route.continue()
+      }
+      return route.abort()
     })
     page.setDefaultTimeout(RENDERED_PAGE_TIMEOUT_MS)
 

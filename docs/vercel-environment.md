@@ -24,15 +24,20 @@ ALLOWED_ORIGINS=
 `GOOGLE_CLIENT_ID` and `VITE_GOOGLE_CLIENT_ID` must match. If they differ, login
 can succeed in the browser while API requests fail token verification.
 
-## Optional
+## Required for Production Usage Limits
 
 ```env
 UPSTASH_REDIS_REST_URL=
 UPSTASH_REDIS_REST_TOKEN=
 ```
 
-Set these when rate-limit and daily-usage counters need to be shared across
-serverless instances. Without them, the API falls back to in-memory limits.
+Set these for Production. They store rate-limit and daily-usage counters in a
+shared Redis store so limits survive serverless restarts and are consistent
+across instances.
+
+Preview and Development builds may omit these variables. In that case the API
+falls back to in-memory limits, which are useful for local testing but are not a
+reliable production cost-control mechanism.
 
 ## Local Development
 
@@ -51,4 +56,5 @@ by git through the existing `*.local` rule.
 
 `npm run build` runs `scripts/verify-vercel-env.js` first. The guard only fails
 inside Vercel builds, where `VERCEL=1`, so normal local builds still work without
-production secrets.
+production secrets. In Vercel Production builds, missing Upstash variables also
+fail the build because shared usage limits are required for production.

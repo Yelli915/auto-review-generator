@@ -2,7 +2,10 @@
 import { lookup as dnsLookup } from 'node:dns/promises'
 import net from 'node:net'
 
-const MAX_URL_LENGTH = 2048
+const DEFAULT_MAX_URL_LENGTH = 2048
+const DEFAULT_PUBLIC_URL_ERROR = '공개된 http/https URL만 사용할 수 있습니다.'
+const DEFAULT_TOO_LONG_ERROR = 'URL이 너무 깁니다.'
+const DNS_LOOKUP_ERROR = 'URL 호스트를 확인할 수 없습니다.'
 
 function normalizeHostname(hostname) {
   return String(hostname || '')
@@ -97,7 +100,9 @@ async function hostnameResolvesToBlockedAddress(hostname) {
 export async function validatePublicHttpUrl(
   rawUrl,
   {
-    errorMessage = '공개 http/https URL만 사용할 수 있습니다.',
+    errorMessage = DEFAULT_PUBLIC_URL_ERROR,
+    maxLength = DEFAULT_MAX_URL_LENGTH,
+    tooLongError = DEFAULT_TOO_LONG_ERROR,
     resolveDns = shouldResolveDns(),
   } = {},
 ) {
@@ -106,8 +111,8 @@ export async function validatePublicHttpUrl(
   }
 
   const value = rawUrl.trim()
-  if (value.length > MAX_URL_LENGTH) {
-    return { ok: false, status: 400, error: 'URL이 너무 깁니다.' }
+  if (value.length > maxLength) {
+    return { ok: false, status: 400, error: tooLongError }
   }
 
   let url
@@ -137,7 +142,7 @@ export async function validatePublicHttpUrl(
         return { ok: false, status: 400, error: errorMessage }
       }
     } catch {
-      return { ok: false, status: 400, error: 'URL 호스트를 확인할 수 없습니다.' }
+      return { ok: false, status: 400, error: DNS_LOOKUP_ERROR }
     }
   }
 

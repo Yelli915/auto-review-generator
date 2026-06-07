@@ -1,137 +1,14 @@
-﻿import { useCallback, useEffect, useId, useRef, useState } from 'react'
+﻿import { useId, useRef, useState } from 'react'
+import { MAX_REVIEW_IMAGE_COUNT } from '../../../../shared/reviewCategories'
+import { useUploadImages } from '../hooks/useUploadImages'
 import ImageEditPanel from './ImageEditPanel'
 import ImagePreviewGrid from './ImagePreviewGrid'
-import {
-  DEFAULT_IMAGE_EDIT,
-  transformImageFile,
-} from '../utils/imageUtils'
-import {
-  MAX_REVIEW_IMAGE_COUNT,
-} from '../../../../shared/reviewCategories'
-
-const MAX_FILE_SIZE_MB = 15
-const IMAGE_RESIZE_OPTIONS = { maxEdge: 448, quality: 0.68 }
-
-function getExtensionFromMimeType(type) {
-  if (type === 'image/png') return 'png'
-  if (type === 'image/webp') return 'webp'
-  return 'jpg'
-}
-
-function isImageFile(file) {
-  if (!file) return false
-  if (file.type?.startsWith('image/')) return true
-  return /\.(avif|gif|jpe?g|png|webp)$/i.test(file.name || '')
-}
-
-function nameClipboardImage(file, index) {
-  if (file.name) return file
-  const extension = getExtensionFromMimeType(file.type)
-  return new File([file], `pasted-image-${index + 1}.${extension}`, {
-    type: file.type || 'image/jpeg',
-    lastModified: Date.now(),
-  })
-}
-
-function getClipboardImageFiles(clipboardData) {
-  if (!clipboardData) return []
-  const itemFiles = Array.from(clipboardData.items || [])
-    .filter((item) => item.kind === 'file' && item.type.startsWith('image/'))
-    .map((item) => item.getAsFile())
-    .filter(isImageFile)
-
-  const files = itemFiles.length
-    ? itemFiles
-    : Array.from(clipboardData.files || []).filter(isImageFile)
-
-  return files.map(nameClipboardImage)
-}
-
-function isTextEditingTarget(target) {
-  if (!(target instanceof HTMLElement)) return false
-  return (
-    target.isContentEditable ||
-    target.tagName === 'INPUT' ||
-    target.tagName === 'TEXTAREA' ||
-    target.tagName === 'SELECT'
-  )
-}
-
-function validateSelectedFiles(files) {
-  if (!files.length) return '이미지를 1장 이상 선택해 주세요.'
-  if (files.length > MAX_REVIEW_IMAGE_COUNT) {
-    return `이미지는 최대 ${MAX_REVIEW_IMAGE_COUNT}장까지 업로드할 수 있습니다.`
-  }
-  const invalidType = files.find((file) => !isImageFile(file))
-  if (invalidType) return '이미지 파일(JPG, PNG 등)만 업로드할 수 있습니다.'
-  const oversized = files.find((file) => file.size > MAX_FILE_SIZE_MB * 1024 * 1024)
-  if (oversized) return `파일 크기는 각 ${MAX_FILE_SIZE_MB}MB 이하여야 합니다.`
-  return ''
-}
-
-function revokeObjectUrls(urls) {
-  urls.forEach((url) => URL.revokeObjectURL(url))
-}
-
-function getImageObjectUrls(images) {
-  return images.flatMap((image) =>
-    [image.previewUrl, image.editedPreviewUrl].filter(Boolean),
-  )
-}
-
-function getImageFileNames(images) {
-  return images.map((image) => image.file.name).join(', ')
-}
-
-function buildImageStatus(images, fallback = '') {
-  return images.length ? getImageFileNames(images) : fallback
-}
-
-async function createReviewImage(file, previewUrl) {
-  const { base64 } = await transformImageFile(file, IMAGE_RESIZE_OPTIONS)
-  return {
-    file,
-    previewUrl,
-    base64Image: base64,
-    mimeType: 'image/jpeg',
-    ...DEFAULT_IMAGE_EDIT,
-  }
-}
-
-function StarRating({ value, onChange, disabled, ratingLabels }) {
-  const [hovered, setHovered] = useState(null)
-  const display = hovered ?? value
-
-  return (
-    <div
-      className="star-rating"
-      role="group"
-      aria-label="별점 선택"
-      onMouseLeave={() => setHovered(null)}
-    >
-      {[1, 2, 3, 4, 5].map((star) => (
-        <button
-          key={star}
-          type="button"
-          className={`star${display >= star ? ' star--on' : ''}`}
-          onMouseEnter={() => !disabled && setHovered(star)}
-          onClick={() => !disabled && onChange(star)}
-          aria-label={`${star}점`}
-          aria-pressed={value === star}
-          tabIndex={disabled ? -1 : 0}
-        >
-          ★
-        </button>
-      ))}
-      <span className="star-rating__label">
-        {display}점 · {ratingLabels[display]}
-      </span>
-    </div>
-  )
-}
+import StarRating from './StarRating'
+import { MAX_FILE_SIZE_MB } from '../utils/uploadImages'
 
 export default function UploadStep({
   category,
+  subcategory,
   onNext,
   onBackToCategory,
   isLoading,
@@ -139,149 +16,53 @@ export default function UploadStep({
 }) {
   const inputId = useId()
   const inputRef = useRef(null)
-  const [images, setImages] = useState([])
   const [inputMode, setInputMode] = useState(category === 'product' ? 'link' : 'image')
   const [productUrl, setProductUrl] = useState('')
+  const [userExperience, setUserExperience] = useState('')
   const [rating, setRating] = useState(5)
-  const [status, setStatus] = useState({ text: '', isError: false })
-  const [isDragging, setIsDragging] = useState(false)
-  const [isProcessing, setIsProcessing] = useState(false)
-  const [editingIndex, setEditingIndex] = useState(null)
-  const objectUrlsRef = useRef([])
-  const processTokenRef = useRef(0)
-
-  useEffect(() => {
-    return () => {
-      revokeObjectUrls(objectUrlsRef.current)
-    }
-  }, [])
-
-  useEffect(() => {
-    if (category !== 'product' && inputMode !== 'image') {
-      setInputMode('image')
-    }
-  }, [category, inputMode])
-
-  const setTrackedImages = useCallback((nextImages, { revokePrevious = false } = {}) => {
-    if (revokePrevious) revokeObjectUrls(objectUrlsRef.current)
-    objectUrlsRef.current = getImageObjectUrls(nextImages)
-    setImages(nextImages)
-  }, [])
-
-  const processFiles = useCallback((fileList, sourceLabel = '선택됨') => {
-    const token = processTokenRef.current + 1
-    processTokenRef.current = token
-    const files = Array.from(fileList || [])
-    const validationError = validateSelectedFiles(files)
-    if (validationError) {
-      setIsProcessing(false)
-      setStatus({ text: validationError, isError: true })
-      return
-    }
-
-    const nextPreviewUrls = files.map((file) => URL.createObjectURL(file))
-    setTrackedImages([], { revokePrevious: true })
-    objectUrlsRef.current = nextPreviewUrls
-    setEditingIndex(null)
-    setIsProcessing(true)
-    setStatus({ text: '', isError: false })
-
-    Promise.all(
-      files.map((file, index) =>
-        createReviewImage(file, nextPreviewUrls[index]),
-      ),
-    )
-      .then((nextImages) => {
-        if (processTokenRef.current !== token) return
-        setTrackedImages(nextImages)
-        setStatus({
-          text: `${nextImages.length}장 ${sourceLabel} · ${getImageFileNames(nextImages)}`,
-          isError: false,
-        })
-      })
-      .catch(() => {
-        if (processTokenRef.current !== token) return
-        setTrackedImages([], { revokePrevious: true })
-        setStatus({ text: '이미지 변환에 실패했습니다.', isError: true })
-      })
-      .finally(() => {
-        if (processTokenRef.current !== token) return
-        setIsProcessing(false)
-      })
-  }, [setTrackedImages])
-
-  function handleFileChange(e) {
-    processFiles(e.target.files)
-    e.target.value = ''
-  }
-
-  function handleDragOver(e) {
-    e.preventDefault()
-    setIsDragging(true)
-  }
-
-  function handleDragLeave(e) {
-    if (!e.currentTarget.contains(e.relatedTarget)) setIsDragging(false)
-  }
-
-  function handleDrop(e) {
-    e.preventDefault()
-    setIsDragging(false)
-    processFiles(e.dataTransfer.files)
-  }
-
-  function handleRemoveImage(index) {
-    if (busy) return
-    const nextImages = images.filter((_, i) => i !== index)
-    revokeObjectUrls(getImageObjectUrls([images[index]]))
-    setTrackedImages(nextImages)
-    setEditingIndex((prev) => {
-      if (prev == null) return null
-      if (prev === index) return null
-      return prev > index ? prev - 1 : prev
-    })
-    setStatus({
-      text: buildImageStatus(nextImages),
-      isError: false,
-    })
-  }
-
-  async function handleApplyImageEdit(editState) {
-    if (editingIndex == null || !images[editingIndex] || busy) return
-    const index = editingIndex
-    const image = images[index]
-    setIsProcessing(true)
-    setStatus({ text: '이미지 편집을 적용하는 중입니다.', isError: false })
-    try {
-      const result = await transformImageFile(image.file, {
-        ...IMAGE_RESIZE_OPTIONS,
-        ...editState,
-        createPreviewUrl: true,
-      })
-      if (image.editedPreviewUrl) URL.revokeObjectURL(image.editedPreviewUrl)
-      const nextImages = images.map((item, i) =>
-        i === index
-          ? {
-              ...item,
-              ...editState,
-              base64Image: result.base64,
-              editedPreviewUrl: result.previewUrl || '',
-            }
-          : item,
-      )
-      setTrackedImages(nextImages)
-      setStatus({ text: `${index + 1}번째 이미지 편집을 적용했습니다.`, isError: false })
-    } catch {
-      setStatus({ text: '이미지 편집 적용에 실패했습니다.', isError: true })
-    } finally {
-      setIsProcessing(false)
-    }
-  }
+  const canUseLink = category === 'product'
+  const effectiveInputMode = canUseLink ? inputMode : 'image'
+  const isLinkMode = effectiveInputMode === 'link'
+  const title = isLinkMode ? '상품 링크 입력' : '사진 업로드'
+  const lede = isLinkMode
+    ? '상품 페이지를 분석해 리뷰 키워드의 기본 재료를 준비합니다.'
+    : '사진과 별점을 바탕으로 앞에서 고른 분야에 맞는 키워드를 추출합니다.'
+  const experiencePlaceholder = category === 'place'
+    ? '예: 대기 시간이 조금 있었지만 좌석 간격이 넓고 조명이 편했어요. 직원 안내는 친절했어요.'
+    : '예: 생각보다 작았지만 마감이 깔끔했어요. 향은 강하지 않았고, 포장은 살짝 아쉬웠어요.'
+  const {
+    busy,
+    editingIndex,
+    handleApplyImageEdit,
+    handleDragLeave,
+    handleDragOver,
+    handleDrop,
+    handleFileChange,
+    handleRemoveImage,
+    images,
+    isDragging,
+    isProcessing,
+    setEditingIndex,
+    setStatus,
+    status,
+  } = useUploadImages({
+    isLoading,
+    isLinkMode,
+    switchToImageMode: () => setInputMode('image'),
+  })
+  const primaryLabel = isLoading
+    ? isLinkMode ? '상품 정보 분석 중...' : '키워드 생성 중...'
+    : isProcessing
+      ? '이미지 처리 중...'
+      : isLinkMode
+        ? '상품 정보 분석하기'
+        : '사진으로 키워드 만들기'
 
   function handleNext() {
     if (typeof onNext !== 'function') return
     const safeProductUrl = productUrl.trim()
-    if (inputMode === 'link') {
+    const safeUserExperience = userExperience.trim()
+    if (isLinkMode) {
       if (!safeProductUrl) {
         setStatus({ text: '상품 링크를 입력해 주세요.', isError: true })
         return
@@ -289,8 +70,10 @@ export default function UploadStep({
       onNext({
         images: [],
         productUrl: safeProductUrl,
+        userExperience: safeUserExperience,
         rating: Number(rating),
         category,
+        subcategory,
       })
       return
     }
@@ -298,8 +81,10 @@ export default function UploadStep({
     onNext({
       images,
       productUrl: '',
+      userExperience: safeUserExperience,
       rating: Number(rating),
       category,
+      subcategory,
     })
   }
 
@@ -311,33 +96,10 @@ export default function UploadStep({
     .filter(Boolean)
     .join(' ')
 
-  const busy = isLoading || isProcessing
-  const canUseLink = category === 'product'
-  const isLinkMode = canUseLink && inputMode === 'link'
-
-  const handlePaste = useCallback((e) => {
-    if (busy) return
-    const pastedFiles = getClipboardImageFiles(e.clipboardData)
-    if (!pastedFiles.length) {
-      if (isTextEditingTarget(e.target)) return
-      return
-    }
-    e.preventDefault()
-    if (isLinkMode) setInputMode('image')
-    processFiles(pastedFiles, '붙여넣음')
-  }, [busy, isLinkMode, processFiles])
-
-  useEffect(() => {
-    document.addEventListener('paste', handlePaste)
-    return () => document.removeEventListener('paste', handlePaste)
-  }, [handlePaste])
-
   return (
     <section className="step-card step-card--enter">
-      <h2 className="step-card__title">사진 업로드</h2>
-      <p className="step-card__lede">
-        사진과 별점을 선택하면 앞에서 고른 분야에 맞춰 키워드를 자동으로 추출합니다.
-      </p>
+      <h2 className="step-card__title">{title}</h2>
+      <p className="step-card__lede">{lede}</p>
 
       <div className="field">
         <label className="field__label">별점</label>
@@ -467,6 +229,25 @@ export default function UploadStep({
       </>
       )}
 
+      <div className="field">
+        <label className="field__label" htmlFor={`${inputId}-experience`}>
+          직접 경험한 내용 <span className="field__label-note">선택 사항</span>
+        </label>
+        <textarea
+          id={`${inputId}-experience`}
+          className="text-input"
+          rows={4}
+          maxLength={800}
+          placeholder={experiencePlaceholder}
+          value={userExperience}
+          onChange={(e) => setUserExperience(e.target.value)}
+          disabled={busy}
+        />
+        <p className="field__hint">
+          실제로 느낀 점을 적으면 리뷰가 더 자연스럽고 과장 없이 작성됩니다. 입력하지 않은 경험은 만들지 않도록 처리합니다.
+        </p>
+      </div>
+
       <div className="btn-row">
         <button
           type="button"
@@ -474,11 +255,7 @@ export default function UploadStep({
           onClick={handleNext}
           disabled={(isLinkMode ? !productUrl.trim() : images.length === 0) || busy}
         >
-          {isLoading
-            ? '키워드 생성 중…'
-            : isProcessing
-              ? '이미지 처리 중…'
-              : '다음: 키워드 선택'}
+          {primaryLabel}
         </button>
         {typeof onBackToCategory === 'function' && (
           <button

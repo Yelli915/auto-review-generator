@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 import test from 'node:test'
 import {
   buildKeywordPrompt,
@@ -6,13 +7,22 @@ import {
   keywordSentimentGuide,
 } from './prompts.js'
 
-test('keywordSentimentGuide maps ratings to sentiment instructions', () => {
-  assert.ok(keywordSentimentGuide(1).length > 10)
-  assert.ok(keywordSentimentGuide(3).length > 10)
-  assert.ok(keywordSentimentGuide(5).length > 10)
+test('prompt source keeps readable Korean text', () => {
+  const source = readFileSync(new URL('./prompts.js', import.meta.url), 'utf8')
+
+  assert.equal(source.includes('리뷰'), true)
+  assert.equal(source.includes('상품'), true)
+  assert.equal(source.includes('장소'), true)
+  assert.equal(source.includes('�'), false)
 })
 
-test('buildKeywordPrompt includes review category and multi-image context', () => {
+test('keywordSentimentGuide maps ratings to distinct sentiment instructions', () => {
+  assert.match(keywordSentimentGuide(1), /매우 불만족/)
+  assert.match(keywordSentimentGuide(3), /보통/)
+  assert.match(keywordSentimentGuide(5), /매우 만족/)
+})
+
+test('buildKeywordPrompt is structured around role, evidence, rules, bans, and JSON output', () => {
   const prompt = buildKeywordPrompt({
     rating: 4,
     category: 'place',
@@ -21,28 +31,74 @@ test('buildKeywordPrompt includes review category and multi-image context', () =
     maxKeywordCount: 8,
   })
 
-  assert.match(prompt, /장소/)
-  assert.match(prompt, /3/)
-  assert.match(prompt, /8/)
-  assert.match(prompt, /JSON/)
-  assert.match(prompt, /keywords/)
+  assert.match(prompt, /역할: 장소 리뷰/)
+  assert.match(prompt, /사진 3장/)
+  assert.match(prompt, /품질 기준:/)
+  assert.match(prompt, /금지사항:/)
+  assert.match(prompt, /출력 형식:/)
+  assert.match(prompt, /JSON만 출력/)
+  assert.match(prompt, /"keywords"/)
 })
 
-test('buildKeywordPrompt includes product context from URL analysis', () => {
+test('buildKeywordPrompt includes product context and option evidence from URL analysis', () => {
   const prompt = buildKeywordPrompt({
     rating: 5,
     category: 'product',
     productContext:
-      '사이트: shop.example\n상품명: 무선 키보드\n설명: 조용한 타건감\n선택 옵션:\n색상: 블랙',
+      '확인된 상품 정보:\n상품명: 무선 키보드\n설명: 조용한 저소음 키보드\n선택 옵션:\n색상: 블랙',
     minKeywordCount: 3,
     maxKeywordCount: 8,
   })
 
-  assert.match(prompt, /shop\.example/)
-  assert.match(prompt, /상품명: 무선 키보드/)
-  assert.match(prompt, /선택 옵션/)
+  assert.match(prompt, /입력 근거:/)
+  assert.match(prompt, /무선 키보드/)
   assert.match(prompt, /색상: 블랙/)
-  assert.match(prompt, /JSON/)
+  assert.match(prompt, /위 입력 근거/)
+})
+
+test('buildKeywordPrompt includes subcategory guidance', () => {
+  const prompt = buildKeywordPrompt({
+    rating: 5,
+    category: 'place',
+    subcategory: 'cafe',
+    imageCount: 1,
+    minKeywordCount: 3,
+    maxKeywordCount: 8,
+  })
+
+  assert.match(prompt, /세부 분야는 "카페"/)
+  assert.match(prompt, /음료와 디저트/)
+})
+
+test('buildKeywordPrompt constrains user experience evidence', () => {
+  const prompt = buildKeywordPrompt({
+    rating: 4,
+    category: 'product',
+    productContext:
+      '사진/상품 정보에서 확인한 근거:\n상품명: 무선 키보드\n\n사용자가 직접 경험한 내용:\n키감은 좋았지만 무게가 조금 아쉬웠습니다.',
+    minKeywordCount: 3,
+    maxKeywordCount: 8,
+  })
+
+  assert.match(prompt, /사용자가 직접 경험한 내용/)
+  assert.match(prompt, /경험 표현은 "사용자가 직접 경험한 내용"/)
+})
+
+test('buildKeywordPrompt separates observed evidence and user experience', () => {
+  const prompt = buildKeywordPrompt({
+    rating: 4,
+    category: 'product',
+    productContext:
+      'observedEvidence:\n상품명: 무선 키보드\n옵션: 블랙\n\nuserExperience:\n키감은 좋았지만 무게가 조금 아쉬웠습니다.',
+    minKeywordCount: 3,
+    maxKeywordCount: 8,
+  })
+
+  assert.match(prompt, /observedEvidence/)
+  assert.match(prompt, /userExperience/)
+  assert.match(prompt, /객관 정보와 사진에서 보이는 정보/)
+  assert.match(prompt, /직접 겪은 장점, 아쉬운 점/)
+  assert.match(prompt, /selectedKeywords/)
 })
 
 test('buildKeywordPrompt asks for variation from previous keywords', () => {
@@ -52,30 +108,71 @@ test('buildKeywordPrompt asks for variation from previous keywords', () => {
     imageCount: 1,
     minKeywordCount: 3,
     maxKeywordCount: 8,
-    previousKeywords: ['배송 빠름', '포장 깔끔', '마감 탄탄'],
+    previousKeywords: ['배송 빠름', '포장 깔끔', '마감 안정감'],
   })
 
   assert.match(prompt, /배송 빠름/)
   assert.match(prompt, /포장 깔끔/)
-  assert.match(prompt, /마감 탄탄/)
+  assert.match(prompt, /최소 1개 이상은 다른 관찰 포인트/)
 })
 
+test('buildKeywordPrompt gates cosmetics guidance to matching product context', () => {
+  const cosmeticPrompt = buildKeywordPrompt({
+    rating: 5,
+    category: 'product',
+    productContext: '상품명: 수분 크림\n설명: 건조한 피부를 위한 데일리 보습 크림',
+    minKeywordCount: 3,
+    maxKeywordCount: 8,
+  })
+  const keyboardPrompt = buildKeywordPrompt({
+    rating: 5,
+    category: 'product',
+    productContext: '상품명: 무선 키보드\n설명: 조용한 저소음 키보드',
+    minKeywordCount: 3,
+    maxKeywordCount: 8,
+  })
 
-test('buildKeywordPrompt guides food appearance and taste for place reviews', () => {
+  assert.match(cosmeticPrompt, /화장품\/뷰티 상품으로 확인되는 경우/)
+  assert.match(cosmeticPrompt, /발림성/)
+  assert.doesNotMatch(keyboardPrompt, /발림성/)
+  assert.doesNotMatch(keyboardPrompt, /보습/)
+})
+
+test('buildKeywordPrompt keeps product content priority over packaging', () => {
   const prompt = buildKeywordPrompt({
+    rating: 5,
+    category: 'product',
+    imageCount: 1,
+    minKeywordCount: 3,
+    maxKeywordCount: 8,
+  })
+
+  assert.match(prompt, /포장, 용기, 케이스 설명보다 실제 내용물/)
+  assert.match(prompt, /사용 판단에 직접 영향/)
+})
+
+test('buildKeywordPrompt guides food appearance and taste only for place reviews', () => {
+  const placePrompt = buildKeywordPrompt({
     rating: 5,
     category: 'place',
     imageCount: 1,
     minKeywordCount: 3,
     maxKeywordCount: 8,
   })
+  const productPrompt = buildKeywordPrompt({
+    rating: 5,
+    category: 'product',
+    imageCount: 1,
+    minKeywordCount: 3,
+    maxKeywordCount: 8,
+  })
 
-  assert.match(prompt, /음식의 모양과 맛 평가/)
-  assert.match(prompt, /플레이팅/)
-  assert.match(prompt, /추측하지 마/)
+  assert.match(placePrompt, /플레이팅/)
+  assert.match(placePrompt, /확인되지 않는 메뉴명/)
+  assert.doesNotMatch(productPrompt, /플레이팅/)
 })
 
-test('buildReviewPrompt includes review category context', () => {
+test('buildReviewPrompt includes review category, keywords, tone, length, and min chars', () => {
   const { prompt, safeLength, minReviewChars } = buildReviewPrompt({
     rating: 5,
     keywords: ['조명 은은함', '동선 편함'],
@@ -86,149 +183,128 @@ test('buildReviewPrompt includes review category context', () => {
 
   assert.equal(safeLength, 'long')
   assert.equal(minReviewChars, 90)
-  assert.match(prompt, /장소/)
-  assert.match(prompt, /조명 은은함/)
-  assert.match(prompt, /동선 편함/)
-  assert.match(prompt, /90/)
+  assert.match(prompt, /역할: 장소 리뷰/)
+  assert.match(prompt, /조명 은은함, 동선 편함/)
+  assert.match(prompt, /정중하고 담백하게/)
+  assert.match(prompt, /최소 90자 이상/)
+})
+
+test('buildReviewPrompt includes subcategory guidance', () => {
+  const { prompt } = buildReviewPrompt({
+    rating: 4,
+    keywords: ['핏 안정감', '소재 부드러움'],
+    length: 'medium',
+    tone: 'neutral',
+    category: 'product',
+    subcategory: 'fashion',
+  })
+
+  assert.match(prompt, /세부 분야는 "패션"/)
+  assert.match(prompt, /핏, 소재감/)
+})
+
+test('buildReviewPrompt passes product context into the final review prompt', () => {
+  const { prompt } = buildReviewPrompt({
+    rating: 4,
+    keywords: ['블랙 색상', '저소음 타건감'],
+    length: 'medium',
+    tone: 'friendly',
+    category: 'product',
+    productContext:
+      '확인된 상품 정보:\n상품명: 무선 키보드\n설명: 조용한 저소음 키보드\n선택 옵션:\n색상: 블랙',
+  })
+
+  assert.match(prompt, /입력 근거:/)
+  assert.match(prompt, /상품명: 무선 키보드/)
+  assert.match(prompt, /색상: 블랙/)
+  assert.match(prompt, /블랙 색상, 저소음 타건감/)
+})
+
+test('buildReviewPrompt constrains user experience evidence', () => {
+  const { prompt } = buildReviewPrompt({
+    rating: 4,
+    keywords: ['키감 좋음', '무게 아쉬움'],
+    length: 'medium',
+    tone: 'neutral',
+    category: 'product',
+    productContext:
+      '사진/상품 정보에서 확인한 근거:\n상품명: 무선 키보드\n\n사용자가 직접 경험한 내용:\n키감은 좋았지만 무게가 조금 아쉬웠습니다.',
+  })
+
+  assert.match(prompt, /사용자가 직접 경험한 내용/)
+  assert.match(prompt, /경험 표현은 "사용자가 직접 경험한 내용"/)
+})
+
+test('buildReviewPrompt separates observed evidence, user experience, and selected keywords', () => {
+  const { prompt } = buildReviewPrompt({
+    rating: 4,
+    keywords: ['키감 좋음', '무게 아쉬움'],
+    length: 'medium',
+    tone: 'neutral',
+    category: 'product',
+    productContext:
+      'observedEvidence:\n상품명: 무선 키보드\n옵션: 블랙\n\nuserExperience:\n키감은 좋았지만 무게가 조금 아쉬웠습니다.',
+  })
+
+  assert.match(prompt, /observedEvidence/)
+  assert.match(prompt, /userExperience/)
+  assert.match(prompt, /selectedKeywords/)
+  assert.match(prompt, /새 사실을 추가하는 근거로 쓰지 않습니다/)
+  assert.match(prompt, /키감 좋음, 무게 아쉬움/)
+})
+
+test('buildReviewPrompt includes rewrite instructions for existing reviews', () => {
+  const { prompt } = buildReviewPrompt({
+    rating: 4,
+    keywords: ['키감 좋음', '무게 아쉬움'],
+    length: 'medium',
+    tone: 'neutral',
+    category: 'product',
+    productContext: '사용자가 직접 경험한 내용:\n키감은 좋았지만 무게가 조금 아쉬웠습니다.',
+    previousReview: '키감이 좋고 전체적으로 만족스러운 키보드였습니다.',
+    rewriteInstruction: '광고 문구처럼 보이는 표현을 줄이고 담백하게 바꿔 주세요.',
+  })
+
+  assert.match(prompt, /기존 리뷰:/)
+  assert.match(prompt, /수정 지시:/)
+  assert.match(prompt, /광고 문구처럼 보이는 표현/)
+  assert.match(prompt, /새 사실은 추가하지 않습니다/)
 })
 
 test('buildReviewPrompt asks for subjective experience-based writing', () => {
   const { prompt } = buildReviewPrompt({
     rating: 4,
-    keywords: ['마감 탄탄함', '사용감 편함'],
+    keywords: ['마감 안정감', '사용감 편함'],
     length: 'medium',
     tone: 'friendly',
     category: 'product',
   })
 
-  assert.match(prompt, /주관적 후기/)
-  assert.match(prompt, /직접 써보고/)
-  assert.match(prompt, /"제가", "저는", "직접 써보니", "느꼈어요"/)
-  assert.match(prompt, /체감 중심/)
-  assert.match(prompt, /좋았던 점과 아쉬웠던 점/)
+  assert.match(prompt, /사용자가 직접 써 본 후기/)
+  assert.match(prompt, /1인칭 체감 표현/)
+  assert.match(prompt, /장면 중심/)
 })
 
-test('buildReviewPrompt prioritizes product contents over packaging containers', () => {
-  const { prompt } = buildReviewPrompt({
+test('buildReviewPrompt gates cosmetics guidance to matching review evidence', () => {
+  const cosmeticReview = buildReviewPrompt({
     rating: 5,
-    keywords: ['내용물 색감 선명함', '용기 밀봉 깔끔함'],
+    keywords: ['부드러운 발림성', '촉촉한 마무리감'],
     length: 'medium',
     tone: 'friendly',
     category: 'product',
-  })
-
-  assert.match(prompt, /포장 용기나 케이스 설명을 최대한 후순위/)
-  assert.match(prompt, /실제 내용물의 모양, 색, 질감, 양, 향, 상태, 사용감/)
-  assert.match(prompt, /짧게 뒤쪽에 언급/)
-})
-
-test('buildReviewPrompt guides food appearance and taste for place reviews', () => {
-  const { prompt } = buildReviewPrompt({
-    rating: 5,
-    keywords: ['플레이팅 색감', '간이 잘 맞음'],
-    length: 'medium',
-    tone: 'friendly',
-    category: 'place',
-  })
-
-  assert.match(prompt, /음식의 모양과 맛 평가/)
-  assert.match(prompt, /식감/)
-  assert.match(prompt, /간/)
-})
-
-test('buildReviewPrompt guides cosmetics with matching review criteria', () => {
-  const { prompt } = buildReviewPrompt({
-    rating: 5,
-    keywords: ['은은한 향', '부드러운 발림성', '오래가는 지속력'],
-    length: 'medium',
-    tone: 'friendly',
-    category: 'product',
-  })
-
-  assert.match(prompt, /화장품/)
-  assert.match(prompt, /향/)
-  assert.match(prompt, /발림성/)
-  assert.match(prompt, /지속력/)
-  assert.match(prompt, /피부 타입/)
-  assert.match(prompt, /건조함 완화/)
-  assert.match(prompt, /사용자가 바로 느낄 수 있는 피부 체감 효과/)
-})
-
-test('buildReviewPrompt omits cosmetics guide for unrelated product reviews', () => {
-  const { prompt } = buildReviewPrompt({
+  }).prompt
+  const keyboardReview = buildReviewPrompt({
     rating: 4,
-    keywords: ['마감 탄탄함', '각도 조절 편함'],
+    keywords: ['마감 안정감', '각도 조절 편함'],
     length: 'medium',
     tone: 'friendly',
     category: 'product',
-  })
+  }).prompt
 
-  assert.doesNotMatch(prompt, /화장품/)
-  assert.doesNotMatch(prompt, /발림성/)
-  assert.doesNotMatch(prompt, /피부 타입/)
-})
-
-test('buildKeywordPrompt guides cosmetics keyword criteria for product reviews', () => {
-  const prompt = buildKeywordPrompt({
-    rating: 5,
-    category: 'product',
-    productContext:
-      '상품명: 수분 크림\n설명: 건조한 피부를 위한 데일리 보습 크림\n선택 옵션:\n용량: 50ml',
-    minKeywordCount: 3,
-    maxKeywordCount: 8,
-  })
-
-  assert.match(prompt, /화장품/)
-  assert.match(prompt, /향/)
-  assert.match(prompt, /발림성/)
-  assert.match(prompt, /보습감/)
-  assert.match(prompt, /피부에 어떤 체감 효과/)
-  assert.match(prompt, /건조함 완화/)
-  assert.match(prompt, /기능성·의학적·장기 효과/)
-})
-
-test('buildKeywordPrompt prioritizes cosmetic contents over containers', () => {
-  const prompt = buildKeywordPrompt({
-    rating: 5,
-    category: 'product',
-    imageCount: 1,
-    minKeywordCount: 3,
-    maxKeywordCount: 8,
-  })
-
-  assert.match(prompt, /화장품이나 뷰티 제품의 키워드/)
-  assert.match(prompt, /용기 표현을 키워드의 중심으로 쓰지 말고/)
-  assert.match(prompt, /내용물의 제형, 색감, 광택, 농도, 향/)
-  assert.match(prompt, /사용 직후 느낄 수 있는 피부 반응/)
-  assert.match(prompt, /누수, 파손, 펌프 불량, 위생, 휴대성/)
-})
-
-test('buildKeywordPrompt omits cosmetic review criteria for unrelated product context', () => {
-  const prompt = buildKeywordPrompt({
-    rating: 5,
-    category: 'product',
-    productContext:
-      '상품명: 무선 키보드\n설명: 조용한 타건감의 사무용 키보드\n선택 옵션:\n색상: 블랙',
-    minKeywordCount: 3,
-    maxKeywordCount: 8,
-  })
-
-  assert.doesNotMatch(prompt, /피부 타입/)
-  assert.doesNotMatch(prompt, /성분 효과/)
-})
-
-test('buildKeywordPrompt prioritizes product contents over packaging containers', () => {
-  const prompt = buildKeywordPrompt({
-    rating: 5,
-    category: 'product',
-    imageCount: 1,
-    minKeywordCount: 3,
-    maxKeywordCount: 8,
-  })
-
-  assert.match(prompt, /실제 내용물의 모양, 색, 질감, 양, 향, 상태, 사용감/)
-  assert.match(prompt, /포장 용기나 케이스 설명을 최대한 후순위/)
-  assert.match(prompt, /리뷰 판단에 직접 영향을 주는 경우/)
+  assert.match(cosmeticReview, /화장품\/뷰티 상품으로 확인되는 경우/)
+  assert.match(cosmeticReview, /발림성/)
+  assert.doesNotMatch(keyboardReview, /발림성/)
+  assert.doesNotMatch(keyboardReview, /보습감/)
 })
 
 test('buildReviewPrompt guides sparse long reviews without blocking them', () => {
@@ -242,7 +318,6 @@ test('buildReviewPrompt guides sparse long reviews without blocking them', () =>
 
   assert.equal(safeLength, 'long')
   assert.equal(minReviewChars, 90)
-  assert.match(prompt, /상품/)
-  assert.match(prompt, /배송 빠름/)
-  assert.match(prompt, /90/)
+  assert.match(prompt, /키워드가 적어도 같은 말을 늘리지 말고/)
+  assert.match(prompt, /최소 90자 이상/)
 })

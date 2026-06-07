@@ -35,10 +35,14 @@ if (process.env.VERCEL === '1') {
     fail('GOOGLE_CLIENT_ID and VITE_GOOGLE_CLIENT_ID must match.')
   }
 
-  const missingOptional = OPTIONAL_VERCEL_ENV.filter((name) => !hasValue(name))
-  if (missingOptional.length > 0) {
+  const missingUsageStore = OPTIONAL_VERCEL_ENV.filter((name) => !hasValue(name))
+  if (process.env.VERCEL_ENV === 'production' && missingUsageStore.length > 0) {
+    fail(
+      `Missing required production usage-limit variables: ${missingUsageStore.join(', ')}`,
+    )
+  } else if (missingUsageStore.length > 0) {
     console.warn(
-      `[vercel-env] Optional shared usage-limit variables are not set: ${missingOptional.join(', ')}`,
+      `[vercel-env] Shared usage-limit variables are not set: ${missingUsageStore.join(', ')}`,
     )
   }
 }

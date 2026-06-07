@@ -8,6 +8,7 @@ import {
   normalizeReviewLength,
   normalizeReviewTone,
 } from '../../../../shared/reviewOptions.js'
+import { createReviewStreamAccumulator } from './reviewStream.js'
 
 const API_PATH = '/api/gemini'
 const KEYWORD_DEBOUNCE_MS = 900
@@ -19,8 +20,12 @@ let inFlightKeywordKey = null
 let inFlightKeywordPromise = null
 let lastKeywordAt = 0
 
+function normalizeString(value) {
+  return typeof value === 'string' ? value.trim() : ''
+}
+
 export function setGoogleIdToken(token) {
-  googleIdToken = typeof token === 'string' ? token.trim() : ''
+  googleIdToken = normalizeString(token)
 }
 
 export function setUnauthorizedHandler(handler) {
@@ -60,7 +65,7 @@ async function callApi(payload) {
 }
 
 export async function analyzeProductUrl(productUrl) {
-  const safeProductUrl = typeof productUrl === 'string' ? productUrl.trim() : ''
+  const safeProductUrl = normalizeString(productUrl)
   if (!safeProductUrl) {
     return { ok: false, error: '상품 링크를 입력해 주세요.' }
   }
@@ -70,13 +75,13 @@ export async function analyzeProductUrl(productUrl) {
   })
 }
 
-
 export async function generateKeywords({
   images,
   productUrl,
   productContext,
   rating,
   category,
+  subcategory,
   previousKeywords = [],
 }) {
   const safeImages = Array.isArray(images)
@@ -87,9 +92,8 @@ export async function generateKeywords({
           mimeType: image.mimeType || 'image/jpeg',
         }))
     : []
-  const safeProductUrl = typeof productUrl === 'string' ? productUrl.trim() : ''
-  const safeProductContext =
-    typeof productContext === 'string' ? productContext.trim() : ''
+  const safeProductUrl = normalizeString(productUrl)
+  const safeProductContext = normalizeString(productContext)
 
   if (!safeImages.length && !safeProductUrl && !safeProductContext) {
     return { ok: false, error: '이미지나 상품 링크를 1개 이상 선택해 주세요.' }
@@ -102,6 +106,7 @@ export async function generateKeywords({
     productContext: safeProductContext,
     rating,
     category,
+    subcategory,
     previousKeywords: Array.isArray(previousKeywords) ? previousKeywords : [],
   }
   const requestKey = JSON.stringify(payload)
@@ -133,12 +138,18 @@ export async function generateReview({
   length,
   tone,
   category,
+  subcategory,
+  productContext,
+  previousReview,
+  rewriteInstruction,
   onChunk,
 }) {
   const safeKeywords = Array.isArray(keywords) ? keywords : []
   const safeLength = normalizeReviewLength(length)
   const safeTone = normalizeReviewTone(tone)
-  const safeOnChunk = typeof onChunk === 'function' ? onChunk : () => {}
+  const safeProductContext = normalizeString(productContext)
+  const safePreviousReview = normalizeString(previousReview)
+  const safeRewriteInstruction = normalizeString(rewriteInstruction)
 
   const response = await fetch(API_PATH, {
     method: 'POST',
@@ -150,6 +161,10 @@ export async function generateReview({
       length: safeLength,
       tone: safeTone,
       category,
+      subcategory,
+      productContext: safeProductContext,
+      previousReview: safePreviousReview,
+      rewriteInstruction: safeRewriteInstruction,
     }),
   })
 
@@ -168,28 +183,8 @@ export async function generateReview({
 
   const reader = response.body.getReader()
   const decoder = new TextDecoder()
+  const stream = createReviewStreamAccumulator(onChunk)
   let buffer = ''
-  let fullText = ''
-  let streamError = ''
-
-  const handleJsonLine = (line) => {
-    const payload = line.trim()
-    if (!payload) return
-    try {
-      const json = JSON.parse(payload)
-      const text = json?.text
-      if (typeof json?.error === 'string' && json.error.trim()) {
-        streamError = json.error.trim()
-        return
-      }
-      if (text) {
-        fullText += text
-        safeOnChunk(fullText)
-      }
-    } catch {
-      void 0
-    }
-  }
 
   while (true) {
     const { done, value } = await reader.read()
@@ -200,15 +195,16 @@ export async function generateReview({
     buffer = lines.pop() || ''
 
     for (const line of lines) {
-      handleJsonLine(line)
+      stream.appendLine(line)
     }
   }
 
   if (buffer.trim()) {
-    handleJsonLine(buffer)
+    stream.appendLine(buffer)
   }
 
-  const normalizedReview = fullText.replace(/\s+/g, ' ').trim()
+  const normalizedReview = stream.getText().replace(/\s+/g, ' ').trim()
+  const streamError = stream.getError()
   if (streamError) {
     throw new Error(streamError)
   }

@@ -1,113 +1,42 @@
 # Auto Review Generator
 
-사진과 별점, 리뷰 분야를 바탕으로 한국어 리뷰 초안을 생성하는 React + Gemini 기반 웹 애플리케이션입니다.
+사진, 상품 링크, 별점, 리뷰 분야를 바탕으로 한국어 리뷰 초안을 생성하는 React + Gemini 기반 웹 애플리케이션입니다.
 
 ![React](https://img.shields.io/badge/React-19-61DAFB?style=flat-square&logo=react)
 ![JavaScript](https://img.shields.io/badge/JavaScript-ES2022-F7DF1E?style=flat-square&logo=javascript)
 ![Gemini](https://img.shields.io/badge/Gemini_2.5_Flash-4285F4?style=flat-square&logo=google)
 
-## 버전 정리
+## 현재 상태
 
-### ver1: 기본 리뷰 생성 MVP
+현재 구현은 Google 로그인, 이미지 기반 리뷰 생성, 상품 URL 분석, 사용량 제한, 배포 환경 검증까지 포함합니다.
 
-사진 1장과 별점을 입력하면 Gemini가 사진을 분석해 리뷰 키워드를 만들고, 사용자가 선택한 키워드로 리뷰 초안을 생성하는 기본 버전입니다.
-
-- 이미지 업로드
-- 별점 선택
-- 이미지 기반 키워드 자동 생성
-- 키워드 선택 후 리뷰 생성
-- 생성된 리뷰 클립보드 복사
-- Gemini API 호출을 서버리스 API로 분리
-
-### ver2: 사용성 및 품질 개선
-
-MVP 흐름을 유지하면서 실제 사용에 필요한 입력 옵션, 이미지 처리, 생성 안정성을 보강한 버전입니다.
-
-- 최대 3장 이미지 업로드
-- 리뷰 분야 선택
-- 장소 리뷰와 상품 리뷰 지원
-- 이미지별 미리보기 제공
-- 이미지 자르기 비율 선택
-- 이미지 90도 회전 편집
-- 리뷰 길이 선택
-  - 짧게
-  - 보통
-  - 길게
-- 말투 선택
-  - 기본
-  - 친근
-  - 격식
-  - 반말
-- 키워드 다시 생성
-- 리뷰 다시 생성
-- Gemini 스트리밍 응답을 이용한 실시간 리뷰 출력
-
-### ver3: 앱 확장 및 운영 안정화
-
-서비스를 공개 배포하고 운영할 수 있도록 인증, 보안, 사용량 제한, 배포 설정, 테스트를 확장한 버전입니다.
-
-- Google 로그인 기반 사용자 인증
-- Google ID Token 서버 검증
-- API 요청 Origin 제한
-- 서버 측 rate limit
-- 일일 사용량 제한
-- Upstash Redis 기반 공유 사용량 저장소 지원
-- 이미지 MIME 타입 검증
-- base64 형식 검증
-- 이미지 파일 시그니처 검증
-- 요청 본문 크기 제한
-- Gemini API 오류 메시지 사용자 친화 변환
-- Vercel 배포 설정
-- Netlify 정적 배포 설정
-- Nginx 보안 헤더 예시 제공
-- Node.js 내장 테스트 러너 기반 테스트
-- 배포 설정 동기화 테스트
-
-## 현재 구현 상태
-
-현재 구현은 ver3 범위까지 포함합니다. 핵심 흐름은 다음과 같습니다.
+기본 흐름:
 
 ```text
 1. Google 로그인
-2. 리뷰 분야 선택
-3. 사진 업로드 및 이미지 편집
+2. 리뷰 분야 선택: 장소 또는 상품
+3. 사진 업로드/편집 또는 상품 링크 입력
 4. 별점 선택
-5. 이미지 분석 및 키워드 생성
+5. 상품 정보와 옵션 확인
 6. 키워드, 리뷰 길이, 말투 선택
-7. 리뷰 스트리밍 생성
-8. 리뷰 복사 또는 다시 생성
+7. Gemini 스트리밍 응답으로 리뷰 생성
+8. 리뷰 복사, 재생성, 처음부터 다시 작성
 ```
-
-Gemini API 호출은 키워드 생성과 리뷰 생성으로 나뉩니다. 키워드 재생성 또는 리뷰 재생성을 누르면 추가 API 호출이 발생합니다.
 
 ## 주요 기능
 
-- 이미지 기반 리뷰 키워드 자동 생성
-- 여러 이미지를 종합한 리뷰 키워드 생성
-- 장소와 상품 중심 리뷰 지원
-- 별점에 따른 긍정, 중립, 부정 뉘앙스 반영
-- 리뷰 길이와 말투 옵션 제공
-- 실시간 스트리밍 리뷰 출력
-- 생성 결과 클립보드 복사
-- 로그인 만료 시 토큰 제거 및 재로그인 안내
-- 클라이언트와 서버 양쪽의 이미지 검증
-- 사용자별 또는 IP별 사용량 제한
-
-## 보안 및 제한
-
-- Gemini API 키는 서버리스 API에서만 사용합니다.
-- 클라이언트는 Google ID Token을 `Authorization: Bearer` 헤더로 전달합니다.
-- 서버는 Google ID Token의 audience를 `GOOGLE_CLIENT_ID`로 검증합니다.
-- 운영 환경에서는 `ALLOWED_ORIGINS`에 포함된 Origin만 API 호출을 허용합니다.
-- API JSON 요청 본문은 2MB로 제한합니다.
-- 업로드 원본 파일은 클라이언트에서 이미지당 15MB 이하로 제한합니다.
-- 서버로 전달되는 디코드 이미지 크기는 이미지당 1.5MB 이하로 제한합니다.
-- 허용 이미지 MIME 타입은 `image/jpeg`, `image/png`, `image/webp`입니다.
-- `keywords`, `review` 요청은 사용자 또는 IP 기준으로 제한됩니다.
-- `ping` 요청은 일일 사용량 제한에서 제외됩니다.
-- CSP, `X-Frame-Options`, `X-Content-Type-Options`, `Referrer-Policy`, `Permissions-Policy`, HSTS 설정을 배포 설정에 포함합니다.
-
-사용량 제한은 기본적으로 서버 메모리 `Map`을 사용합니다. 서버리스 인스턴스가 재시작되거나 여러 인스턴스로 분산되면 제한 상태가 완전히 공유되지 않을 수 있습니다. 강한 비용 보호가 필요하면 `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN`을 설정해 공유 저장소를 사용합니다.
+- 장소 리뷰와 상품 리뷰를 구분해 키워드와 리뷰 문체를 생성
+- 최대 3장 이미지 업로드, 미리보기, 삭제, 자르기, 회전 편집
+- 상품 URL에서 상품명, 브랜드, 이미지, 가격, 설명, 옵션 후보 추출
+- URL 분석이 불완전한 경우 상품 정보를 직접 보완
+- 별점에 따라 긍정, 중립, 부정 뉘앙스 반영
+- 키워드 재생성, 전체 선택/해제, 리뷰 길이와 말투 선택
+- Gemini 리뷰 응답을 스트리밍으로 실시간 표시
+- Google OAuth ID Token 기반 API 인증
+- Origin 제한, 이미지 검증, 요청 크기 제한, rate limit, 일일 사용량 제한
+- 상품 URL 분석 시 private network URL과 위험한 redirect 차단
+- Upstash Redis를 통한 서버리스 환경의 공유 사용량 저장소 지원
+- Vercel/Netlify 보안 헤더와 빌드 설정 검증 테스트
 
 ## 기술 스택
 
@@ -116,8 +45,8 @@ Gemini API 호출은 키워드 생성과 리뷰 생성으로 나뉩니다. 키�
 | Frontend | React 19 |
 | Build Tool | Vite |
 | Language | JavaScript ES2022+, ESM |
-| Styling | CSS Variables |
-| API | Vercel Serverless Functions compatible Node.js API |
+| Styling | CSS Variables, 분리된 CSS 모듈 파일 |
+| API | Vercel Serverless Functions 호환 Node.js API |
 | Runtime | Node.js 20.x |
 | AI | Google Gemini 2.5 Flash |
 | Auth | Google OAuth ID Token verification |
@@ -129,42 +58,34 @@ Gemini API 호출은 키워드 생성과 리뷰 생성으로 나뉩니다. 키�
 ```text
 auto-review-generator/
 ├─ api/
-│  ├─ gemini.js
-│  ├─ gemini.test.js
-│  ├─ keywordUtils.js
-│  ├─ prompts.js
-│  └─ prompts.test.js
-├─ deploy/
-│  └─ nginx/
-│     └─ security-headers.conf
+│  ├─ gemini.js                  # /api/gemini 진입점과 public export
+│  ├─ gemini/                    # 인증, rate limit, Gemini 호출, 스트리밍, 이미지 검증
+│  ├─ productContext.js          # 상품 URL 분석 public export
+│  ├─ product/                   # 상품 URL 검증, HTML/JSON-LD/embedded data/reader 분석
+│  ├─ prompts.js                 # 키워드/리뷰 프롬프트 생성
+│  └─ *.test.js
 ├─ shared/
 │  ├─ httpJson.js
 │  ├─ reviewCategories.js
 │  ├─ reviewOptions.js
 │  └─ reviewRating.js
 ├─ src/
-│  ├─ App.jsx
+│  ├─ App.jsx                    # Google 로그인과 인증 상태 관리
 │  ├─ main.jsx
-│  ├─ index.css
-│  ├─ utils/
-│  │  └─ env.js
-│  └─ components/
-│     └─ ReviewGenerator/
-│        ├─ ReviewGenerator.jsx
-│        ├─ api/
-│        │  └─ geminiService.js
-│        ├─ steps/
-│        │  ├─ ImageEditPanel.jsx
-│        │  ├─ ImagePreviewGrid.jsx
-│        │  ├─ UploadStep.jsx
-│        │  ├─ KeywordStep.jsx
-│        │  └─ ReviewStep.jsx
-│        └─ utils/
-│           ├─ imageUtils.js
-│           └─ imageUtils.test.js
-├─ deploy-config.test.js
-├─ netlify.toml
+│  ├─ index.css                  # CSS entry
+│  ├─ styles/                    # base, layout, upload, keyword, image editor CSS
+│  └─ components/ReviewGenerator/
+│     ├─ ReviewGenerator.jsx     # 단계별 화면 조립
+│     ├─ api/                    # 클라이언트 API 호출과 스트림 파싱
+│     ├─ hooks/                  # 리뷰 생성 플로우 상태 관리
+│     ├─ steps/                  # 카테고리, 업로드, 옵션, 키워드, 리뷰 단계
+│     └─ utils/                  # 이미지 처리, 업로드 유틸, 상품 옵션 유틸
+├─ docs/
+│  └─ vercel-environment.md
+├─ deploy/nginx/security-headers.conf
+├─ scripts/verify-vercel-env.js
 ├─ vercel.json
+├─ netlify.toml
 └─ package.json
 ```
 
@@ -177,36 +98,28 @@ GOOGLE_CLIENT_ID=
 VITE_GOOGLE_CLIENT_ID=
 UPSTASH_REDIS_REST_URL=
 UPSTASH_REDIS_REST_TOKEN=
+API_AUTH_TOKEN=
 ```
 
-- `GEMINI_API_KEY`: Google AI Studio에서 발급한 Gemini API 키입니다. 서버 환경 변수로만 설정합니다.
-- `ALLOWED_ORIGINS`: 운영 환경에서 허용할 프론트엔드 Origin 목록입니다. 예: `https://example.com,https://www.example.com`
-- `GOOGLE_CLIENT_ID`: 서버에서 Google ID Token을 검증할 때 사용하는 OAuth 클라이언트 ID입니다.
-- `VITE_GOOGLE_CLIENT_ID`: 프론트엔드 Google 로그인 버튼에서 사용하는 OAuth 클라이언트 ID입니다.
-- `UPSTASH_REDIS_REST_URL`: 공유 사용량 제한 저장소로 사용할 Upstash Redis REST URL입니다.
-- `UPSTASH_REDIS_REST_TOKEN`: Upstash Redis REST Token입니다.
+운영 환경에서는 `GOOGLE_CLIENT_ID`, `VITE_GOOGLE_CLIENT_ID`, `ALLOWED_ORIGINS`, `GEMINI_API_KEY`가 필요합니다. Production에서 안정적인 비용 제어가 필요하면 Upstash 변수도 설정합니다. 각 변수의 역할과 Vercel 설정 방법은 [docs/vercel-environment.md](docs/vercel-environment.md)를 참고하세요.
 
-운영 환경에서는 `GOOGLE_CLIENT_ID`와 `ALLOWED_ORIGINS`가 필수입니다. 누락되면 API 요청이 차단됩니다.
+`API_AUTH_TOKEN`은 Google OAuth 대신 서버 간 호출을 보호해야 할 때 사용할 수 있는 선택 변수입니다. 브라우저 사용자 플로우에서는 Google OAuth 설정을 우선 사용합니다.
 
 ## 설치 및 실행
 
 ```bash
 npm install
-vercel env pull .env.local
-npm run dev:vercel
+npm run dev
 ```
 
-Windows PowerShell에서는 다음 명령으로 Vercel 값을 `.env.local`에 가져올 수 있습니다.
-
-```powershell
-vercel env pull .env.local
-```
-
-Vercel 서버리스 함수까지 로컬에서 확인하려면 다음 명령을 사용합니다.
+Vercel 서버리스 API까지 로컬에서 확인하려면 Vercel 환경 변수를 가져온 뒤 실행합니다.
 
 ```bash
+vercel env pull .env.local
 npm run dev:vercel
 ```
+
+`.env.local`은 git에 커밋하지 않습니다.
 
 ## 검증 명령
 
@@ -214,53 +127,56 @@ npm run dev:vercel
 npm test
 npm run lint
 npm run build
-npm audit --audit-level=moderate
 ```
 
-현재 테스트는 다음 범위를 검증합니다.
+현재 테스트 범위:
 
-- 이미지 입력 검증
-- 서버 rate limit
-- 일일 사용량 제한
-- 키워드 정제 및 Gemini 키워드 응답 파싱
-- Gemini quota/error 메시지 변환
-- Vercel/Netlify 보안 헤더 동기화
-- Vercel/Netlify 빌드 출력 설정 동기화
+- Gemini 핸들러, ping, action 라우팅
+- Google 인증, Origin 제한, client IP 추출
+- rate limit, 일일 사용량 제한, Upstash fallback
+- 이미지 MIME/base64/signature/크기 검증
+- 키워드 생성, 중복 회피, 필터링, JSON 파싱
+- 리뷰 프롬프트와 Gemini 오류 메시지 변환
+- 상품 URL 분석, HTML metadata, JSON-LD, embedded data, reader fallback
+- private network URL과 private network redirect 차단
+- 리뷰 스트림 파싱
+- 이미지 편집 유틸
+- Vercel/Netlify 배포 설정 동기화
+
+## 보안 및 제한
+
+- Gemini API 키는 서버리스 API에서만 사용합니다.
+- 클라이언트는 Google ID Token을 `Authorization: Bearer` 헤더로 전달합니다.
+- 서버는 ID Token의 audience를 `GOOGLE_CLIENT_ID`로 검증합니다.
+- 운영 환경에서는 `ALLOWED_ORIGINS`에 포함된 Origin만 API 호출이 허용됩니다.
+- JSON 요청 본문은 2MB로 제한합니다.
+- 클라이언트 원본 이미지 파일은 각 15MB 이하로 제한합니다.
+- 서버로 전달되는 디코딩 이미지 크기는 이미지당 1.5MB 이하로 제한합니다.
+- 허용 이미지 MIME 타입은 `image/jpeg`, `image/png`, `image/webp`입니다.
+- 상품 URL은 public `http/https`만 허용하며 `localhost`, 사설망, metadata host, 인증 정보 포함 URL을 차단합니다.
+- 상품 URL redirect와 reader fallback redirect도 매 단계 public URL 검증을 다시 통과해야 합니다.
+- 브라우저 렌더링 fallback은 Playwright 네트워크 요청을 검사해 내부망 요청을 abort합니다.
+- `keywords`, `review` 요청은 사용자 또는 IP 기준으로 rate limit과 일일 사용량 제한을 적용합니다.
+- `ping` 요청과 상품 URL 분석 요청은 일일 Gemini 사용량 제한 대상이 아닙니다.
 
 ## 배포
 
 - Vercel: `vercel.json` 기준으로 정적 빌드와 `/api/gemini` 서버리스 API를 함께 배포합니다.
-- Netlify: `netlify.toml` 기준으로 정적 빌드와 보안 헤더를 설정합니다. 현재 상태에서는 `/api/gemini`가 Netlify Functions로 연결되어 있지 않으므로 Netlify 단독 배포에서는 리뷰 생성 API가 동작하지 않습니다.
+- Netlify: `netlify.toml` 기준으로 정적 빌드와 보안 헤더를 설정합니다. 현재 `/api/gemini`은 Vercel Functions 호환 API이므로 Netlify 단독 배포에서는 리뷰 생성 API를 별도로 연결해야 합니다.
 - Nginx: `deploy/nginx/security-headers.conf`는 자체 호스팅 시 참고할 보안 헤더 예시입니다.
+
+`npm run build`는 `scripts/verify-vercel-env.js`를 먼저 실행합니다. 로컬 빌드는 운영 secrets 없이도 통과하지만, Vercel Production 빌드에서는 필수 환경 변수가 없으면 배포 전에 실패하도록 구성되어 있습니다.
 
 ## 문제 해결
 
 - `401`: Google 로그인이 없거나 ID Token이 만료되었습니다. 다시 로그인하세요.
 - `403`: 요청 Origin이 `ALLOWED_ORIGINS`에 포함되어 있지 않습니다.
-- `413`: 요청 본문 또는 서버 디코드 이미지 크기가 너무 큽니다.
+- `413`: 요청 본문 또는 서버로 전달된 이미지가 크기 제한을 초과했습니다.
 - `415`: 지원하지 않는 이미지 형식입니다. JPG, PNG, WEBP를 사용하세요.
-- `429`: 서버 rate limit, 일일 사용량 제한, 또는 Gemini API 할당량 제한입니다. `Retry-After`가 있으면 해당 시간 이후 다시 시도하세요.
-- 이미지 업로드 실패: 이미지 형식과 15MB 이하 크기 제한을 확인하세요.
-- 리뷰가 너무 짧음: 키워드를 더 선택하거나 리뷰 길이를 조정한 뒤 다시 생성하세요.
+- `429`: 서버 rate limit, 일일 사용량 제한, 또는 Gemini quota 제한입니다. `Retry-After`가 있으면 해당 시간 이후 다시 시도하세요.
+- 상품 URL 분석 실패: 사이트가 차단되었거나 HTML/metadata를 읽을 수 없습니다. 상품명 또는 설명을 직접 입력하세요.
+- 리뷰가 너무 짧게 생성됨: 키워드를 더 선택하거나 리뷰 길이를 조정한 뒤 다시 생성하세요.
 
 ## License
 
 MIT
-
-## Vercel Environment Management
-
-Environment variables are managed in Vercel. See
-`docs/vercel-environment.md` for the required Production, Preview, and
-Development values.
-
-For local Vercel-compatible development, pull values from Vercel instead of
-hand-writing a local `.env` file:
-
-```bash
-vercel env pull .env.local
-npm run dev:vercel
-```
-
-The build now validates required variables during Vercel builds so missing
-values fail deployment before the app can return HTTP 500 for missing server
-configuration.
