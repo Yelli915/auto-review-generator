@@ -2,7 +2,7 @@
   display: grid;
   gap: 12px;
   margin-top: 16px;
-  padding: 14px;
+  padding: 16px;
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   background: var(--surface-subtle);
@@ -30,7 +30,7 @@
 
 .image-editor__preview {
   position: relative;
-  min-height: 210px;
+  min-height: 220px;
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   background: var(--code-bg);
@@ -127,7 +127,7 @@
 }
 
 .segmented__item {
-  min-height: 38px;
+  min-height: 40px;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   background: var(--bg);
@@ -143,6 +143,10 @@
   background: var(--surface);
   color: var(--accent);
   box-shadow: var(--shadow-sm);
+}
+
+.segmented__item:hover:not(:disabled) {
+  border-color: var(--accent-border);
 }
 
 .segmented__item:disabled {
@@ -162,11 +166,11 @@
   justify-content: center;
   gap: 8px;
   width: 100%;
-  min-height: 42px;
+  min-height: 44px;
   padding: 0 18px;
   font: inherit;
   font-size: 0.9375rem;
-  font-weight: 600;
+  font-weight: 700;
   border-radius: var(--radius-sm);
   border: none;
   cursor: pointer;
@@ -190,7 +194,7 @@
 .btn--primary {
   color: var(--accent-contrast);
   background: var(--accent);
-  box-shadow: none;
+  box-shadow: var(--shadow-sm);
 }
 
 .btn--primary:hover:not(:disabled) {
@@ -206,6 +210,7 @@
   color: var(--text-h);
   background: var(--surface);
   border: 1px solid var(--border-strong);
+  box-shadow: var(--shadow-sm);
 }
 
 .btn--secondary:hover:not(:disabled) {
@@ -263,4 +268,3 @@
     flex: 1.2;
   }
 }
-

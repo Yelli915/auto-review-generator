@@ -3,7 +3,7 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 24px 24px 28px;
+  padding: 28px 24px 30px;
   box-sizing: border-box;
   min-height: 0;
 }
@@ -20,14 +20,14 @@
   text-align: left;
   width: 100%;
   max-width: 880px;
-  margin-bottom: 12px;
+  margin-bottom: 14px;
   box-sizing: border-box;
 }
 
 .review-app__title {
   font-family: var(--heading);
-  font-weight: 700;
-  font-size: clamp(1.35rem, 3vw, 1.75rem);
+  font-weight: 800;
+  font-size: clamp(1.45rem, 3vw, 1.9rem);
   letter-spacing: 0;
   color: var(--text-h);
   margin: 0 0 6px;
@@ -35,11 +35,16 @@
 }
 
 .review-app__eyebrow {
-  margin: 0 0 8px;
+  display: inline-flex;
+  align-items: center;
+  margin: 0 0 10px;
+  padding: 3px 8px;
+  border-radius: var(--radius-sm);
   font-size: 0.74rem;
   font-weight: 700;
   letter-spacing: 0;
   color: var(--accent);
+  background: var(--accent-bg);
 }
 
 .review-app__tagline {
@@ -52,7 +57,7 @@
 .review-app__main {
   width: 100%;
   max-width: 880px;
-  margin-top: 14px;
+  margin-top: 16px;
 }
 
 .stepper {
@@ -60,9 +65,12 @@
   align-items: center;
   justify-content: flex-start;
   gap: 0;
-  margin-top: 4px;
+  margin-top: 2px;
   width: 100%;
   max-width: 880px;
+  overflow-x: auto;
+  padding: 2px 0 8px;
+  scrollbar-width: thin;
 }
 
 .stepper__item {
@@ -75,7 +83,7 @@
 
 .stepper__item:not(:last-child)::after {
   content: '';
-  flex: 0 0 46px;
+  flex: 0 0 54px;
   height: 1px;
   margin: 0 6px;
   background: var(--border);
@@ -88,8 +96,8 @@
 }
 
 .stepper__dot {
-  width: 26px;
-  height: 26px;
+  width: 28px;
+  height: 28px;
   border-radius: var(--radius-sm);
   display: flex;
   align-items: center;
@@ -139,7 +147,7 @@
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
-  padding: 24px;
+  padding: clamp(20px, 3vw, 28px);
   box-shadow: var(--shadow);
   text-align: left;
 }
@@ -154,22 +162,22 @@
 
 .step-card__title {
   font-family: var(--heading);
-  font-size: 1.125rem;
-  font-weight: 600;
+  font-size: 1.2rem;
+  font-weight: 800;
   color: var(--text-h);
   margin: 0 0 14px;
   letter-spacing: 0;
 }
 
 .step-card__lede {
-  margin: -8px 0 14px;
-  font-size: 0.8125rem;
+  margin: -6px 0 18px;
+  font-size: 0.875rem;
   color: var(--text-muted);
   line-height: 1.5;
 }
 
 .step-section {
-  margin-bottom: 22px;
+  margin-bottom: 24px;
 }
 
 .step-section:last-child {
@@ -200,7 +208,7 @@
 
 .options-row {
   display: grid;
-  gap: 14px;
+  gap: 16px;
 }
 
 @media (min-width: 440px) {
@@ -215,13 +223,13 @@
 }
 
 .field {
-  margin-bottom: 12px;
+  margin-bottom: 14px;
 }
 
 .field__label {
   display: block;
   font-size: 0.8125rem;
-  font-weight: 600;
+  font-weight: 700;
   color: var(--text-h);
   margin-bottom: 6px;
   letter-spacing: 0.02em;
@@ -246,4 +254,21 @@
   margin: 8px 0 0;
   font-size: 0.8125rem;
   color: var(--text-muted);
+  line-height: 1.45;
+}
+
+@media (max-width: 640px) {
+  .stepper {
+    width: calc(100% + 8px);
+    margin-right: -8px;
+  }
+
+  .stepper__item:not(:last-child)::after {
+    flex-basis: 28px;
+    margin-inline: 4px;
+  }
+
+  .stepper__label {
+    max-width: 54px;
+  }
 }

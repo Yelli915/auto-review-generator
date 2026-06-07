@@ -1,5 +1,5 @@
 .banner {
-  padding: 12px 14px;
+  padding: 13px 15px;
   border-radius: var(--radius-md);
   font-size: 0.875rem;
   line-height: 1.45;
@@ -25,7 +25,7 @@
 }
 
 .keyword-empty {
-  padding: 22px 18px;
+  padding: 24px 18px;
   text-align: center;
   background: var(--surface-subtle);
   border: 1px dashed var(--border-strong);
@@ -43,7 +43,7 @@
 .chip-group {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
+  gap: 9px;
   margin-bottom: 0;
 }
 
@@ -71,8 +71,8 @@
 }
 
 .chip {
-  padding: 8px 12px;
-  min-height: 38px;
+  padding: 8px 13px;
+  min-height: 40px;
   border-radius: var(--radius-sm);
   border: 1px solid var(--border-strong);
   font: inherit;
@@ -84,6 +84,7 @@
   transition:
     border-color 0.15s ease,
     background 0.15s ease,
+    color 0.15s ease,
     box-shadow 0.15s ease;
 }
 
@@ -94,6 +95,7 @@
 .chip[aria-pressed='true'] {
   border-color: var(--accent);
   background: var(--accent-bg);
+  color: var(--accent);
   font-weight: 600;
   box-shadow: var(--shadow-sm);
 }
@@ -113,8 +115,8 @@
 }
 
 .chip-remove {
-  width: 30px;
-  min-height: 38px;
+  width: 32px;
+  min-height: 40px;
   margin-left: -1px;
   border: 1px solid var(--border-strong);
   border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
@@ -146,8 +148,8 @@
 }
 
 .review-output {
-  min-height: 180px;
-  padding: 18px;
+  min-height: 190px;
+  padding: 20px;
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   line-height: 1.65;
@@ -157,6 +159,7 @@
   color: var(--text-h);
   background: var(--surface-raised);
   text-align: left;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.55);
 }
 
 .review-output--placeholder {
@@ -288,7 +291,7 @@ code {
 .star {
   background: none;
   border: none;
-  padding: 4px 3px;
+  padding: 4px;
   cursor: pointer;
   font-size: 1.75rem;
   line-height: 1;
@@ -325,6 +328,7 @@ code {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 12px;
   margin-bottom: 10px;
 }
 
@@ -439,15 +443,15 @@ code {
 .review-action-groups {
   display: grid;
   grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
-  gap: 12px;
+  gap: 14px;
   margin-top: 14px;
 }
 
 .review-action-group {
   display: grid;
   align-content: start;
-  gap: 8px;
-  padding: 12px;
+  gap: 10px;
+  padding: 14px;
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   background: var(--surface-subtle);
@@ -476,9 +480,25 @@ code {
 
 .review-rewrite-action {
   margin: 0;
-  padding: 6px 8px;
+  padding: 7px 9px;
   background: var(--surface);
   border: 1px solid var(--border);
+}
+
+@media (max-width: 640px) {
+  .keyword-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .selection-badge {
+    margin-left: 0;
+    margin-top: 6px;
+  }
+
+  .review-action-groups {
+    grid-template-columns: 1fr;
+  }
 }
 
 
