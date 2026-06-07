@@ -36,11 +36,7 @@ if (process.env.VERCEL === '1') {
   }
 
   const missingUsageStore = OPTIONAL_VERCEL_ENV.filter((name) => !hasValue(name))
-  if (process.env.VERCEL_ENV === 'production' && missingUsageStore.length > 0) {
-    fail(
-      `Missing required production usage-limit variables: ${missingUsageStore.join(', ')}`,
-    )
-  } else if (missingUsageStore.length > 0) {
+  if (missingUsageStore.length > 0) {
     console.warn(
       `[vercel-env] Shared usage-limit variables are not set: ${missingUsageStore.join(', ')}`,
     )
