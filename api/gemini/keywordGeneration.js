@@ -18,6 +18,7 @@ import {
   requestGemini,
   toClientErrorStatus,
 } from './geminiClient.js'
+import { sliceBalancedSegment } from '../../shared/balancedText.js'
 
 function normalizeKeywordSet(keywords) {
   const normalized = Array.isArray(keywords)
@@ -162,38 +163,6 @@ function trimToJsonStart(s) {
   return idx >= 0 ? s.slice(idx).trim() : s.trim()
 }
 
-function sliceBalancedSegment(str, openCh, closeCh) {
-  const start = str.indexOf(openCh)
-  if (start < 0) return ''
-  let depth = 0
-  let inString = false
-  let quote = ''
-  let escaped = false
-  for (let i = start; i < str.length; i += 1) {
-    const ch = str[i]
-    if (inString) {
-      if (escaped) escaped = false
-      else if (ch === '\\') escaped = true
-      else if (ch === quote) {
-        inString = false
-        quote = ''
-      }
-      continue
-    }
-    if (ch === '"' || ch === "'") {
-      inString = true
-      quote = ch
-      continue
-    }
-    if (ch === openCh) depth += 1
-    if (ch === closeCh) {
-      depth -= 1
-      if (depth === 0) return str.slice(start, i + 1)
-    }
-  }
-  return ''
-}
-
 function extractQuotedHangulKeywords(text) {
   const out = []
   const re = /"([^"]+)"/g
@@ -262,14 +231,14 @@ export function parseKeywordsFromText(text) {
     }
   }
 
-  const objSlice = sliceBalancedSegment(normalized, '{', '}')
+  const objSlice = sliceBalancedSegment(normalized, { openCh: '{' })
   if (objSlice) {
     const parsed = tryParse(loosenJsonCommas(objSlice))
     const fromObject = parsed ? sanitizeKeywordsField(parsed?.keywords) : null
     if (fromObject) return fromObject
   }
 
-  const arraySlice = sliceBalancedSegment(normalized, '[', ']')
+  const arraySlice = sliceBalancedSegment(normalized, { openCh: '[' })
   if (arraySlice) {
     const parsed = tryParse(loosenJsonCommas(arraySlice))
     const fromArray = parsed ? sanitizeKeywordArray(parsed) : null

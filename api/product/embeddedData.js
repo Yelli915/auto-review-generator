@@ -11,44 +11,7 @@ import {
   firstValueByKeys,
   normalizeImageUrl,
 } from './productInfo.js'
-
-function sliceBalancedJsonLike(text, startIndex) {
-  const openCh = text[startIndex]
-  const closeCh = openCh === '{' ? '}' : openCh === '[' ? ']' : ''
-  if (!closeCh) return ''
-
-  let depth = 0
-  let inString = false
-  let quote = ''
-  let escaped = false
-
-  for (let i = startIndex; i < text.length; i += 1) {
-    const ch = text[i]
-    if (inString) {
-      if (escaped) {
-        escaped = false
-      } else if (ch === '\\') {
-        escaped = true
-      } else if (ch === quote) {
-        inString = false
-        quote = ''
-      }
-      continue
-    }
-
-    if (ch === '"' || ch === "'") {
-      inString = true
-      quote = ch
-      continue
-    }
-    if (ch === openCh) depth += 1
-    if (ch === closeCh) {
-      depth -= 1
-      if (depth === 0) return text.slice(startIndex, i + 1)
-    }
-  }
-  return ''
-}
+import { sliceBalancedSegment } from '../../shared/balancedText.js'
 
 function collectScriptPayloads(html) {
   const payloads = []
@@ -75,7 +38,7 @@ function collectScriptPayloads(html) {
       const start = body.slice(assignment.index + assignment[0].length).search(/[[{]/)
       if (start < 0) continue
       const jsonStart = assignment.index + assignment[0].length + start
-      const jsonLike = sliceBalancedJsonLike(body, jsonStart)
+      const jsonLike = sliceBalancedSegment(body, { startIndex: jsonStart })
       if (jsonLike) payloads.push(jsonLike)
     }
   }
@@ -87,7 +50,7 @@ function parseEmbeddedJsonPayload(payload) {
   const trimmed = payload.trim()
   const start = trimmed.search(/[[{]/)
   if (start < 0) return null
-  const jsonLike = sliceBalancedJsonLike(trimmed, start)
+  const jsonLike = sliceBalancedSegment(trimmed, { startIndex: start })
   if (!jsonLike) return null
 
   try {

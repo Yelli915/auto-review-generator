@@ -1,5 +1,4 @@
 /* global process */
-import { normalizeReviewTone } from '../../shared/reviewOptions.js'
 import { fetchProductAnalysis } from '../productContext.js'
 import { authorizeRequest } from './auth.js'
 import { getClientIp } from './clientIp.js'
@@ -108,7 +107,7 @@ async function handleReview(body, res, key, rateKey) {
       rating: Number.isFinite(Number(body.rating)) ? Number(body.rating) : 5,
       keywords: body.keywords,
       length: body.length,
-      tone: normalizeReviewTone(body.tone),
+      tone: body.tone,
       category: body.category,
       subcategory: body.subcategory,
       productContext: body.productContext,

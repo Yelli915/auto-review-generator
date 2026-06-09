@@ -29,6 +29,7 @@ can succeed in the browser while API requests fail token verification.
 ```env
 UPSTASH_REDIS_REST_URL=
 UPSTASH_REDIS_REST_TOKEN=
+API_AUTH_TOKEN=
 ```
 
 Set these when you want shared rate-limit and daily-usage counters. They store
@@ -38,6 +39,10 @@ across instances.
 Personal deployments may omit these variables. In that case the API falls back
 to in-memory limits, which are useful for local testing and small personal use
 but are not a reliable production cost-control mechanism.
+
+`API_AUTH_TOKEN` is optional. Set it only when you need to protect server-to-server
+calls with the `x-api-auth-token` header instead of relying solely on Google OAuth
+for browser users.
 
 ## Local Development
 

@@ -7,10 +7,20 @@ function getTrimmedEnv(name) {
   return typeof process.env[name] === 'string' ? process.env[name].trim() : ''
 }
 
+function normalizeOrigin(value) {
+  const trimmed = typeof value === 'string' ? value.trim() : ''
+  if (!trimmed) return ''
+  try {
+    return new URL(trimmed).origin
+  } catch {
+    return trimmed
+  }
+}
+
 function parseAllowOrigins() {
   const list = getTrimmedEnv('ALLOWED_ORIGINS')
     .split(',')
-    .map((value) => value.trim())
+    .map(normalizeOrigin)
     .filter(Boolean)
   return list.length ? new Set(list) : null
 }
@@ -20,8 +30,8 @@ function hasConfiguredAllowOrigins() {
 }
 
 function isTrustedOrigin(req) {
-  const origin = req.headers?.origin
-  if (typeof origin !== 'string' || !origin.trim()) return false
+  const origin = normalizeOrigin(req.headers?.origin)
+  if (!origin) return false
   const allowSet = parseAllowOrigins()
   if (allowSet) return allowSet.has(origin)
   if (process.env.NODE_ENV === 'production') return false
