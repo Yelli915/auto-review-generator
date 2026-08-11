@@ -10,7 +10,7 @@ import {
   normalizeReviewLength,
   normalizeReviewTone,
 } from '../shared/reviewOptions.js'
-import { isLikelyKeywordPhrase } from './keywordUtils.js'
+import { isLikelyKeywordPhrase } from './review/keywordUtils.js'
 
 const REVIEW_TONE_PROMPT_MAP = {
   neutral: '차분하고 자연스럽게 씁니다. 과장하지 말고 관찰한 사실 중심으로 씁니다.',

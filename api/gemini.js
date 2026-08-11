@@ -1,18 +1,18 @@
-export { default } from './gemini/handler.js'
+export { default } from './review/handler.js'
 export {
   applyDailyUsageLimit,
   applyRateLimit,
-} from './gemini/rateLimit.js'
+} from './review/rateLimit.js'
 export {
   buildImageParts,
   validateImageInput,
   validateImagesInput,
-} from './gemini/imageInput.js'
+} from './review/imageInput.js'
 export {
   buildKeywordGenerationConfig,
   buildReviewGenerationConfig,
   humanizeGeminiApiError,
-} from './gemini/geminiClient.js'
+} from './review/providers/gemini/client.js'
 export {
   appendKeywordRetryGuidance,
   filterCosmeticContainerKeywords,
@@ -21,4 +21,4 @@ export {
   keywordSignature,
   parseKeywordsFromText,
   sanitizeKeywordArray,
-} from './gemini/keywordGeneration.js'
+} from './review/keywordGeneration.js'

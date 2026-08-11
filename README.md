@@ -159,10 +159,10 @@
 ```text
 auto-review-generator/
 ├─ api/
-│  ├─ gemini.js                  # /api/gemini 진입점과 public export
-│  ├─ gemini/                    # 인증, rate limit, Gemini 호출, 스트리밍, 이미지 검증
-│  ├─ productContext.js          # 상품 URL 분석 public export
-│  ├─ product/                   # 상품 URL 검증, HTML/JSON-LD/embedded data/reader 분석
+│  ├─ gemini.js                  # /api/gemini 진입점(Vercel 라우트)과 public export
+│  ├─ review/                    # 인증, rate limit, 리뷰 생성 오케스트레이션, 이미지 검증 (provider 무관)
+│  │  └─ providers/gemini/       # Gemini 전용 클라이언트와 모델 설정
+│  ├─ product/                   # 상품 URL 검증, HTML/JSON-LD/embedded data/reader 분석 및 진입점(fetchProductAnalysis)
 │  ├─ prompts.js                 # 키워드/리뷰 프롬프트 생성
 │  └─ *.test.js
 ├─ shared/

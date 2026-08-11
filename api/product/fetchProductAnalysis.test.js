@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { fetchProductAnalysis } from '../productContext.js'
+import { fetchProductAnalysis } from './fetchProductAnalysis.js'
 import {
   htmlResponse,
   withEnv,

@@ -54,8 +54,25 @@ export function isBlockedIpAddress(ip) {
   }
 
   if (ipVersion === 6) {
-    const mapped = normalized.match(/^::ffff:(\d{1,3}(?:\.\d{1,3}){3})$/)
-    if (mapped) return isBlockedIpAddress(mapped[1])
+    const dottedMapped = normalized.match(/^::ffff:(\d{1,3}(?:\.\d{1,3}){3})$/)
+    if (dottedMapped) return isBlockedIpAddress(dottedMapped[1])
+
+    // The WHATWG URL parser normalizes IPv4-mapped IPv6 hosts to hex groups
+    // (e.g. ::ffff:127.0.0.1 -> ::ffff:7f00:1), so url.hostname never matches
+    // the dotted-decimal form above and must be decoded separately.
+    const hexMapped = normalized.match(/^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/)
+    if (hexMapped) {
+      const high = parseInt(hexMapped[1], 16)
+      const low = parseInt(hexMapped[2], 16)
+      const dotted = [
+        (high >> 8) & 0xff,
+        high & 0xff,
+        (low >> 8) & 0xff,
+        low & 0xff,
+      ].join('.')
+      return isBlockedIpAddress(dotted)
+    }
+
     return (
       normalized === '::' ||
       normalized === '::1' ||

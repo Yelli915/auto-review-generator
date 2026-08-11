@@ -1,8 +1,7 @@
-import { createJsonHeaders, readJsonSafely } from '../../shared/httpJson.js'
+import { createJsonHeaders, readJsonSafely } from '../../../../shared/httpJson.js'
+import { KEYWORDS_MAX_COUNT, KEYWORDS_MIN_COUNT } from '../../config.js'
 import {
-  KEYWORDS_MAX_COUNT,
   KEYWORDS_MAX_OUTPUT_TOKENS,
-  KEYWORDS_MIN_COUNT,
   MAX_RETRIES,
   MODEL,
   RETRYABLE_STATUS,

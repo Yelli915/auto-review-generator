@@ -1,8 +1,8 @@
 /* global process */
-import { fetchProductAnalysis } from '../productContext.js'
+import { fetchProductAnalysis } from '../product/fetchProductAnalysis.js'
 import { authorizeRequest } from './auth.js'
 import { getClientIp } from './clientIp.js'
-import { MODEL } from './config.js'
+import { MODEL } from './providers/gemini/config.js'
 import { json, readJsonBody } from './httpResponse.js'
 import { generateKeywordResult } from './keywordGeneration.js'
 import { applyDailyUsageLimit, applyRateLimit } from './rateLimit.js'

@@ -1,5 +1,5 @@
-import { hasHangul, isLikelyKeywordPhrase } from '../keywordUtils.js'
-import { fetchProductAnalysis } from '../productContext.js'
+import { hasHangul, isLikelyKeywordPhrase } from './keywordUtils.js'
+import { fetchProductAnalysis } from '../product/fetchProductAnalysis.js'
 import { buildKeywordPrompt } from '../prompts.js'
 import {
   CONTAINER_CENTERED_KEYWORD_RE,
@@ -17,7 +17,7 @@ import {
   buildKeywordGenerationConfig,
   requestGemini,
   toClientErrorStatus,
-} from './geminiClient.js'
+} from './providers/gemini/client.js'
 import { sliceBalancedSegment } from '../../shared/balancedText.js'
 
 function normalizeKeywordSet(keywords) {

@@ -1,4 +1,4 @@
-import { isAccessChallengeText } from '../accessChallenge.js'
+import { isAccessChallengeText } from './accessChallenge.js'
 
 export function firstString(...values) {
   return values.find((value) => typeof value === 'string' && value.trim())?.trim() || ''

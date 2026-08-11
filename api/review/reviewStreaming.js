@@ -1,11 +1,11 @@
 import { createJsonHeaders, readJsonSafely } from '../../shared/httpJson.js'
 import { buildReviewPrompt } from '../prompts.js'
-import { MODEL } from './config.js'
+import { MODEL } from './providers/gemini/config.js'
 import {
   buildReviewGenerationConfig,
   humanizeGeminiApiError,
   makeStreamUrl,
-} from './geminiClient.js'
+} from './providers/gemini/client.js'
 import { setCommonSecurityHeaders } from './httpResponse.js'
 
 function normalizeReviewText(text) {
