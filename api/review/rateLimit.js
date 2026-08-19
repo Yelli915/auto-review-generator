@@ -1,8 +1,8 @@
-/* global process */
 import { createJsonHeaders, readJsonSafely } from '../../shared/httpJson.js'
 import {
   DAILY_USAGE_ACTIONS,
   DAILY_USAGE_MAX_REQUESTS,
+  getTrimmedEnv,
   RATE_LIMIT_MAX_REQUESTS,
   RATE_LIMIT_WINDOW_MS,
   USAGE_STORE_KEY_PREFIX,
@@ -16,14 +16,8 @@ function encodeUsageKeyPart(value) {
 }
 
 function getSharedUsageStoreConfig() {
-  const url =
-    typeof process.env.UPSTASH_REDIS_REST_URL === 'string'
-      ? process.env.UPSTASH_REDIS_REST_URL.trim().replace(/\/+$/, '')
-      : ''
-  const token =
-    typeof process.env.UPSTASH_REDIS_REST_TOKEN === 'string'
-      ? process.env.UPSTASH_REDIS_REST_TOKEN.trim()
-      : ''
+  const url = getTrimmedEnv('UPSTASH_REDIS_REST_URL').replace(/\/+$/, '')
+  const token = getTrimmedEnv('UPSTASH_REDIS_REST_TOKEN')
   return url && token ? { url, token } : null
 }
 

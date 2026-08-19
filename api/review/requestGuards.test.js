@@ -3,13 +3,12 @@ import assert from 'node:assert/strict'
 import { Buffer } from 'node:buffer'
 import test from 'node:test'
 import { authorizeRequest } from './auth.js'
+import { applyDailyUsageLimit, applyRateLimit } from './rateLimit.js'
 import {
-  applyDailyUsageLimit,
-  applyRateLimit,
   buildImageParts,
   validateImageInput,
   validateImagesInput,
-} from '../gemini.js'
+} from './imageInput.js'
 import { createMockRequest, png1x1Base64, withEnv } from '../testUtils.js'
 
 delete process.env.UPSTASH_REDIS_REST_URL

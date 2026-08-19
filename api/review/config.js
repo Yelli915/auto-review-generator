@@ -3,6 +3,11 @@
 export const MODEL = 'gemini-2.5-flash'
 export const RETRYABLE_STATUS = new Set([500, 502, 503, 504])
 export const MAX_RETRIES = 2
+
+export function getTrimmedEnv(name) {
+  return typeof process.env[name] === 'string' ? process.env[name].trim() : ''
+}
+
 export const MAX_REQUEST_BODY_BYTES = 2 * 1024 * 1024
 export const MAX_IMAGE_BYTES = 1536 * 1024
 export const ALLOWED_IMAGE_MIME_TYPES = new Set([

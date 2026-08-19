@@ -26,7 +26,6 @@ import {
 export {
   appendKeywordRetryGuidance,
   isSameKeywordSet,
-  keywordSignature,
   sanitizeKeywordArray,
 } from './keywordSets.js'
 export {

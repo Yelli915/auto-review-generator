@@ -26,7 +26,7 @@ export function normalizeKeywordSet(keywords) {
   return sanitizeKeywordArray(normalized) || []
 }
 
-export function keywordSignature(keywords) {
+function keywordSignature(keywords) {
   return normalizeKeywordSet(keywords)
     .sort((a, b) => a.localeCompare(b, 'ko'))
     .join('|')
