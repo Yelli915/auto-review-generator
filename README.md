@@ -100,7 +100,7 @@
 | 항목 | 결과 |
 | --- | --- |
 | 테스트 | 97 tests 통과 |
-| 테스트 파일 | 14 files |
+| 테스트 파일 | 11 files |
 | production build | 통과, 700 ms |
 | JS bundle gzip | 77.55 kB |
 | CSS bundle gzip | 6.63 kB |
@@ -249,7 +249,7 @@ npm run build
 
 | 명령 | 결과 |
 | --- | --- |
-| `npm test` | 통과: 97 tests, 14 test files, duration 2.28s |
+| `npm test` | 통과: 97 tests, 11 test files, duration 2.24s |
 | `npm run lint` | 통과 |
 | `npm run build` | 통과: Vite production build 700ms |
 
