@@ -95,7 +95,7 @@
 
 ## 성능 및 분석 지표
 
-최근 로컬 검증과 브라우저 측정 결과는 [docs/metrics.md](docs/metrics.md)에 기록했습니다.
+최근 로컬 검증과 브라우저 측정 결과입니다.
 
 | 항목 | 결과 |
 | --- | --- |
@@ -108,11 +108,11 @@
 | DOMContentLoaded | 470 ms |
 | first paint | 480 ms |
 
-현재 셸에 `GEMINI_API_KEY`가 없어 실제 Gemini 리뷰 생성의 첫 chunk 표시 시간과 전체 생성 시간은 아직 측정하지 않았습니다. 측정 조건과 기록 항목은 [docs/metrics.md](docs/metrics.md)에 정리했습니다.
+현재 셸에 `GEMINI_API_KEY`가 없어 실제 Gemini 리뷰 생성의 첫 chunk 표시 시간과 전체 생성 시간은 아직 측정하지 않았습니다.
 
 ## 상품 URL 분석 케이스
 
-상품 URL 분석은 HTML metadata, JSON-LD, embedded data, reader fallback, rendered fallback 순서로 상품 맥락을 확보합니다. 성공, fallback, 차단 케이스는 [docs/product-url-analysis.md](docs/product-url-analysis.md)에 정리했습니다.
+상품 URL 분석은 HTML metadata, JSON-LD, embedded data, reader fallback, rendered fallback 순서로 상품 맥락을 확보합니다.
 
 대표 케이스:
 
@@ -183,8 +183,6 @@ auto-review-generator/
 │     ├─ hooks/                  # 리뷰 생성 플로우와 업로드 상태 관리
 │     ├─ steps/                  # 분야, 업로드, 옵션, 키워드, 리뷰 단계
 │     └─ utils/                  # 이미지 처리, 업로드/상품 옵션 유틸
-├─ docs/
-│  └─ vercel-environment.md
 ├─ deploy/nginx/security-headers.conf
 ├─ scripts/verify-vercel-env.js
 ├─ vercel.json
@@ -221,7 +219,7 @@ API_AUTH_TOKEN=
 
 Upstash 변수를 설정하면 rate limit과 일일 사용량 카운터가 Redis에 저장됩니다. 설정하지 않으면 로컬 테스트와 소규모 개인 사용에 적합한 인메모리 제한으로 동작하지만, 서버리스 인스턴스 간 공유되지는 않습니다.
 
-운영 환경에서는 `GOOGLE_CLIENT_ID`, `VITE_GOOGLE_CLIENT_ID`, `ALLOWED_ORIGINS`, `GEMINI_API_KEY`가 필요합니다. 안정적인 비용 제어가 필요하면 Upstash 변수도 함께 설정하세요. 자세한 Vercel 설정 방법은 [docs/vercel-environment.md](docs/vercel-environment.md)를 참고하세요.
+운영 환경에서는 `GOOGLE_CLIENT_ID`, `VITE_GOOGLE_CLIENT_ID`, `ALLOWED_ORIGINS`, `GEMINI_API_KEY`가 필요합니다. 안정적인 비용 제어가 필요하면 Upstash 변수도 함께 설정하세요.
 
 ## 설치 및 실행
 
