@@ -1,5 +1,5 @@
 /* global Buffer */
-import { MAX_REQUEST_BODY_BYTES } from './config.js'
+import { MAX_REQUEST_BODY_BYTES } from '../config.js'
 
 export function setCommonSecurityHeaders(res) {
   res.setHeader('X-Content-Type-Options', 'nosniff')

@@ -1,4 +1,4 @@
-import { createJsonHeaders, readJsonSafely } from '../../shared/httpJson.js'
+import { createJsonHeaders, readJsonSafely } from '../../../../shared/httpJson.js'
 import {
   KEYWORDS_MAX_COUNT,
   KEYWORDS_MAX_OUTPUT_TOKENS,
@@ -7,7 +7,7 @@ import {
   MODEL,
   RETRYABLE_STATUS,
   REVIEW_MAX_OUTPUT_TOKENS,
-} from './config.js'
+} from '../../config.js'
 
 function wait(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms))

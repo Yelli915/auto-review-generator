@@ -1,4 +1,4 @@
-import { isAccessChallengeText } from '../accessChallenge.js'
+import { isAccessChallengeText } from './accessChallenge.js'
 import {
   MAX_PRODUCT_URL_LENGTH,
   READER_BASE_URL,

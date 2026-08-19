@@ -1,10 +1,10 @@
 /* global process */
 import { fetchProductAnalysis } from '../productContext.js'
 import { authorizeRequest } from './auth.js'
-import { getClientIp } from './clientIp.js'
+import { getClientIp } from './http/clientIp.js'
 import { MODEL } from './config.js'
-import { json, readJsonBody } from './httpResponse.js'
-import { generateKeywordResult } from './keywordGeneration.js'
+import { json, readJsonBody } from './http/httpResponse.js'
+import { generateKeywordResult } from './keywords/keywordGeneration.js'
 import { applyDailyUsageLimit, applyRateLimit } from './rateLimit.js'
 import { streamGeminiReview } from './reviewStreaming.js'
 

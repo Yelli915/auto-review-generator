@@ -1,4 +1,4 @@
-import { isAccessChallengeText } from '../accessChallenge.js'
+import { isAccessChallengeText } from './accessChallenge.js'
 import { extractEmbeddedProductData } from './embeddedData.js'
 import { extractMetaContent, extractTitle } from './htmlUtils.js'
 import {
