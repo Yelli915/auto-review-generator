@@ -6,7 +6,7 @@ import {
   humanizeGeminiApiError,
   makeStreamUrl,
 } from './providers/gemini/client.js'
-import { setCommonSecurityHeaders } from './httpResponse.js'
+import { setCommonSecurityHeaders } from './http/httpResponse.js'
 
 function normalizeReviewText(text) {
   return typeof text === 'string' ? text.replace(/\s+/g, ' ').trim() : ''

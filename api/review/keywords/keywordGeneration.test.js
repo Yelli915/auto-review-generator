@@ -7,7 +7,7 @@ import {
   isSameKeywordSet,
   parseKeywordsFromText,
   sanitizeKeywordArray,
-} from '../gemini.js'
+} from '../../gemini.js'
 
 test('sanitizeKeywordArray keeps short Hangul phrases and removes invalid values', () => {
   assert.deepEqual(

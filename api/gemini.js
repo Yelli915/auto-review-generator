@@ -21,4 +21,4 @@ export {
   keywordSignature,
   parseKeywordsFromText,
   sanitizeKeywordArray,
-} from './review/keywordGeneration.js'
+} from './review/keywords/keywordGeneration.js'

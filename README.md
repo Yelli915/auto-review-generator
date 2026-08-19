@@ -99,8 +99,8 @@
 
 | 항목 | 결과 |
 | --- | --- |
-| 테스트 | 79 tests 통과 |
-| 테스트 파일 | 12 files |
+| 테스트 | 97 tests 통과 |
+| 테스트 파일 | 14 files |
 | production build | 통과, 700 ms |
 | JS bundle gzip | 77.55 kB |
 | CSS bundle gzip | 6.63 kB |
@@ -161,6 +161,8 @@ auto-review-generator/
 ├─ api/
 │  ├─ gemini.js                  # /api/gemini 진입점(Vercel 라우트)과 public export
 │  ├─ review/                    # 인증, rate limit, 리뷰 생성 오케스트레이션, 이미지 검증 (provider 무관)
+│  │  ├─ http/                   # 요청/응답 저수준 유틸(JSON 응답, 본문 파싱, client IP 추출)
+│  │  ├─ keywords/                # 키워드 생성 오케스트레이션, 파싱, 필터링, 정규화
 │  │  └─ providers/gemini/       # Gemini 전용 클라이언트와 모델 설정
 │  ├─ product/                   # 상품 URL 검증, HTML/JSON-LD/embedded data/reader 분석 및 진입점(fetchProductAnalysis)
 │  ├─ prompts.js                 # 키워드/리뷰 프롬프트 생성
@@ -249,7 +251,7 @@ npm run build
 
 | 명령 | 결과 |
 | --- | --- |
-| `npm test` | 통과: 79 tests, 12 test files, duration 4.98s |
+| `npm test` | 통과: 97 tests, 14 test files, duration 2.28s |
 | `npm run lint` | 통과 |
 | `npm run build` | 통과: Vite production build 700ms |
 
