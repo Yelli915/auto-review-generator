@@ -1,6 +1,6 @@
-/* global process */
 import { fetchProductAnalysis } from '../product/fetchProductAnalysis.js'
 import { authorizeRequest } from './auth.js'
+import { getTrimmedEnv } from './config.js'
 import { getClientIp } from './http/clientIp.js'
 import { MODEL } from './providers/gemini/config.js'
 import { json, readJsonBody } from './http/httpResponse.js'
@@ -25,12 +25,6 @@ const ERRORS = {
 
 function sendError(res, status, error) {
   return json(res, status, { ok: false, error })
-}
-
-function getGeminiApiKey() {
-  return typeof process.env.GEMINI_API_KEY === 'string'
-    ? process.env.GEMINI_API_KEY.trim()
-    : ''
 }
 
 function getRateKey(req, auth) {
@@ -146,7 +140,7 @@ export default async function handler(req, res) {
     return handleAnalyzeProduct(body, res)
   }
 
-  const key = getGeminiApiKey()
+  const key = getTrimmedEnv('GEMINI_API_KEY')
   if (!key) return sendError(res, 500, ERRORS.missingGeminiKey)
 
   if (body.action === 'keywords') {

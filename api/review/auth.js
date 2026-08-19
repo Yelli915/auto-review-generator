@@ -1,11 +1,8 @@
 /* global process */
 import { OAuth2Client } from 'google-auth-library'
+import { getTrimmedEnv } from './config.js'
 
 const GOOGLE_OAUTH_CLIENT = new OAuth2Client()
-
-function getTrimmedEnv(name) {
-  return typeof process.env[name] === 'string' ? process.env[name].trim() : ''
-}
 
 function normalizeOrigin(value) {
   const trimmed = typeof value === 'string' ? value.trim() : ''

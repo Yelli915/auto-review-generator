@@ -11,6 +11,7 @@ import {
   normalizeReviewTone,
 } from '../shared/reviewOptions.js'
 import { isLikelyKeywordPhrase } from './review/keywords/keywordUtils.js'
+import { COSMETIC_CONTEXT_RE } from './review/config.js'
 
 const REVIEW_TONE_PROMPT_MAP = {
   neutral: '차분하고 자연스럽게 씁니다. 과장하지 말고 관찰한 사실 중심으로 씁니다.',
@@ -18,9 +19,6 @@ const REVIEW_TONE_PROMPT_MAP = {
   formal: '정중하고 담백하게 씁니다. 불필요한 감탄이나 과장은 피하고 명확하게 씁니다.',
   casual: '편한 말투로 쓰되, 실제 관찰 포인트가 흐려지지 않게 씁니다.',
 }
-
-const COSMETIC_REVIEW_PATTERN =
-  /화장품|뷰티|스킨|로션|크림|수분|보습|앰플|세럼|에센스|토너|선크림|자외선|클렌징|쿠션|파운데이션|립|틴트|마스카라|아이섀도|블러셔|발림|흡수|밀착|마무리감|지속력|피부/
 
 function joinPromptLines(...parts) {
   return parts
@@ -63,7 +61,7 @@ function buildRewriteBlock(previousReview, rewriteInstruction) {
 }
 
 function isCosmeticReviewContext(category, values) {
-  return category === 'product' && values.some((value) => COSMETIC_REVIEW_PATTERN.test(value))
+  return category === 'product' && values.some((value) => COSMETIC_CONTEXT_RE.test(value))
 }
 
 export function keywordSentimentGuide(rating) {

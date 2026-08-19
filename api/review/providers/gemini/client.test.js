@@ -4,7 +4,7 @@ import {
   buildKeywordGenerationConfig,
   buildReviewGenerationConfig,
   humanizeGeminiApiError,
-} from '../../../gemini.js'
+} from './client.js'
 
 test('buildKeywordGenerationConfig reserves output for short JSON responses', () => {
   const config = buildKeywordGenerationConfig()

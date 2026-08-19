@@ -2,12 +2,14 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import {
   appendKeywordRetryGuidance,
+  isSameKeywordSet,
+  sanitizeKeywordArray,
+} from './keywordSets.js'
+import {
   filterCosmeticContainerKeywords,
   isCosmeticContainerOnlyKeyword,
-  isSameKeywordSet,
-  parseKeywordsFromText,
-  sanitizeKeywordArray,
-} from '../../gemini.js'
+} from './keywordFiltering.js'
+import { parseKeywordsFromText } from './keywordParsing.js'
 
 test('sanitizeKeywordArray keeps short Hangul phrases and removes invalid values', () => {
   assert.deepEqual(
