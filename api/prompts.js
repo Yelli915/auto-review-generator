@@ -11,7 +11,11 @@ import {
   normalizeReviewTone,
 } from '../shared/reviewOptions.js'
 import { isLikelyKeywordPhrase } from './review/keywords/keywordUtils.js'
-import { COSMETIC_CONTEXT_RE } from './review/config.js'
+import {
+  COSMETIC_CONTEXT_RE,
+  GENERIC_BAN_PHRASES_PLACE,
+  GENERIC_BAN_PHRASES_PRODUCT,
+} from './review/config.js'
 
 const REVIEW_TONE_PROMPT_MAP = {
   neutral: '차분하고 자연스럽게 씁니다. 과장하지 말고 관찰한 사실 중심으로 씁니다.',
@@ -87,9 +91,9 @@ function buildSpecificityGuide(category) {
 }
 
 function buildGenericBan(category) {
-  return category === 'place'
-    ? '금지: "분위기 좋음", "깔끔함", "만족", "가성비", "무난함"처럼 어느 장소에나 붙는 표현.'
-    : '금지: "좋음", "깔끔함", "만족", "가성비", "무난함"처럼 어느 상품에나 붙는 표현.'
+  const phrases = category === 'place' ? GENERIC_BAN_PHRASES_PLACE : GENERIC_BAN_PHRASES_PRODUCT
+  const noun = category === 'place' ? '장소' : '상품'
+  return `금지: ${phrases.map((p) => `"${p}"`).join(', ')}처럼 어느 ${noun}에나 붙는 표현.`
 }
 
 function buildUniqueTraitRule(category) {
@@ -292,6 +296,7 @@ export function buildReviewPrompt({
       `- 최소 ${minReviewChars}자 이상으로 작성합니다.`,
       '- 리뷰 본문만 출력합니다.',
     ),
+    safeKeywords,
     safeLength,
     minReviewChars,
   }
