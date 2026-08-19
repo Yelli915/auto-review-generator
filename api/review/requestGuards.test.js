@@ -1,13 +1,100 @@
+/* global process */
 import assert from 'node:assert/strict'
 import { Buffer } from 'node:buffer'
 import test from 'node:test'
+import { authorizeRequest } from './auth.js'
 import {
+  applyDailyUsageLimit,
+  applyRateLimit,
   buildImageParts,
   validateImageInput,
   validateImagesInput,
 } from '../gemini.js'
-import { png1x1Base64 } from '../testUtils.js'
+import { createMockRequest, png1x1Base64, withEnv } from '../testUtils.js'
 
+delete process.env.UPSTASH_REDIS_REST_URL
+delete process.env.UPSTASH_REDIS_REST_TOKEN
+
+// auth.js
+test('authorizeRequest normalizes configured production origins', async () => {
+  await withEnv(
+    {
+      NODE_ENV: 'production',
+      GOOGLE_CLIENT_ID: null,
+      API_AUTH_TOKEN: 'test-token',
+      ALLOWED_ORIGINS: 'https://example.vercel.app/',
+    },
+    async () => {
+      const req = createMockRequest(
+        { action: 'keywords' },
+        {
+          origin: 'https://example.vercel.app',
+          'x-api-auth-token': 'test-token',
+        },
+      )
+
+      const result = await authorizeRequest(req)
+
+      assert.equal(result.ok, true)
+    },
+  )
+})
+
+test('authorizeRequest rejects unlisted production origins', async () => {
+  await withEnv(
+    {
+      NODE_ENV: 'production',
+      GOOGLE_CLIENT_ID: null,
+      API_AUTH_TOKEN: 'test-token',
+      ALLOWED_ORIGINS: 'https://example.vercel.app',
+    },
+    async () => {
+      const req = createMockRequest(
+        { action: 'keywords' },
+        {
+          origin: 'https://preview.example.vercel.app',
+          'x-api-auth-token': 'test-token',
+        },
+      )
+
+      const result = await authorizeRequest(req)
+
+      assert.equal(result.ok, false)
+      assert.equal(result.status, 403)
+      assert.equal(result.error, 'Origin is not allowed.')
+    },
+  )
+})
+
+// rateLimit.js
+test('applyRateLimit blocks bursts after the request window limit', async () => {
+  const id = `test-rate-${Date.now()}-${Math.random()}`
+
+  for (let i = 0; i < 20; i += 1) {
+    assert.equal((await applyRateLimit(id)).ok, true)
+  }
+
+  const blocked = await applyRateLimit(id)
+  assert.equal(blocked.ok, false)
+  assert.equal(Number.isInteger(blocked.retryAfterSec), true)
+})
+
+test('applyDailyUsageLimit allows only counted actions up to the daily limit', async () => {
+  const id = `test-user-${Date.now()}-${Math.random()}`
+
+  assert.equal((await applyDailyUsageLimit(id, 'ping')).ok, true)
+
+  for (let i = 0; i < 20; i += 1) {
+    assert.equal((await applyDailyUsageLimit(id, 'keywords')).ok, true)
+  }
+
+  const blocked = await applyDailyUsageLimit(id, 'review')
+  assert.equal(blocked.ok, false)
+  assert.equal(blocked.limit, 20)
+  assert.equal(Number.isInteger(blocked.retryAfterSec), true)
+})
+
+// imageInput.js
 test('validateImageInput accepts supported image content', () => {
   const result = validateImageInput(`\n${png1x1Base64}\n`, 'IMAGE/PNG')
 
