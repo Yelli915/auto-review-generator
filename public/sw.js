@@ -1,5 +1,5 @@
 const CACHE_NAME = 'auto-review-generator-v1'
-const APP_SHELL = ['/', '/manifest.webmanifest', '/favicon.svg']
+const APP_SHELL = ['/', '/manifest.webmanifest']
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
