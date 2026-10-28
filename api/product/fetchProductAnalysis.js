@@ -7,11 +7,11 @@ import {
 } from './config.js'
 import {
   extractProductInfoFromHtml,
+  extractProductOptionGroupsFromHtml,
   isAccessChallengeHtml,
 } from './htmlProduct.js'
-import { decodeHtmlEntities, parseAttributes } from './htmlUtils.js'
+import { formatProductContext } from '../../shared/productContext.js'
 import {
-  buildProductContext,
   buildProductInfo,
   hasUsefulProductInfo,
   productNameFromUrl,
@@ -134,145 +134,13 @@ async function fetchReaderOrRenderedProductAnalysis(urlString, reason = '') {
   return null
 }
 
-function cacheFallbackProductAnalysis(url, reason, warning) {
-  return cacheProductAnalysis(
-    url,
-    buildFallbackAnalysis(url, reason, warning),
-  )
-}
-
-// -- product option group extraction (<select> and radio/checkbox groups) --
-
-function normalizeOptionText(text) {
-  return decodeHtmlEntities(String(text || ''))
-    .replace(/<[^>]*>/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
-}
-
-function extractAssociatedLabel(html, inputId) {
-  if (!inputId) return ''
-  const escaped = inputId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-  const labelMatch = html.match(
-    new RegExp(`<label\\b[^>]*for=["']${escaped}["'][^>]*>([\\s\\S]*?)<\\/label>`, 'i'),
-  )
-  return normalizeOptionText(labelMatch?.[1] || '')
-}
-
-function simplifyGroupLabel(rawLabel, fallback) {
-  const text = normalizeOptionText(rawLabel || fallback)
-  if (!text) return ''
-  return text.replace(/\s*[:|·.-]\s*$/, '').trim()
-}
-
-function extractSelectOptionGroups(html) {
-  const groups = []
-  const selectRe = /<select\b([^>]*)>([\s\S]*?)<\/select>/gi
-  let selectMatch
-  while ((selectMatch = selectRe.exec(html)) !== null) {
-    const attrs = parseAttributes(selectMatch[1] || '')
-    const body = selectMatch[2] || ''
-    const groupLabel = simplifyGroupLabel(
-      attrs['aria-label'] ||
-        attrs['data-label'] ||
-        extractAssociatedLabel(html, attrs.id) ||
-        attrs.name ||
-        attrs.id,
-      '옵션',
-    )
-
-    const options = []
-    const optionRe = /<option\b([^>]*)>([\s\S]*?)<\/option>/gi
-    let optionMatch
-    while ((optionMatch = optionRe.exec(body)) !== null) {
-      const optionAttrs = parseAttributes(optionMatch[1] || '')
-      const label = normalizeOptionText(optionMatch[2] || optionAttrs.label || '')
-      const value = normalizeOptionText(optionAttrs.value || label)
-      const disabled = 'disabled' in optionAttrs
-      if (!label || disabled) continue
-      if (!value && !label) continue
-      const isPlaceholder =
-        !value ||
-        /선택|choose|select|option|사이즈 선택|색상 선택|옵션 선택/i.test(label)
-      if (isPlaceholder && options.length === 0) continue
-      options.push({
-        value: value || label,
-        label,
-      })
-    }
-
-    const uniqueOptions = []
-    const seen = new Set()
-    for (const option of options) {
-      const key = `${option.value}::${option.label}`
-      if (seen.has(key)) continue
-      seen.add(key)
-      uniqueOptions.push(option)
-    }
-
-    if (uniqueOptions.length >= 2) {
-      groups.push({
-        id: attrs.id || attrs.name || `select-${groups.length + 1}`,
-        label: groupLabel,
-        type: 'select',
-        options: uniqueOptions.slice(0, 12),
-      })
-    }
-  }
-  return groups
-}
-
-function extractRadioOptionGroups(html) {
-  const inputRe = /<input\b([^>]*\btype=["']?(?:radio|checkbox)["']?[^>]*)>/gi
-  const grouped = new Map()
-  let inputMatch
-  while ((inputMatch = inputRe.exec(html)) !== null) {
-    const attrs = parseAttributes(inputMatch[1] || '')
-    const name = attrs.name || attrs.id
-    if (!name) continue
-    const label =
-      normalizeOptionText(attrs['aria-label']) ||
-      normalizeOptionText(attrs.title) ||
-      extractAssociatedLabel(html, attrs.id) ||
-      normalizeOptionText(attrs.value)
-    if (!label) continue
-    const groupLabel = simplifyGroupLabel(
-      attrs['aria-label'] || extractAssociatedLabel(html, attrs.id) || attrs.name || attrs.id,
-      '옵션',
-    )
-    const list = grouped.get(name) || {
-      id: name,
-      label: groupLabel,
-      type: attrs.type || 'radio',
-      options: [],
-    }
-    list.options.push({
-      value: normalizeOptionText(attrs.value || label),
-      label,
-    })
-    grouped.set(name, list)
-  }
-
-  return Array.from(grouped.values())
-    .map((group) => {
-      const seen = new Set()
-      const options = []
-      for (const option of group.options) {
-        const key = `${option.value}::${option.label}`
-        if (seen.has(key)) continue
-        seen.add(key)
-        options.push(option)
-      }
-      return { ...group, options: options.slice(0, 12) }
-    })
-    .filter((group) => group.options.length >= 2)
-}
-
-function extractProductOptionGroupsFromHtml(html) {
-  return [...extractSelectOptionGroups(html), ...extractRadioOptionGroups(html)].slice(
-    0,
-    8,
-  )
+// 보조 읽기(reader → rendered, useReader가 false면 rendered만)를 시도하고,
+// 모두 실패하면 URL만으로 만든 대체 결과를 캐시합니다.
+async function fallBackProductAnalysis(url, { reason = '', useReader = true, message, warning }) {
+  const alternate = useReader
+    ? await fetchReaderOrRenderedProductAnalysis(url, reason)
+    : await cacheRenderedProductAnalysis(url)
+  return alternate || cacheProductAnalysis(url, buildFallbackAnalysis(url, message, warning))
 }
 
 export async function fetchProductAnalysis(rawUrl) {
@@ -291,71 +159,42 @@ export async function fetchProductAnalysis(rawUrl) {
     response = fetched.response
     responseUrl = fetched.url
   } catch {
-    const fallbackAnalysis = await fetchReaderOrRenderedProductAnalysis(
-      normalized.url,
-      'direct fetch failed',
-    )
-    if (fallbackAnalysis) {
-      return fallbackAnalysis
-    }
-
-    return cacheFallbackProductAnalysis(
-      normalized.url,
-      '서버에서 페이지를 직접 읽지 못했습니다.',
-      FALLBACK_WARNINGS.fetchFailed,
-    )
+    return fallBackProductAnalysis(normalized.url, {
+      reason: 'direct fetch failed',
+      message: '서버에서 페이지를 직접 읽지 못했습니다.',
+      warning: FALLBACK_WARNINGS.fetchFailed,
+    })
   }
 
   if (!response.ok) {
-    const fallbackAnalysis = await fetchReaderOrRenderedProductAnalysis(
-      responseUrl,
-      `HTTP ${response.status}`,
-    )
-    if (fallbackAnalysis) {
-      return fallbackAnalysis
-    }
-
-    return cacheFallbackProductAnalysis(
-      responseUrl,
-      `HTTP ${response.status} 응답으로 페이지 본문을 읽지 못했습니다.`,
-      FALLBACK_WARNINGS.httpBlocked,
-    )
+    return fallBackProductAnalysis(responseUrl, {
+      reason: `HTTP ${response.status}`,
+      message: `HTTP ${response.status} 응답으로 페이지 본문을 읽지 못했습니다.`,
+      warning: FALLBACK_WARNINGS.httpBlocked,
+    })
   }
 
   const contentType = response.headers.get('content-type') || ''
   if (contentType && !/text\/html|application\/xhtml\+xml/i.test(contentType)) {
-    const renderedAnalysis = await cacheRenderedProductAnalysis(responseUrl)
-    if (renderedAnalysis) {
-      return renderedAnalysis
-    }
-
-    return cacheFallbackProductAnalysis(
-      responseUrl,
-      'HTML 페이지가 아닌 응답입니다.',
-      FALLBACK_WARNINGS.nonHtml,
-    )
+    return fallBackProductAnalysis(responseUrl, {
+      useReader: false,
+      message: 'HTML 페이지가 아닌 응답입니다.',
+      warning: FALLBACK_WARNINGS.nonHtml,
+    })
   }
 
   try {
     const html = await readResponseTextLimited(response)
     if (isAccessChallengeHtml(html)) {
-      const fallbackAnalysis = await fetchReaderOrRenderedProductAnalysis(
-        responseUrl,
-        'access challenge page',
-      )
-      if (fallbackAnalysis) {
-        return fallbackAnalysis
-      }
-
-      return cacheFallbackProductAnalysis(
-        responseUrl,
-        'Access challenge page returned instead of product content.',
-        FALLBACK_WARNINGS.httpBlocked,
-      )
+      return fallBackProductAnalysis(responseUrl, {
+        reason: 'access challenge page',
+        message: 'Access challenge page returned instead of product content.',
+        warning: FALLBACK_WARNINGS.httpBlocked,
+      })
     }
 
     const product = extractProductInfoFromHtml(html, responseUrl)
-    const productContext = buildProductContext(product, responseUrl)
+    const productContext = formatProductContext(product, responseUrl)
     const hasInfo = hasUsefulProductInfo(product)
     if (!hasInfo) {
       const renderedAnalysis = await cacheRenderedProductAnalysis(responseUrl)
@@ -381,15 +220,10 @@ export async function fetchProductAnalysis(rawUrl) {
       }),
     )
   } catch (err) {
-    const renderedAnalysis = await cacheRenderedProductAnalysis(responseUrl)
-    if (renderedAnalysis) {
-      return renderedAnalysis
-    }
-
-    return cacheFallbackProductAnalysis(
-      responseUrl,
-      err instanceof Error ? err.message : '상품 정보를 읽지 못했습니다.',
-      FALLBACK_WARNINGS.readFailed,
-    )
+    return fallBackProductAnalysis(responseUrl, {
+      useReader: false,
+      message: err instanceof Error ? err.message : '상품 정보를 읽지 못했습니다.',
+      warning: FALLBACK_WARNINGS.readFailed,
+    })
   }
 }

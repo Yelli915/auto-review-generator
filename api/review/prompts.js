@@ -10,7 +10,7 @@ import {
   normalizeReviewLength,
   normalizeReviewTone,
 } from '../../shared/reviewOptions.js'
-import { isLikelyKeywordPhrase } from './keywords/keywordUtils.js'
+import { isLikelyKeywordPhrase } from '../../shared/keywordPhrase.js'
 import {
   COSMETIC_CONTEXT_RE,
   getGenericBanPhrases,
@@ -39,17 +39,13 @@ function normalizeKeywordPhrases(values, limit = Infinity) {
     .slice(0, limit)
 }
 
-function normalizeSourceContext(productContext) {
-  return typeof productContext === 'string' ? productContext.trim().slice(0, 2800) : ''
-}
-
-function normalizeReviewRewriteText(value, maxLength) {
+function clipText(value, maxLength) {
   return typeof value === 'string' ? value.trim().slice(0, maxLength) : ''
 }
 
 function buildRewriteBlock(previousReview, rewriteInstruction) {
-  const safePreviousReview = normalizeReviewRewriteText(previousReview, 1600)
-  const safeRewriteInstruction = normalizeReviewRewriteText(rewriteInstruction, 300)
+  const safePreviousReview = clipText(previousReview, 1600)
+  const safeRewriteInstruction = clipText(rewriteInstruction, 300)
   if (!safePreviousReview || !safeRewriteInstruction) return ''
   return joinPromptLines(
     '기존 리뷰:',
@@ -132,7 +128,7 @@ function buildSubjectiveReviewGuide(category) {
 }
 
 function buildSourceBlock(productContext) {
-  const safeProductContext = normalizeSourceContext(productContext)
+  const safeProductContext = clipText(productContext, 2800)
   return safeProductContext
     ? ['입력 근거:', safeProductContext].join('\n')
     : ''
@@ -197,7 +193,7 @@ export function buildKeywordPrompt({
 }) {
   const safeCategory = normalizeReviewCategory(category)
   const categoryMeta = REVIEW_CATEGORY_MAP[safeCategory]
-  const safeProductContext = normalizeSourceContext(productContext)
+  const safeProductContext = clipText(productContext, 2800)
   const safePreviousKeywords = normalizeKeywordPhrases(previousKeywords, maxKeywordCount)
   const productContentGuide = buildProductContentsPriorityGuide(safeCategory)
   const cosmeticGuide = isCosmeticReviewContext(safeCategory, [safeProductContext])
@@ -252,7 +248,7 @@ export function buildReviewPrompt({
   const safeCategory = normalizeReviewCategory(category)
   const categoryMeta = REVIEW_CATEGORY_MAP[safeCategory]
   const minReviewChars = getReviewMinChars(safeLength)
-  const safeProductContext = normalizeSourceContext(productContext)
+  const safeProductContext = clipText(productContext, 2800)
   const rewriteBlock = buildRewriteBlock(previousReview, rewriteInstruction)
   const foodGuide = buildFoodEvaluationGuide(safeCategory)
   const productContentGuide = buildProductContentsPriorityGuide(safeCategory)

@@ -2,12 +2,10 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { transformImageFile } from '../utils/imageUtils'
 import {
   IMAGE_RESIZE_OPTIONS,
-  buildImageStatus,
   createReviewImage,
   getClipboardImageFiles,
   getImageFileNames,
   getImageObjectUrls,
-  isTextEditingTarget,
   revokeObjectUrls,
   validateSelectedFiles,
 } from '../utils/uploadImages'
@@ -109,7 +107,7 @@ export function useUploadImages({ isLoading, isLinkMode, switchToImageMode }) {
       return prev > index ? prev - 1 : prev
     })
     setStatus({
-      text: buildImageStatus(nextImages),
+      text: getImageFileNames(nextImages),
       isError: false,
     })
   }, [busy, images, setTrackedImages])
@@ -149,10 +147,7 @@ export function useUploadImages({ isLoading, isLinkMode, switchToImageMode }) {
   const handlePaste = useCallback((e) => {
     if (busy) return
     const pastedFiles = getClipboardImageFiles(e.clipboardData)
-    if (!pastedFiles.length) {
-      if (isTextEditingTarget(e.target)) return
-      return
-    }
+    if (!pastedFiles.length) return
     e.preventDefault()
     if (isLinkMode) switchToImageMode?.()
     processFiles(pastedFiles, '붙여넣음')
@@ -176,7 +171,6 @@ export function useUploadImages({ isLoading, isLinkMode, switchToImageMode }) {
     isDragging,
     isProcessing,
     setEditingIndex,
-    setStatus,
     status,
   }
 }

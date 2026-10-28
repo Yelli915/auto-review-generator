@@ -16,11 +16,5 @@ export async function readResponseTextLimited(response) {
     chunks.push(value)
   }
 
-  const bytes = new Uint8Array(total)
-  let offset = 0
-  for (const chunk of chunks) {
-    bytes.set(chunk, offset)
-    offset += chunk.byteLength
-  }
-  return new TextDecoder().decode(bytes)
+  return new Blob(chunks).text()
 }

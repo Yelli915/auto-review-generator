@@ -1,5 +1,10 @@
-import { hasHangul, isLikelyKeywordPhrase } from './keywordUtils.js'
-import { KEYWORD_LEN_MAX, KEYWORD_LEN_MIN } from '../config.js'
+import {
+  hasHangul,
+  isLikelyKeywordPhrase,
+  KEYWORD_LEN_MAX,
+  KEYWORD_LEN_MIN,
+  normalizeKeywordText,
+} from '../../../shared/keywordPhrase.js'
 
 export function sanitizeKeywordArray(arr) {
   if (!Array.isArray(arr)) return null
@@ -17,11 +22,7 @@ export function sanitizeKeywordArray(arr) {
 
 export function normalizeKeywordSet(keywords) {
   const normalized = Array.isArray(keywords)
-    ? keywords
-        .map((keyword) =>
-          typeof keyword === 'string' ? keyword.replace(/\s+/g, ' ').trim() : '',
-        )
-        .filter(Boolean)
+    ? keywords.map(normalizeKeywordText).filter(Boolean)
     : []
   return sanitizeKeywordArray(normalized) || []
 }

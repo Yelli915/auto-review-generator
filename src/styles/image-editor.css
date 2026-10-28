@@ -120,40 +120,6 @@
   width: 100%;
 }
 
-.segmented {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(64px, 1fr));
-  gap: 6px;
-}
-
-.segmented__item {
-  min-height: 40px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--bg);
-  color: var(--text);
-  font: inherit;
-  font-size: 0.875rem;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.segmented__item.is-active {
-  border-color: var(--accent);
-  background: var(--surface);
-  color: var(--accent);
-  box-shadow: var(--shadow-sm);
-}
-
-.segmented__item:hover:not(:disabled) {
-  border-color: var(--accent-border);
-}
-
-.segmented__item:disabled {
-  cursor: not-allowed;
-  opacity: 0.6;
-}
-
 @media (max-width: 720px) {
   .image-editor__body {
     grid-template-columns: 1fr;
@@ -171,7 +137,7 @@
   font: inherit;
   font-size: 0.9375rem;
   font-weight: 700;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-pill);
   border: none;
   cursor: pointer;
   transition:
@@ -192,14 +158,12 @@
 }
 
 .btn--primary {
-  color: var(--accent-contrast);
-  background: var(--accent);
-  box-shadow: var(--shadow-sm);
+  color: var(--ink-contrast);
+  background: var(--ink);
 }
 
 .btn--primary:hover:not(:disabled) {
-  background: var(--accent-hover);
-  box-shadow: none;
+  opacity: 0.88;
 }
 
 .btn--primary:active:not(:disabled) {
@@ -210,12 +174,11 @@
   color: var(--text-h);
   background: var(--surface);
   border: 1px solid var(--border-strong);
-  box-shadow: var(--shadow-sm);
 }
 
 .btn--secondary:hover:not(:disabled) {
   background: var(--surface-subtle);
-  border-color: #98a2b3;
+  border-color: var(--text-muted);
 }
 
 .btn--ghost {
@@ -230,41 +193,6 @@
 }
 
 .btn--lg {
-  min-height: 48px;
-  font-size: 1rem;
-}
-
-.btn-row {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  margin-top: 14px;
-}
-
-.btn-row--tight {
-  margin-top: 0;
-}
-
-.btn-row--tight.btn-row--split {
-  margin-top: 18px;
-}
-
-.btn-row--split {
-  flex-direction: column;
-}
-
-@media (min-width: 400px) {
-  .btn-row--split {
-    flex-direction: row;
-    align-items: stretch;
-  }
-
-  .btn-row--split .btn {
-    flex: 1;
-    min-width: 0;
-  }
-
-  .btn-row--split .btn--primary {
-    flex: 1.2;
-  }
+  min-height: 54px;
+  font-size: 1.0625rem;
 }

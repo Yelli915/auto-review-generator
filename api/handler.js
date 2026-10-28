@@ -1,3 +1,4 @@
+import { normalizeReviewRating } from '../shared/reviewRating.js'
 import { fetchProductAnalysis } from './product/fetchProductAnalysis.js'
 import { authorizeRequest } from './core/auth.js'
 import { getTrimmedEnv } from './core/config.js'
@@ -75,16 +76,7 @@ async function handleAnalyzeProduct(body, res) {
   const analysis = await fetchProductAnalysis(productUrl)
   if (!analysis.ok) return sendError(res, analysis.status, analysis.error)
 
-  return json(res, 200, {
-    ok: true,
-    url: analysis.url,
-    product: analysis.product,
-    productContext: analysis.productContext,
-    optionGroups: analysis.optionGroups,
-    analysisStatus: analysis.analysisStatus,
-    warning: analysis.warning,
-    needsManualInput: analysis.needsManualInput,
-  })
+  return json(res, 200, analysis)
 }
 
 async function handleKeywords(body, res, key, rateKey) {
@@ -98,7 +90,7 @@ async function handleReview(body, res, key, rateKey) {
   try {
     await streamGeminiReview({
       key,
-      rating: Number.isFinite(Number(body.rating)) ? Number(body.rating) : 5,
+      rating: normalizeReviewRating(body.rating),
       keywords: body.keywords,
       length: body.length,
       tone: body.tone,

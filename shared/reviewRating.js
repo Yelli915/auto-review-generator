@@ -1,6 +1,6 @@
-export const DEFAULT_REVIEW_RATING = 5
-export const MIN_REVIEW_RATING = 1
-export const MAX_REVIEW_RATING = 5
+const DEFAULT_REVIEW_RATING = 5
+const MIN_REVIEW_RATING = 1
+const MAX_REVIEW_RATING = 5
 
 export function normalizeReviewRating(value) {
   const rating = Number(value)

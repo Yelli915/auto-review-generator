@@ -1,8 +1,8 @@
 /* global process */
 import { ACCESS_CHALLENGE_PATTERN } from './accessChallenge.js'
 import { FALLBACK_WARNINGS, PRODUCT_FETCH_HEADERS } from './config.js'
+import { formatProductContext } from '../../shared/productContext.js'
 import {
-  buildProductContext,
   buildProductInfo,
   hasUsefulProductInfo,
   normalizeImageUrl,
@@ -199,7 +199,7 @@ export async function fetchRenderedProductAnalysis(urlString) {
   return buildAnalysisResult({
     url: urlString,
     product: normalizedProduct,
-    productContext: buildProductContext(normalizedProduct, urlString),
+    productContext: formatProductContext(normalizedProduct, urlString),
     optionGroups: [],
     analysisStatus: 'rendered',
     warning: FALLBACK_WARNINGS.rendered,

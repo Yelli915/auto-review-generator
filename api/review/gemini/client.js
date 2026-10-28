@@ -20,7 +20,7 @@ export function makeStreamUrl(model = MODEL) {
   return `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?alt=sse`
 }
 
-export function parseGeminiRetryAfterSeconds(message) {
+function parseGeminiRetryAfterSeconds(message) {
   if (typeof message !== 'string') return null
   const m = message.match(/retry in ([\d.]+)\s*s/i)
   if (!m) return null
@@ -28,7 +28,7 @@ export function parseGeminiRetryAfterSeconds(message) {
   return Number.isFinite(sec) && sec > 0 ? sec : null
 }
 
-export function isTemporaryHighDemandMessage(message) {
+function isTemporaryHighDemandMessage(message) {
   if (typeof message !== 'string') return false
   return /currently experiencing high demand|spikes in demand are usually temporary|please try again later/i.test(
     message,

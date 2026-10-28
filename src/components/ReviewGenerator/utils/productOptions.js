@@ -8,18 +8,6 @@ export function normalizeOptionGroups(optionGroups) {
   return Array.isArray(optionGroups) ? optionGroups : []
 }
 
-export function mergeOptionSelections(optionGroups, selections) {
-  const groups = normalizeOptionGroups(optionGroups)
-  const defaults = getDefaultOptionSelections(groups)
-  if (!Array.isArray(selections) || !selections.length) return defaults
-  return defaults.map((value, index) => {
-    const candidate = selections[index]
-    return groups[index]?.options?.some((option) => option.value === candidate)
-      ? candidate
-      : value
-  })
-}
-
 export function normalizeProductInfo(product, fallbackUrl = '') {
   const source = product && typeof product === 'object' ? product : {}
   return {
@@ -33,7 +21,7 @@ export function normalizeProductInfo(product, fallbackUrl = '') {
   }
 }
 
-export function hasValidOptionSelections(optionGroups, selections) {
+function hasValidOptionSelections(optionGroups, selections) {
   return (
     optionGroups.length === 0 ||
     optionGroups.every((group, index) => selections[index] && group?.options?.length)

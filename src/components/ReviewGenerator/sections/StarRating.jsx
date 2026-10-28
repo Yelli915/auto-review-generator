@@ -1,6 +1,6 @@
 import { useState } from 'react'
 
-export default function StarRating({ value, onChange, disabled, ratingLabels }) {
+export default function StarRating({ value, onChange, disabled, ratingLabels, labelledBy }) {
   const [hovered, setHovered] = useState(null)
   const display = hovered ?? value
 
@@ -8,7 +8,8 @@ export default function StarRating({ value, onChange, disabled, ratingLabels }) 
     <div
       className="star-rating"
       role="group"
-      aria-label="별점 선택"
+      aria-label={labelledBy ? undefined : '별점 선택'}
+      aria-labelledby={labelledBy}
       onMouseLeave={() => setHovered(null)}
     >
       {[1, 2, 3, 4, 5].map((star) => (

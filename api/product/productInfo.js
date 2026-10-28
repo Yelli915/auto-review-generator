@@ -79,18 +79,6 @@ export function hasUsefulProductInfo(product) {
   return Boolean(product?.name || product?.brand || product?.imageUrl || product?.price)
 }
 
-export function buildProductContext(product, url) {
-  const parts = [
-    product?.site && `사이트: ${product.site}`,
-    product?.name && `상품명: ${product.name}`,
-    product?.brand && `브랜드: ${product.brand}`,
-    product?.description && `설명: ${product.description}`,
-    product?.price && `가격 정보: ${product.price}`,
-    `링크: ${url}`,
-  ].filter(Boolean)
-  return parts.join('\n')
-}
-
 export function productNameFromUrl(url) {
   const segments = url.pathname
     .split('/')
