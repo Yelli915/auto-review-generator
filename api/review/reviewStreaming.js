@@ -39,8 +39,13 @@ export async function streamGeminiReview({
     rewriteInstruction,
   })
 
+  // 사용자가 연결을 끊으면 Gemini 생성도 멈춰 토큰을 아낍니다.
+  const upstream = new AbortController()
+  res.on?.('close', () => upstream.abort())
+
   const response = await fetch(makeStreamUrl(MODEL), {
     method: 'POST',
+    signal: upstream.signal,
     headers: createJsonHeaders({ 'x-goog-api-key': key }),
     body: JSON.stringify({
       contents: [{ parts: [{ text: prompt }] }],
@@ -101,6 +106,7 @@ export async function streamGeminiReview({
       if (done) break
     }
   } catch (err) {
+    if (upstream.signal.aborted) return
     writeJsonLine({
       error: err instanceof Error ? err.message : '스트리밍 응답을 읽지 못했습니다.',
     })

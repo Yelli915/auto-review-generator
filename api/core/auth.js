@@ -1,4 +1,5 @@
-/* global process */
+/* global process, Buffer */
+import { timingSafeEqual } from 'node:crypto'
 import { OAuth2Client } from 'google-auth-library'
 import { getTrimmedEnv } from './config.js'
 
@@ -39,6 +40,13 @@ function isTrustedOrigin(req) {
   } catch {
     return false
   }
+}
+
+function isSameToken(value, expected) {
+  if (typeof value !== 'string') return false
+  const a = Buffer.from(value.trim())
+  const b = Buffer.from(expected)
+  return a.length === b.length && timingSafeEqual(a, b)
 }
 
 function getBearerToken(req) {
@@ -112,7 +120,7 @@ export async function authorizeRequest(req) {
 
   if (appAuthToken) {
     const headerToken = req.headers?.['x-api-auth-token']
-    if (typeof headerToken !== 'string' || headerToken.trim() !== appAuthToken) {
+    if (!isSameToken(headerToken, appAuthToken)) {
       return { ok: false, status: 401, error: 'Request is not authenticated.' }
     }
   }

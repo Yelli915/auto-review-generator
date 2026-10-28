@@ -4,34 +4,23 @@ import {
 } from './config.js'
 
 const productAnalysisCache = new Map()
-const fetchCacheScopes = new WeakMap()
-let nextFetchCacheScope = 1
 
-function getProductAnalysisCacheKey(urlString) {
-  const fetchImpl = globalThis.fetch
-  if (typeof fetchImpl !== 'function') return urlString
-  let scope = fetchCacheScopes.get(fetchImpl)
-  if (!scope) {
-    scope = nextFetchCacheScope
-    nextFetchCacheScope += 1
-    fetchCacheScopes.set(fetchImpl, scope)
-  }
-  return `${scope}:${urlString}`
+export function clearProductAnalysisCache() {
+  productAnalysisCache.clear()
 }
 
 export function getCachedProductAnalysis(urlString) {
-  const cacheKey = getProductAnalysisCacheKey(urlString)
-  const cached = productAnalysisCache.get(cacheKey)
+  const cached = productAnalysisCache.get(urlString)
   if (!cached) return null
   if (Date.now() - cached.createdAt > PRODUCT_ANALYSIS_CACHE_TTL_MS) {
-    productAnalysisCache.delete(cacheKey)
+    productAnalysisCache.delete(urlString)
     return null
   }
   return cached.value
 }
 
 export function cacheProductAnalysis(urlString, value) {
-  productAnalysisCache.set(getProductAnalysisCacheKey(urlString), {
+  productAnalysisCache.set(urlString, {
     createdAt: Date.now(),
     value,
   })

@@ -24,6 +24,8 @@ import { fetchPublicUrl } from './publicFetch.js'
 import { readResponseTextLimited } from './responseText.js'
 import { buildAnalysisResult } from './result.js'
 
+export { clearProductAnalysisCache } from './cache.js'
+
 // 보조 읽기(reader → rendered, useReader가 false면 rendered만)를 시도하고,
 // 모두 실패하면 URL만으로 만든 대체 결과를 캐시합니다.
 async function fallBackProductAnalysis(url, { reason = '', useReader = true, message, warning }) {
