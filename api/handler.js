@@ -56,7 +56,12 @@ async function rejectDailyUsageLimit(res, identifier, action) {
     sendError(res, 503, ERRORS.usageStoreUnavailable)
     return true
   }
-  if (dailyUsage.ok) return false
+  if (dailyUsage.ok) {
+    if (dailyUsage.limit) {
+      res.setHeader('X-Daily-Remaining', String(Math.max(0, dailyUsage.limit - dailyUsage.count)))
+    }
+    return false
+  }
 
   res.setHeader('Retry-After', String(dailyUsage.retryAfterSec))
   sendError(

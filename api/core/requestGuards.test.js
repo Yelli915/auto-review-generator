@@ -86,6 +86,7 @@ test('applyDailyUsageLimit allows only counted actions up to the daily limit', a
   for (let i = 0; i < 20; i += 1) {
     assert.equal((await applyDailyUsageLimit(id, 'keywords')).ok, true)
   }
+  assert.equal((await applyDailyUsageLimit(`${id}-count`, 'keywords')).count, 1)
 
   const blocked = await applyDailyUsageLimit(id, 'keywords')
   assert.equal(blocked.ok, false)

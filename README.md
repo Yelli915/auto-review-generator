@@ -20,6 +20,7 @@ React SPA + Vercel 서버리스 API 하나(`/api/gemini`)로 구성하고, Gemin
 - 사진 최대 3장 업로드·붙여넣기, 서버는 MIME·base64·시그니처·크기 재검증
 - 키워드 선택·직접 추가·다시 추천, 분량·말투 선택 후 리뷰를 스트리밍으로 표시
 - 새로 생성·다듬기·강조 단어 바꾸기 결과를 버전(v1, v2…)으로 최대 10개 보관
+- 리뷰에 빠진 키워드 표시·보완, 다듬기 요청 직접 입력, 원본 버전과 비교, 오늘 남은 생성 횟수 표시
 - 입력과 결과를 탭 단위(`sessionStorage`)로 저장해 새로고침 후에도 이어 쓰기
 - Google ID Token 인증, Origin 제한, 사용자/IP별 rate limit·일일 사용량 제한, SSRF 방어
 
@@ -105,7 +106,7 @@ npm run dev:vercel   # 서버리스 API 포함 (vercel env pull .env.local 후)
 테스트 (API 키·Redis 불필요):
 
 ```bash
-npm test && npm run lint && npm run build   # 91 tests
+npm test && npm run lint && npm run build   # 92 tests
 ```
 
 Vercel Production 빌드는 `scripts/verify-vercel-env.js`가 필수 환경 변수를 먼저 확인하고, 없으면 배포 전에 실패.

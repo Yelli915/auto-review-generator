@@ -41,3 +41,12 @@ export function splitKeywordHighlights(text, keywords) {
   }
   return segments
 }
+
+// 리뷰에 어간이 하나도 안 들어간 키워드를 돌려줍니다. 어간이 없는(너무 짧은) 키워드는 판단하지 않습니다.
+export function findMissingKeywords(text, keywords) {
+  if (!text || !Array.isArray(keywords)) return []
+  return keywords.filter((keyword) => {
+    const stems = buildStems([keyword])
+    return stems.length > 0 && !stems.some(({ stem }) => text.includes(stem))
+  })
+}

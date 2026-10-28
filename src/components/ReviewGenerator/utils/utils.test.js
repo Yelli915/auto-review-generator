@@ -136,3 +136,10 @@ test('workspace context builds the evidence text sent to keyword and review prom
   // 상품 정보가 비어 있으면 페이지에서 읽은 근거를 그대로 씁니다.
   assert.equal(appendProductContext({ productContext: '원문' }, {}, '').productContext, '원문')
 })
+
+test('findMissingKeywords returns keywords whose stems never appear in the review', async () => {
+  const { findMissingKeywords } = await import('./keywordHighlight.js')
+  const text = '은은한 조명 덕분에 분위기가 좋았어요.'
+  assert.deepEqual(findMissingKeywords(text, ['조명 은은함', '주차 편함', '맛']), ['주차 편함'])
+  assert.deepEqual(findMissingKeywords('', ['조명']), [])
+})

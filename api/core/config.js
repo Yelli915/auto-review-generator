@@ -7,7 +7,7 @@ export function getTrimmedEnv(name) {
 export const MAX_REQUEST_BODY_BYTES = 2 * 1024 * 1024
 export const RATE_LIMIT_WINDOW_MS = 60 * 1000
 export const RATE_LIMIT_MAX_REQUESTS = 20
-// action별 하루 요청 한도. 상품 분석은 브라우저 렌더링까지 쓰므로 따로 제한합니다.
+// action별 하루 요청 한도. 상품 분석은 외부 페이지를 읽으므로 따로 제한합니다.
 export const DAILY_USAGE_LIMITS = {
   keywords: 20,
   review: 20,

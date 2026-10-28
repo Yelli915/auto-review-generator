@@ -181,4 +181,8 @@ export async function generateReview({
   if (streamError) {
     throw new Error(streamError)
   }
+
+  // 오늘 남은 리뷰 생성 횟수. 한도가 없는 환경이면 null입니다.
+  const remaining = response.headers.get('X-Daily-Remaining')
+  return { remaining: remaining === null ? null : Number(remaining) }
 }
