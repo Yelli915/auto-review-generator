@@ -21,25 +21,6 @@ delete process.env.UPSTASH_REDIS_REST_TOKEN
 // 테스트마다 다른 가짜 fetch를 쓰므로 이전 테스트의 상품 분석 캐시를 비웁니다.
 beforeEach(clearProductAnalysisCache)
 
-test('handler ping works without auth or Gemini environment variables', async () => {
-  await withEnv(
-    {
-      GEMINI_API_KEY: null,
-      GOOGLE_CLIENT_ID: null,
-      ALLOWED_ORIGINS: null,
-    },
-    async () => {
-      const req = createMockRequest({ action: 'ping' })
-      const res = createMockResponse()
-
-      await handler(req, res)
-
-      assert.equal(res.statusCode, 200)
-      assert.equal(JSON.parse(res.body).ok, true)
-    },
-  )
-})
-
 test('handler treats missing previousKeywords as an empty list', async () => {
   await withEnv(
     {

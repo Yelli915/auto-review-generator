@@ -19,7 +19,6 @@ import {
 } from './productInfo.js'
 import { fetchPublicUrl } from './publicFetch.js'
 import { fetchReaderProductAnalysis } from './reader.js'
-import { fetchRenderedProductAnalysis } from './rendered.js'
 import { readResponseTextLimited } from './responseText.js'
 import { buildAnalysisResult } from './result.js'
 import { validatePublicHttpUrl } from '../publicUrlGuard.js'
@@ -106,19 +105,9 @@ async function normalizeProductUrl(rawUrl) {
   })
 }
 
-async function fetchReaderOrRenderedProductAnalysis(urlString, reason, signal) {
-  return (
-    (await fetchReaderProductAnalysis(urlString, reason, signal)) ||
-    (await fetchRenderedProductAnalysis(urlString, signal))
-  )
-}
-
-// 보조 읽기(reader → rendered, useReader가 false면 rendered만)를 시도하고,
-// 모두 실패하면 URL만으로 만든 대체 결과를 돌려줍니다.
+// reader로 다시 읽어 보고(useReader가 false면 생략), 실패하면 URL만으로 만든 대체 결과를 돌려줍니다.
 async function fallBackProductAnalysis(url, signal, { reason = '', useReader = true, message, warning }) {
-  const alternate = useReader
-    ? await fetchReaderOrRenderedProductAnalysis(url, reason, signal)
-    : await fetchRenderedProductAnalysis(url, signal)
+  const alternate = useReader && (await fetchReaderProductAnalysis(url, reason, signal))
   return alternate || buildFallbackAnalysis(url, message, warning)
 }
 
@@ -132,7 +121,7 @@ export async function fetchProductAnalysis(rawUrl, { beforeFetch } = {}) {
     return { ok: false, status: 429, error: PRODUCT_FETCH_REJECTED_ERROR }
   }
 
-  // direct → reader → rendered가 하나의 제한 시간을 나눠 써서 함수 최대 실행 시간 전에 끝냅니다.
+  // direct → reader가 하나의 제한 시간을 나눠 써서 함수 최대 실행 시간 전에 끝냅니다.
   const signal = AbortSignal.timeout(PRODUCT_ANALYSIS_DEADLINE_MS)
   const result = await analyzeProductUrl(normalized.url, signal)
   // 시간 초과로 만든 대체 결과는 다음 시도에서 다시 읽도록 캐시하지 않습니다.
@@ -192,12 +181,6 @@ async function analyzeProductUrl(url, signal) {
     const product = extractProductInfoFromHtml(html, responseUrl)
     const productContext = formatProductContext(product, responseUrl)
     const hasInfo = hasUsefulProductInfo(product)
-    if (!hasInfo) {
-      const renderedAnalysis = await fetchRenderedProductAnalysis(responseUrl, signal)
-      if (renderedAnalysis) {
-        return renderedAnalysis
-      }
-    }
     return buildAnalysisResult({
       url: responseUrl,
       product: hasInfo ? product : buildFallbackProductInfo(responseUrl),
