@@ -1,8 +1,8 @@
 export const DEFAULT_REVIEW_CATEGORY = 'place'
-export const DEFAULT_REVIEW_SUBCATEGORY = ''
+const DEFAULT_REVIEW_SUBCATEGORY = ''
 export const MAX_REVIEW_IMAGE_COUNT = 3
 
-export const REVIEW_SUBCATEGORY_OPTIONS = {
+const REVIEW_SUBCATEGORY_OPTIONS = {
   place: [
     {
       value: 'restaurant',
@@ -100,7 +100,7 @@ export const REVIEW_CATEGORY_MAP = REVIEW_CATEGORY_OPTIONS.reduce(
   {},
 )
 
-export const REVIEW_SUBCATEGORY_MAP = Object.entries(
+const REVIEW_SUBCATEGORY_MAP = Object.entries(
   REVIEW_SUBCATEGORY_OPTIONS,
 ).reduce((acc, [category, options]) => {
   acc[category] = options.reduce((optionAcc, option) => {

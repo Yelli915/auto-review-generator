@@ -90,21 +90,15 @@ export async function streamGeminiReview({
   try {
     while (true) {
       const { done, value } = await reader.read()
-      if (done) break
-      buffer += decoder.decode(value, { stream: true })
+      // 끝나면 줄바꿈을 붙여 마지막 줄도 같은 경로로 처리합니다.
+      buffer += done ? '\n' : decoder.decode(value, { stream: true })
       const lines = buffer.split('\n')
       buffer = lines.pop() || ''
       for (const line of lines) {
         if (!line.startsWith('data: ')) continue
         handleSsePayload(line.slice(6).trim())
       }
-    }
-
-    if (buffer.trim()) {
-      for (const line of buffer.split('\n')) {
-        if (!line.startsWith('data: ')) continue
-        handleSsePayload(line.slice(6).trim())
-      }
+      if (done) break
     }
   } catch (err) {
     writeJsonLine({

@@ -8,8 +8,6 @@ export const ALLOWED_IMAGE_MIME_TYPES = new Set([
 ])
 export const KEYWORDS_MIN_COUNT = 3
 export const KEYWORDS_MAX_COUNT = 8
-export const KEYWORD_LEN_MIN = 2
-export const KEYWORD_LEN_MAX = 30
 export const KEYWORD_RETRY_LIMIT = 3
 
 const GENERIC_BAN_PHRASES_PLACE = [

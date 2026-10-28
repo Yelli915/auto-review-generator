@@ -1,70 +1,6 @@
-import { hasHangul } from './keywordUtils.js'
-import {
-  KEYWORD_LEN_MAX,
-  KEYWORD_LEN_MIN,
-  KEYWORDS_MAX_COUNT,
-  KEYWORDS_MIN_COUNT,
-} from '../config.js'
+import { hasHangul } from '../../../shared/keywordPhrase.js'
+import { KEYWORDS_MAX_COUNT, KEYWORDS_MIN_COUNT } from '../config.js'
 import { sanitizeKeywordArray } from './keywordSets.js'
-import { sliceBalancedSegment } from '../../../shared/balancedText.js'
-
-function sanitizeKeywordsField(keywords) {
-  if (Array.isArray(keywords)) return sanitizeKeywordArray(keywords)
-  if (typeof keywords === 'string') {
-    const parts = keywords
-      .split(/[,\s\n|/]+/g)
-      .map((s) => s.trim())
-      .filter(Boolean)
-    return sanitizeKeywordArray(parts)
-  }
-  return null
-}
-
-function stripEnglishJsonPreamble(str) {
-  if (typeof str !== 'string') return ''
-  return str.replace(
-    /^\s*(?:here(?:'s| is)?|sure[:,]?|of course[:,]?|json[:,]?|keywords[:,]?)[^[{]*(?=[[{])/i,
-    '',
-  )
-}
-
-function loosenJsonCommas(s) {
-  if (typeof s !== 'string') return ''
-  return s.replace(/,\s*([}\]])/g, '$1')
-}
-
-function trimToJsonStart(s) {
-  if (typeof s !== 'string') return ''
-  const idx = s.search(/[[{]/)
-  return idx >= 0 ? s.slice(idx).trim() : s.trim()
-}
-
-function extractQuotedHangulKeywords(text) {
-  const out = []
-  const re = /"([^"]+)"/g
-  let match
-  while ((match = re.exec(text)) !== null) {
-    const value = match[1].trim()
-    if (hasHangul(value)) out.push(value)
-  }
-  return sanitizeKeywordArray(out)
-}
-
-function extractSingleQuotedHangulKeywords(text) {
-  const out = []
-  const re = /'([^']+)'/g
-  let match
-  while ((match = re.exec(text)) !== null) {
-    const value = match[1].trim()
-    if (hasHangul(value)) out.push(value)
-  }
-  return sanitizeKeywordArray(out)
-}
-
-function mergeUniqueKeywordLists(...lists) {
-  const merged = lists.flatMap((list) => (Array.isArray(list) ? list : []))
-  return sanitizeKeywordArray(merged)
-}
 
 function gatherKeywordResponseText(data) {
   const candidates = Array.isArray(data?.candidates) ? data.candidates : []
@@ -78,91 +14,27 @@ function gatherKeywordResponseText(data) {
     .trim()
 }
 
+// 키워드 요청은 responseSchema로 JSON 응답을 받습니다. JSON.parse가 실패하는 경우는
+// 사실상 응답이 잘린 경우(MAX_TOKENS)뿐이라, 닫힌 따옴표 안의 한글 문구만 건집니다.
 export function parseKeywordsFromText(text) {
   if (typeof text !== 'string' || !text.trim()) return null
-  const raw = text.trim()
-  let normalized = raw
-    .replace(/^```json\s*/i, '')
-    .replace(/^```\s*/i, '')
-    .replace(/\s*```$/i, '')
-  normalized = stripEnglishJsonPreamble(normalized)
-  normalized = trimToJsonStart(normalized)
-  const loose = loosenJsonCommas(normalized)
-
-  const tryParse = (s) => {
-    try {
-      return JSON.parse(s)
-    } catch {
-      return null
-    }
+  try {
+    const parsed = JSON.parse(text)
+    return sanitizeKeywordArray(parsed?.keywords) || sanitizeKeywordArray(parsed)
+  } catch {
+    const quoted = Array.from(text.matchAll(/"([^"]+)"/g), (match) => match[1].trim())
+    return sanitizeKeywordArray(quoted.filter(hasHangul))
   }
-
-  for (const candidate of [normalized, loose]) {
-    const parsed = tryParse(candidate)
-    if (parsed) {
-      const fromObject = sanitizeKeywordsField(parsed?.keywords)
-      if (fromObject) return fromObject
-      const fromArray = sanitizeKeywordArray(parsed)
-      if (fromArray) return fromArray
-    }
-  }
-
-  const objSlice = sliceBalancedSegment(normalized, { openCh: '{' })
-  if (objSlice) {
-    const parsed = tryParse(loosenJsonCommas(objSlice))
-    const fromObject = parsed ? sanitizeKeywordsField(parsed?.keywords) : null
-    if (fromObject) return fromObject
-  }
-
-  const arraySlice = sliceBalancedSegment(normalized, { openCh: '[' })
-  if (arraySlice) {
-    const parsed = tryParse(loosenJsonCommas(arraySlice))
-    const fromArray = parsed ? sanitizeKeywordArray(parsed) : null
-    if (fromArray) return fromArray
-  }
-
-  const fromLines = sanitizeKeywordArray(
-    normalized
-      .split('\n')
-      .map((line) => line.replace(/^[\s\-*0-9.()]+/, '').trim())
-      .filter(Boolean),
-  )
-  if (fromLines) return fromLines
-
-  return mergeUniqueKeywordLists(
-    extractQuotedHangulKeywords(normalized),
-    extractSingleQuotedHangulKeywords(normalized),
-  )
 }
 
 export function parseKeywordsFromAny(data) {
   const text = gatherKeywordResponseText(data)
-  const direct = parseKeywordsFromText(text)
-  if (direct && direct.length >= 1) {
-    if (direct.length < KEYWORDS_MIN_COUNT) {
-      return { keywords: null, rawText: text, tooFew: true, partial: direct }
-    }
-    return { keywords: direct.slice(0, KEYWORDS_MAX_COUNT), rawText: text }
+  const keywords = parseKeywordsFromText(text)
+  if (!keywords) return { keywords: null, rawText: text }
+  if (keywords.length < KEYWORDS_MIN_COUNT) {
+    return { keywords: null, rawText: text, tooFew: true, partial: keywords }
   }
-
-  const tokenized = text
-    .replace(/^(?:keywords|keyword|키워드)\s*:?\s*/i, '')
-    .split(/[,\s\n|/]+/g)
-    .map((v) => v.replace(/^[\s\-*0-9.()]+/, '').trim())
-    .filter(Boolean)
-  const cleaned = Array.from(new Set(tokenized)).filter(
-    (v) =>
-      v.length >= KEYWORD_LEN_MIN &&
-      v.length <= KEYWORD_LEN_MAX &&
-      hasHangul(v),
-  )
-  if (cleaned.length >= KEYWORDS_MIN_COUNT) {
-    return { keywords: cleaned.slice(0, KEYWORDS_MAX_COUNT), rawText: text }
-  }
-  if (cleaned.length >= 1) {
-    return { keywords: null, rawText: text, tooFew: true, partial: cleaned }
-  }
-  return { keywords: null, rawText: text }
+  return { keywords: keywords.slice(0, KEYWORDS_MAX_COUNT), rawText: text }
 }
 
 export function summarizeKeywordDebug(data) {

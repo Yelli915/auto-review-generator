@@ -13,7 +13,7 @@ function getExtensionFromMimeType(type) {
   return 'jpg'
 }
 
-export function isImageFile(file) {
+function isImageFile(file) {
   if (!file) return false
   if (file.type?.startsWith('image/')) return true
   return /\.(avif|gif|jpe?g|png|webp)$/i.test(file.name || '')
@@ -42,16 +42,6 @@ export function getClipboardImageFiles(clipboardData) {
   return files.map(nameClipboardImage)
 }
 
-export function isTextEditingTarget(target) {
-  if (!(target instanceof HTMLElement)) return false
-  return (
-    target.isContentEditable ||
-    target.tagName === 'INPUT' ||
-    target.tagName === 'TEXTAREA' ||
-    target.tagName === 'SELECT'
-  )
-}
-
 export function validateSelectedFiles(files) {
   if (!files.length) return '이미지를 1장 이상 선택해 주세요.'
   if (files.length > MAX_REVIEW_IMAGE_COUNT) {
@@ -76,10 +66,6 @@ export function getImageObjectUrls(images) {
 
 export function getImageFileNames(images) {
   return images.map((image) => image.file.name).join(', ')
-}
-
-export function buildImageStatus(images, fallback = '') {
-  return images.length ? getImageFileNames(images) : fallback
 }
 
 export async function createReviewImage(file, previewUrl) {

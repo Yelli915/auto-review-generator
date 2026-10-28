@@ -19,7 +19,8 @@ createRoot(document.getElementById('root')).render(
   </StrictMode>,
 )
 
-if ('serviceWorker' in navigator) {
+// dev에서는 등록하지 않습니다. 캐시가 Vite 개발 모듈을 붙잡아 서버 재시작 후 빈 화면이 됩니다.
+if (import.meta.env.PROD && 'serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('/sw.js').catch(() => {
       // PWA install remains optional; the app should still run if registration fails.

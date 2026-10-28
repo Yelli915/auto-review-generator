@@ -1,3 +1,4 @@
+import { normalizeReviewRating } from '../../../shared/reviewRating.js'
 import { fetchProductAnalysis } from '../../product/fetchProductAnalysis.js'
 import { buildKeywordPrompt } from '../prompts.js'
 import { DEBUG_LOGS } from '../../core/config.js'
@@ -23,20 +24,8 @@ import {
   summarizeKeywordDebug,
 } from './keywordParsing.js'
 
-export {
-  appendKeywordRetryGuidance,
-  isSameKeywordSet,
-  sanitizeKeywordArray,
-} from './keywordSets.js'
-export {
-  filterCosmeticContainerKeywords,
-  isCosmeticContainerOnlyKeyword,
-} from './keywordFiltering.js'
-export { parseKeywordsFromText } from './keywordParsing.js'
-
 export async function generateKeywordResult({ body, key }) {
-  const rawRating = Number.isFinite(Number(body.rating)) ? Number(body.rating) : 5
-  const rating = Math.max(1, Math.min(5, rawRating))
+  const rating = normalizeReviewRating(body.rating)
   const productUrl =
     typeof body.productUrl === 'string' ? body.productUrl.trim() : ''
   let productContext =

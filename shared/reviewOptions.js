@@ -1,6 +1,6 @@
-export const DEFAULT_REVIEW_LENGTH = 'medium'
-export const DEFAULT_REVIEW_TONE = 'neutral'
-export const SPARSE_LONG_REVIEW_KEYWORD_MIN = 3
+const DEFAULT_REVIEW_LENGTH = 'medium'
+const DEFAULT_REVIEW_TONE = 'neutral'
+const SPARSE_LONG_REVIEW_KEYWORD_MIN = 3
 
 export const REVIEW_LENGTH_OPTIONS = [
   {

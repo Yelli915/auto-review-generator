@@ -11,7 +11,7 @@ import {
   firstValueByKeys,
   normalizeImageUrl,
 } from './productInfo.js'
-import { sliceBalancedSegment } from '../../shared/balancedText.js'
+import { sliceBalancedSegment } from './balancedText.js'
 
 function collectScriptPayloads(html) {
   const payloads = []

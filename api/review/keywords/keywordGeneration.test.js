@@ -95,9 +95,9 @@ test('parseKeywordsFromText reads JSON keyword responses', () => {
   )
 })
 
-test('parseKeywordsFromText recovers keywords from quoted text', () => {
+test('parseKeywordsFromText recovers closed keywords from a truncated JSON response', () => {
   assert.deepEqual(
-    parseKeywordsFromText('키워드는 "배송 빠름", "색감 좋음", "마감 깔끔" 입니다.'),
-    ['배송 빠름', '색감 좋음', '마감 깔끔'],
+    parseKeywordsFromText('{"keywords":["배송 빠름","색감 좋음","마감 깔'),
+    ['배송 빠름', '색감 좋음'],
   )
 })

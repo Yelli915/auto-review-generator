@@ -1,3 +1,11 @@
+// 키워드 문구 규칙입니다. 서버(키워드 생성·리뷰 프롬프트)와 화면(직접 추가 키워드 검증)이 같이 씁니다.
+export const KEYWORD_LEN_MIN = 2
+export const KEYWORD_LEN_MAX = 30
+
+export function normalizeKeywordText(value) {
+  return typeof value === 'string' ? value.replace(/\s+/g, ' ').trim() : ''
+}
+
 export function hasHangul(s) {
   return /[\uAC00-\uD7A3]/.test(s)
 }

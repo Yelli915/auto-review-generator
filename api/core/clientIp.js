@@ -1,18 +1,13 @@
 /* global process */
+import net from 'node:net'
+
 function normalizeIp(raw) {
   if (typeof raw !== 'string') return ''
   return raw.trim().replace(/^::ffff:/, '')
 }
 
 function isValidIp(ip) {
-  if (typeof ip !== 'string' || !ip) return false
-  if (/^\d{1,3}(?:\.\d{1,3}){3}$/.test(ip)) {
-    return ip.split('.').every((part) => {
-      const n = Number(part)
-      return Number.isInteger(n) && n >= 0 && n <= 255
-    })
-  }
-  return /^[a-fA-F0-9:]+$/.test(ip)
+  return net.isIP(ip) !== 0
 }
 
 function shouldTrustProxyHeaders() {

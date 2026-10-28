@@ -2,6 +2,13 @@ import {
   FALLBACK_WARNINGS,
   PRODUCT_FETCH_HEADERS,
 } from './config.js'
+import {
+  extractProductInfoFromHtml,
+  extractProductOptionGroupsFromHtml,
+  isAccessChallengeHtml,
+} from './htmlProduct.js'
+import { formatProductContext } from '../../shared/productContext.js'
+import { hasUsefulProductInfo } from './productInfo.js'
 import { getCachedProductAnalysis, cacheProductAnalysis } from './cache.js'
 import {
   cacheRenderedProductAnalysis,
@@ -12,25 +19,18 @@ import {
   buildFallbackProductContext,
   buildFallbackProductInfo,
 } from './fallbacks.js'
-import {
-  extractProductInfoFromHtml,
-  isAccessChallengeHtml,
-} from './htmlProduct.js'
-import { extractProductOptionGroupsFromHtml } from './options.js'
-import {
-  buildProductContext,
-  hasUsefulProductInfo,
-} from './productInfo.js'
-import { readResponseTextLimited } from './responseText.js'
-import { buildAnalysisResult } from './result.js'
 import { normalizeProductUrl } from './url.js'
 import { fetchPublicUrl } from './publicFetch.js'
+import { readResponseTextLimited } from './responseText.js'
+import { buildAnalysisResult } from './result.js'
 
-function cacheFallbackProductAnalysis(url, reason, warning) {
-  return cacheProductAnalysis(
-    url,
-    buildFallbackAnalysis(url, reason, warning),
-  )
+// 보조 읽기(reader → rendered, useReader가 false면 rendered만)를 시도하고,
+// 모두 실패하면 URL만으로 만든 대체 결과를 캐시합니다.
+async function fallBackProductAnalysis(url, { reason = '', useReader = true, message, warning }) {
+  const alternate = useReader
+    ? await fetchReaderOrRenderedProductAnalysis(url, reason)
+    : await cacheRenderedProductAnalysis(url)
+  return alternate || cacheProductAnalysis(url, buildFallbackAnalysis(url, message, warning))
 }
 
 export async function fetchProductAnalysis(rawUrl) {
@@ -49,71 +49,42 @@ export async function fetchProductAnalysis(rawUrl) {
     response = fetched.response
     responseUrl = fetched.url
   } catch {
-    const fallbackAnalysis = await fetchReaderOrRenderedProductAnalysis(
-      normalized.url,
-      'direct fetch failed',
-    )
-    if (fallbackAnalysis) {
-      return fallbackAnalysis
-    }
-
-    return cacheFallbackProductAnalysis(
-      normalized.url,
-      '서버에서 페이지를 직접 읽지 못했습니다.',
-      FALLBACK_WARNINGS.fetchFailed,
-    )
+    return fallBackProductAnalysis(normalized.url, {
+      reason: 'direct fetch failed',
+      message: '서버에서 페이지를 직접 읽지 못했습니다.',
+      warning: FALLBACK_WARNINGS.fetchFailed,
+    })
   }
 
   if (!response.ok) {
-    const fallbackAnalysis = await fetchReaderOrRenderedProductAnalysis(
-      responseUrl,
-      `HTTP ${response.status}`,
-    )
-    if (fallbackAnalysis) {
-      return fallbackAnalysis
-    }
-
-    return cacheFallbackProductAnalysis(
-      responseUrl,
-      `HTTP ${response.status} 응답으로 페이지 본문을 읽지 못했습니다.`,
-      FALLBACK_WARNINGS.httpBlocked,
-    )
+    return fallBackProductAnalysis(responseUrl, {
+      reason: `HTTP ${response.status}`,
+      message: `HTTP ${response.status} 응답으로 페이지 본문을 읽지 못했습니다.`,
+      warning: FALLBACK_WARNINGS.httpBlocked,
+    })
   }
 
   const contentType = response.headers.get('content-type') || ''
   if (contentType && !/text\/html|application\/xhtml\+xml/i.test(contentType)) {
-    const renderedAnalysis = await cacheRenderedProductAnalysis(responseUrl)
-    if (renderedAnalysis) {
-      return renderedAnalysis
-    }
-
-    return cacheFallbackProductAnalysis(
-      responseUrl,
-      'HTML 페이지가 아닌 응답입니다.',
-      FALLBACK_WARNINGS.nonHtml,
-    )
+    return fallBackProductAnalysis(responseUrl, {
+      useReader: false,
+      message: 'HTML 페이지가 아닌 응답입니다.',
+      warning: FALLBACK_WARNINGS.nonHtml,
+    })
   }
 
   try {
     const html = await readResponseTextLimited(response)
     if (isAccessChallengeHtml(html)) {
-      const fallbackAnalysis = await fetchReaderOrRenderedProductAnalysis(
-        responseUrl,
-        'access challenge page',
-      )
-      if (fallbackAnalysis) {
-        return fallbackAnalysis
-      }
-
-      return cacheFallbackProductAnalysis(
-        responseUrl,
-        'Access challenge page returned instead of product content.',
-        FALLBACK_WARNINGS.httpBlocked,
-      )
+      return fallBackProductAnalysis(responseUrl, {
+        reason: 'access challenge page',
+        message: 'Access challenge page returned instead of product content.',
+        warning: FALLBACK_WARNINGS.httpBlocked,
+      })
     }
 
     const product = extractProductInfoFromHtml(html, responseUrl)
-    const productContext = buildProductContext(product, responseUrl)
+    const productContext = formatProductContext(product, responseUrl)
     const hasInfo = hasUsefulProductInfo(product)
     if (!hasInfo) {
       const renderedAnalysis = await cacheRenderedProductAnalysis(responseUrl)
@@ -139,15 +110,10 @@ export async function fetchProductAnalysis(rawUrl) {
       }),
     )
   } catch (err) {
-    const renderedAnalysis = await cacheRenderedProductAnalysis(responseUrl)
-    if (renderedAnalysis) {
-      return renderedAnalysis
-    }
-
-    return cacheFallbackProductAnalysis(
-      responseUrl,
-      err instanceof Error ? err.message : '상품 정보를 읽지 못했습니다.',
-      FALLBACK_WARNINGS.readFailed,
-    )
+    return fallBackProductAnalysis(responseUrl, {
+      useReader: false,
+      message: err instanceof Error ? err.message : '상품 정보를 읽지 못했습니다.',
+      warning: FALLBACK_WARNINGS.readFailed,
+    })
   }
 }

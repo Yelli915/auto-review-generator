@@ -4,21 +4,15 @@ import {
   readJsonSafely,
 } from '#shared/httpJson'
 import {
-  getReviewMinChars,
   normalizeReviewLength,
   normalizeReviewTone,
 } from '#shared/reviewOptions'
 import { createReviewStreamAccumulator } from './reviewStream.js'
 
 const API_PATH = '/api/gemini'
-const KEYWORD_DEBOUNCE_MS = 900
 
 let googleIdToken = ''
 let onUnauthorized = null
-
-let inFlightKeywordKey = null
-let inFlightKeywordPromise = null
-let lastKeywordAt = 0
 
 function normalizeString(value) {
   return typeof value === 'string' ? value.trim() : ''
@@ -26,6 +20,10 @@ function normalizeString(value) {
 
 export function setGoogleIdToken(token) {
   googleIdToken = normalizeString(token)
+}
+
+export function hasGoogleIdToken() {
+  return Boolean(googleIdToken)
 }
 
 export function setUnauthorizedHandler(handler) {
@@ -36,19 +34,22 @@ function buildAuthHeaders() {
   return googleIdToken ? { Authorization: `Bearer ${googleIdToken}` } : {}
 }
 
+async function post(payload) {
+  const response = await fetch(API_PATH, {
+    method: 'POST',
+    headers: createJsonHeaders(buildAuthHeaders()),
+    body: JSON.stringify(payload),
+  })
+  if (response.status === 401) onUnauthorized?.()
+  return response
+}
+
 async function callApi(payload) {
   try {
-    const response = await fetch(API_PATH, {
-      method: 'POST',
-      headers: createJsonHeaders(buildAuthHeaders()),
-      body: JSON.stringify(payload),
-    })
+    const response = await post(payload)
     const data = await readJsonSafely(response)
 
     if (!response.ok) {
-      if (response.status === 401 && onUnauthorized) {
-        onUnauthorized()
-      }
       return {
         ok: false,
         error: pickErrorMessage(data, `요청 실패 (HTTP ${response.status})`),
@@ -99,7 +100,8 @@ export async function generateKeywords({
     return { ok: false, error: '이미지나 상품 링크를 1개 이상 선택해 주세요.' }
   }
 
-  const payload = {
+  // 중복 요청은 화면의 busy 상태와 서버 요청 제한이 막습니다.
+  return callApi({
     action: 'keywords',
     images: safeImages,
     productUrl: safeProductUrl,
@@ -108,28 +110,7 @@ export async function generateKeywords({
     category,
     subcategory,
     previousKeywords: Array.isArray(previousKeywords) ? previousKeywords : [],
-  }
-  const requestKey = JSON.stringify(payload)
-  const now = Date.now()
-
-  if (inFlightKeywordPromise && inFlightKeywordKey === requestKey) {
-    return inFlightKeywordPromise
-  }
-  if (now - lastKeywordAt < KEYWORD_DEBOUNCE_MS) {
-    return {
-      ok: false,
-      error: '요청이 너무 빠릅니다. 잠시 후 다시 시도해 주세요.',
-    }
-  }
-
-  inFlightKeywordKey = requestKey
-  lastKeywordAt = now
-  inFlightKeywordPromise = callApi(payload).finally(() => {
-    inFlightKeywordKey = null
-    inFlightKeywordPromise = null
   })
-
-  return inFlightKeywordPromise
 }
 
 export async function generateReview({
@@ -151,30 +132,22 @@ export async function generateReview({
   const safePreviousReview = normalizeString(previousReview)
   const safeRewriteInstruction = normalizeString(rewriteInstruction)
 
-  const response = await fetch(API_PATH, {
-    method: 'POST',
-    headers: createJsonHeaders(buildAuthHeaders()),
-    body: JSON.stringify({
-      action: 'review',
-      rating,
-      keywords: safeKeywords,
-      length: safeLength,
-      tone: safeTone,
-      category,
-      subcategory,
-      productContext: safeProductContext,
-      previousReview: safePreviousReview,
-      rewriteInstruction: safeRewriteInstruction,
-    }),
+  const response = await post({
+    action: 'review',
+    rating,
+    keywords: safeKeywords,
+    length: safeLength,
+    tone: safeTone,
+    category,
+    subcategory,
+    productContext: safeProductContext,
+    previousReview: safePreviousReview,
+    rewriteInstruction: safeRewriteInstruction,
   })
 
   if (!response.ok) {
     const error = await readJsonSafely(response)
-    const msg = pickErrorMessage(error, '리뷰 생성 실패')
-    if (response.status === 401 && onUnauthorized) {
-      onUnauthorized()
-    }
-    throw new Error(msg || '리뷰 생성 실패')
+    throw new Error(pickErrorMessage(error, '리뷰 생성 실패') || '리뷰 생성 실패')
   }
 
   if (!response.body) {
@@ -203,12 +176,9 @@ export async function generateReview({
     stream.appendLine(buffer)
   }
 
-  const normalizedReview = stream.getText().replace(/\s+/g, ' ').trim()
+  // 잘림·최소 글자수 검사는 서버(reviewStreaming)가 하고, 실패하면 스트림에 error로 보냅니다.
   const streamError = stream.getError()
   if (streamError) {
     throw new Error(streamError)
-  }
-  if (normalizedReview.length < getReviewMinChars(safeLength)) {
-    throw new Error('리뷰가 너무 짧게 생성되었습니다. 다시 생성해 주세요.')
   }
 }

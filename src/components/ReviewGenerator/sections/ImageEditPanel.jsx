@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react'
+import ChoiceGroup from './ChoiceGroup'
 import {
   CROP_MODES,
   DEFAULT_FREE_CROP_RECT,
@@ -220,21 +221,13 @@ export default function ImageEditPanel({
           </div>
 
           <div className="image-editor__group">
-            <span className="field__label">비율</span>
-            <div className="segmented" role="group" aria-label="이미지 자르기 비율">
-              {CROP_OPTIONS.map((option) => (
-                <button
-                  key={option.value}
-                  type="button"
-                  className={`segmented__item${cropMode === option.value ? ' is-active' : ''}`}
-                  onClick={() => setCropMode(option.value)}
-                  disabled={isBusy}
-                  aria-pressed={cropMode === option.value}
-                >
-                  {option.label}
-                </button>
-              ))}
-            </div>
+            <ChoiceGroup
+              legend="비율"
+              options={CROP_OPTIONS}
+              value={cropMode}
+              onChange={setCropMode}
+              disabled={isBusy}
+            />
           </div>
 
           {cropMode === CROP_MODES.free && (
