@@ -4,17 +4,17 @@ import {
   DEFAULT_REVIEW_SUBCATEGORY,
   normalizeReviewCategory,
   normalizeReviewSubcategory,
-} from '../../../../shared/reviewCategories'
+} from '#shared/reviewCategories'
 import {
   DEFAULT_REVIEW_LENGTH,
   DEFAULT_REVIEW_TONE,
-} from '../../../../shared/reviewOptions'
-import { normalizeReviewRating } from '../../../../shared/reviewRating'
+} from '#shared/reviewOptions'
+import { normalizeReviewRating } from '#shared/reviewRating'
 import {
   analyzeProductUrl,
   generateKeywords,
   generateReview,
-} from '../api/geminiService'
+} from '../services/geminiService'
 import {
   getDefaultOptionSelections as getDefaultSelections,
   normalizeProductInfo,

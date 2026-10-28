@@ -1,5 +1,5 @@
 ﻿import { useId, useRef, useState } from 'react'
-import { MAX_REVIEW_IMAGE_COUNT } from '../../../../shared/reviewCategories'
+import { MAX_REVIEW_IMAGE_COUNT } from '#shared/reviewCategories'
 import { useUploadImages } from '../hooks/useUploadImages'
 import ImageEditPanel from './ImageEditPanel'
 import ImagePreviewGrid from './ImagePreviewGrid'

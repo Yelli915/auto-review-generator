@@ -4,7 +4,7 @@ import ReviewGenerator from './components/ReviewGenerator/ReviewGenerator'
 import {
   setGoogleIdToken,
   setUnauthorizedHandler,
-} from './components/ReviewGenerator/api/geminiService'
+} from './components/ReviewGenerator/services/geminiService'
 import { getGoogleClientId } from './utils/env'
 
 function App() {

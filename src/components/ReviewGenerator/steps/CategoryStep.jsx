@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { REVIEW_CATEGORY_OPTIONS } from '../../../../shared/reviewCategories'
+import { REVIEW_CATEGORY_OPTIONS } from '#shared/reviewCategories'
 
 export default function CategoryStep({ onSelect }) {
   const [selectedCategory, setSelectedCategory] = useState(

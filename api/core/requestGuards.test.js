@@ -8,7 +8,7 @@ import {
   buildImageParts,
   validateImageInput,
   validateImagesInput,
-} from './imageInput.js'
+} from '../review/imageInput.js'
 import { createMockRequest, png1x1Base64, withEnv } from '../testUtils.js'
 
 delete process.env.UPSTASH_REDIS_REST_URL

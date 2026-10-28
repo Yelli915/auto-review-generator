@@ -1,12 +1,13 @@
 import { createJsonHeaders, readJsonSafely } from '../../shared/httpJson.js'
-import { buildReviewPrompt } from '../prompts.js'
-import { DEBUG_LOGS, MODEL } from './config.js'
+import { buildReviewPrompt } from './prompts.js'
+import { DEBUG_LOGS } from '../core/config.js'
+import { MODEL } from './gemini/config.js'
 import {
   buildReviewGenerationConfig,
   humanizeGeminiApiError,
   makeStreamUrl,
-} from './providers/gemini/client.js'
-import { setCommonSecurityHeaders } from './http/httpResponse.js'
+} from './gemini/client.js'
+import { setCommonSecurityHeaders } from '../core/httpResponse.js'
 import { collectReviewQualityIssues } from './reviewQualityCheck.js'
 
 function normalizeReviewText(text) {

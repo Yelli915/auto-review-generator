@@ -1,1 +1,1 @@
-export { default } from './review/handler.js'
+export { default } from './handler.js'

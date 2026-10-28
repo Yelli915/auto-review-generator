@@ -1,7 +1,7 @@
 import { fetchProductAnalysis } from '../../product/fetchProductAnalysis.js'
-import { buildKeywordPrompt } from '../../prompts.js'
+import { buildKeywordPrompt } from '../prompts.js'
+import { DEBUG_LOGS } from '../../core/config.js'
 import {
-  DEBUG_LOGS,
   KEYWORD_RETRY_LIMIT,
   KEYWORDS_MAX_COUNT,
   KEYWORDS_MIN_COUNT,
@@ -11,7 +11,7 @@ import {
   buildKeywordGenerationConfig,
   requestGemini,
   toClientErrorStatus,
-} from '../providers/gemini/client.js'
+} from '../gemini/client.js'
 import { appendKeywordRetryGuidance, isSameKeywordSet, sanitizeKeywordArray } from './keywordSets.js'
 import {
   appendContainerKeywordRetryGuidance,

@@ -5,7 +5,7 @@ import {
   REVIEW_LENGTH_OPTIONS,
   REVIEW_TONE_OPTIONS,
   isSparseLongReview,
-} from '../../../../shared/reviewOptions'
+} from '#shared/reviewOptions'
 
 const SKELETON_WIDTHS = [80, 96, 68, 110, 76, 90]
 const CUSTOM_KEYWORD_MAX_LENGTH = 30

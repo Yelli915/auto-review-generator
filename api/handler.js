@@ -1,11 +1,12 @@
-import { fetchProductAnalysis } from '../product/fetchProductAnalysis.js'
-import { authorizeRequest } from './auth.js'
-import { getTrimmedEnv, MODEL } from './config.js'
-import { getClientIp } from './http/clientIp.js'
-import { json, readJsonBody } from './http/httpResponse.js'
-import { generateKeywordResult } from './keywords/keywordGeneration.js'
-import { applyDailyUsageLimit, applyRateLimit } from './rateLimit.js'
-import { streamGeminiReview } from './reviewStreaming.js'
+import { fetchProductAnalysis } from './product/fetchProductAnalysis.js'
+import { authorizeRequest } from './core/auth.js'
+import { getTrimmedEnv } from './core/config.js'
+import { getClientIp } from './core/clientIp.js'
+import { MODEL } from './review/gemini/config.js'
+import { json, readJsonBody } from './core/httpResponse.js'
+import { generateKeywordResult } from './review/keywords/keywordGeneration.js'
+import { applyDailyUsageLimit, applyRateLimit } from './core/rateLimit.js'
+import { streamGeminiReview } from './review/reviewStreaming.js'
 
 const ERRORS = {
   invalidMethod: 'Method Not Allowed',

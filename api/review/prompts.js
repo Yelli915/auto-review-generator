@@ -2,19 +2,19 @@ import {
   REVIEW_CATEGORY_MAP,
   getReviewSubcategoryMeta,
   normalizeReviewCategory,
-} from '../shared/reviewCategories.js'
+} from '../../shared/reviewCategories.js'
 import {
   getReviewMinChars,
   getReviewLengthPrompt,
   isSparseLongReview,
   normalizeReviewLength,
   normalizeReviewTone,
-} from '../shared/reviewOptions.js'
-import { isLikelyKeywordPhrase } from './review/keywords/keywordUtils.js'
+} from '../../shared/reviewOptions.js'
+import { isLikelyKeywordPhrase } from './keywords/keywordUtils.js'
 import {
   COSMETIC_CONTEXT_RE,
   getGenericBanPhrases,
-} from './review/config.js'
+} from './config.js'
 
 const REVIEW_TONE_PROMPT_MAP = {
   neutral: '차분하고 자연스럽게 씁니다. 과장하지 말고 관찰한 사실 중심으로 씁니다.',

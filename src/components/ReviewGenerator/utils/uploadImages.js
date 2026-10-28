@@ -1,4 +1,4 @@
-import { MAX_REVIEW_IMAGE_COUNT } from '../../../../shared/reviewCategories'
+import { MAX_REVIEW_IMAGE_COUNT } from '#shared/reviewCategories'
 import {
   DEFAULT_IMAGE_EDIT,
   transformImageFile,

@@ -136,7 +136,7 @@
 - Origin 제한, JSON 요청 크기 제한, 이미지 MIME/base64/signature/크기 검증, rate limit, 일일 사용량 제한을 적용합니다.
 - 상품 URL 분석에서 사설망 URL, 위험한 redirect, 인증 정보가 포함된 URL을 차단합니다.
 - Upstash Redis가 설정되면 서버리스 환경에서도 공유 rate limit과 일일 사용량 카운터를 유지합니다.
-- Vercel/Netlify 보안 헤더와 Vercel 환경 변수 검증 스크립트를 포함합니다.
+- Vercel 보안 헤더와 환경 변수 검증 스크립트를 포함합니다.
 
 ## 기술 스택
 
@@ -147,26 +147,26 @@
 | Language | JavaScript ES2022+, ESM |
 | Styling | CSS Variables, 분리된 CSS 파일 |
 | API | Vercel Serverless Functions 호환 Node.js API |
-| Runtime | Node.js 20.x |
+| Runtime | Node.js 24.x |
 | AI | Google Gemini 2.5 Flash |
 | Auth | Google OAuth ID Token verification |
 | Product Analysis | HTML metadata, JSON-LD, embedded data, reader fallback, optional rendered fallback |
 | Tests | Node.js built-in `node:test` |
-| Deployment | Vercel, Netlify static config, Nginx security header sample |
+| Deployment | Vercel |
 
 ## 프로젝트 구조
 
 ```text
 auto-review-generator/
 ├─ api/
-│  ├─ gemini.js                  # /api/gemini 진입점(Vercel 라우트)과 public export
-│  ├─ review/                    # 인증, rate limit, 리뷰 생성 오케스트레이션, 이미지 검증 (provider 무관)
-│  │  ├─ http/                   # 요청/응답 저수준 유틸(JSON 응답, 본문 파싱, client IP 추출)
-│  │  ├─ keywords/                # 키워드 생성 오케스트레이션, 파싱, 필터링, 정규화
-│  │  └─ providers/gemini/       # Gemini 전용 클라이언트와 모델 설정
+│  ├─ gemini.js                  # /api/gemini 진입점(Vercel 라우트)
+│  ├─ handler.js                 # action 라우팅(ping, analyze-product, keywords, review)
+│  ├─ core/                      # 인증, rate limit, 공통 설정, JSON 응답/본문 파싱, client IP
+│  ├─ review/                    # 프롬프트, 리뷰 스트리밍, 이미지 검증, 품질 로그
+│  │  ├─ keywords/               # 키워드 생성 오케스트레이션, 파싱, 필터링, 정규화
+│  │  └─ gemini/                 # Gemini 클라이언트와 모델 설정
 │  ├─ product/                   # 상품 URL 검증, HTML/JSON-LD/embedded data/reader 분석 및 진입점(fetchProductAnalysis)
-│  ├─ prompts.js                 # 키워드/리뷰 프롬프트 생성
-│  └─ *.test.js
+│  └─ publicUrlGuard.js          # 상품 URL SSRF 방어
 ├─ shared/
 │  ├─ httpJson.js
 │  ├─ reviewCategories.js
@@ -179,14 +179,12 @@ auto-review-generator/
 │  ├─ styles/                    # base, layout, upload, keyword, image editor CSS
 │  └─ components/ReviewGenerator/
 │     ├─ ReviewGenerator.jsx     # 단계별 화면 조립
-│     ├─ api/                    # 클라이언트 API 호출과 스트림 파싱
+│     ├─ services/               # 클라이언트 API 호출과 스트림 파싱
 │     ├─ hooks/                  # 리뷰 생성 플로우와 업로드 상태 관리
 │     ├─ steps/                  # 분야, 업로드, 옵션, 키워드, 리뷰 단계
 │     └─ utils/                  # 이미지 처리, 업로드/상품 옵션 유틸
-├─ deploy/nginx/security-headers.conf
 ├─ scripts/verify-vercel-env.js
 ├─ vercel.json
-├─ netlify.toml
 └─ package.json
 ```
 
@@ -273,7 +271,6 @@ npm run build
 - private network URL과 private network redirect 차단
 - 리뷰 스트림 파싱
 - 이미지 편집 유틸
-- Vercel/Netlify 배포 설정 동기화
 
 ## 보안 및 제한
 
@@ -294,8 +291,6 @@ npm run build
 ## 배포
 
 - Vercel: `vercel.json` 기준으로 정적 빌드와 `/api/gemini` 서버리스 API를 함께 배포합니다.
-- Netlify: `netlify.toml` 기준으로 정적 빌드와 보안 헤더를 설정합니다. 현재 `/api/gemini`는 Vercel Functions 호환 API이므로 Netlify 단독 배포에서는 리뷰 생성 API를 별도로 연결해야 합니다.
-- Nginx: `deploy/nginx/security-headers.conf`는 자체 호스팅 시 참고할 수 있는 보안 헤더 예시입니다.
 
 `npm run build`는 `scripts/verify-vercel-env.js`를 먼저 실행합니다. 로컬 빌드는 운영 secrets 없이도 통과하지만, Vercel Production 빌드에서는 필수 환경 변수가 없으면 배포 전에 실패하도록 구성되어 있습니다.
 
