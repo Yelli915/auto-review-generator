@@ -72,9 +72,16 @@ async function handleAnalyzeProduct(body, res, rateKey) {
   const productUrl =
     typeof body.productUrl === 'string' ? body.productUrl.trim() : ''
   if (!productUrl) return sendError(res, 400, ERRORS.productUrlRequired)
-  if (await rejectDailyUsageLimit(res, rateKey, body.action)) return
 
-  const analysis = await fetchProductAnalysis(productUrl)
+  // 캐시 적중이나 잘못된 URL은 한도를 쓰지 않도록 실제로 페이지를 읽기 직전에만 차감합니다.
+  let limited = false
+  const analysis = await fetchProductAnalysis(productUrl, {
+    beforeFetch: async () => {
+      limited = await rejectDailyUsageLimit(res, rateKey, body.action)
+      return !limited
+    },
+  })
+  if (limited) return
   if (!analysis.ok) return sendError(res, analysis.status, analysis.error)
 
   return json(res, 200, analysis)

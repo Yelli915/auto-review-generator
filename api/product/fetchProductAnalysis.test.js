@@ -1,11 +1,17 @@
 import assert from 'node:assert/strict'
-import test from 'node:test'
-import { fetchProductAnalysis } from './fetchProductAnalysis.js'
+import test, { beforeEach } from 'node:test'
+import {
+  clearProductAnalysisCache,
+  fetchProductAnalysis,
+} from './fetchProductAnalysis.js'
 import {
   htmlResponse,
   withEnv,
   withFetch,
 } from '../testUtils.js'
+
+// 테스트마다 다른 가짜 fetch를 쓰므로 이전 테스트의 상품 분석 캐시를 비웁니다.
+beforeEach(clearProductAnalysisCache)
 
 test('fetchProductAnalysis falls back when product page returns non-ok response', async () => {
   await withEnv({ DISABLE_RENDERED_PRODUCT_FETCH: '1' }, () =>
@@ -202,6 +208,48 @@ test('fetchProductAnalysis rejects redirects to private-network URLs', async () 
       assert.equal(result.ok, false)
       assert.equal(result.status, 400)
       assert.equal(calls.length, 1)
+    },
+  )
+})
+
+test('fetchProductAnalysis caches redirected results under the requested URL', async () => {
+  let fetchCount = 0
+  await withFetch(
+    async (url) => {
+      fetchCount += 1
+      if (String(url) === 'https://shop.example/short') {
+        return new Response(null, {
+          status: 302,
+          headers: { location: 'https://shop.example/products/keyboard' },
+        })
+      }
+      return htmlResponse(
+        '<html><head><meta property="og:title" content="키보드"></head></html>',
+      )
+    },
+    async () => {
+      const first = await fetchProductAnalysis('https://shop.example/short')
+      const second = await fetchProductAnalysis('https://shop.example/short')
+      assert.equal(first.ok, true)
+      assert.equal(second, first)
+      assert.equal(fetchCount, 2)
+    },
+  )
+})
+
+test('fetchProductAnalysis skips beforeFetch on cache hits', async () => {
+  let charged = 0
+  const beforeFetch = async () => {
+    charged += 1
+    return true
+  }
+  await withFetch(
+    async () =>
+      htmlResponse('<html><head><meta property="og:title" content="마우스"></head></html>'),
+    async () => {
+      await fetchProductAnalysis('https://shop.example/products/mouse', { beforeFetch })
+      await fetchProductAnalysis('https://shop.example/products/mouse', { beforeFetch })
+      assert.equal(charged, 1)
     },
   )
 })

@@ -1,11 +1,8 @@
 import { MAX_REVIEW_IMAGE_COUNT } from '#shared/reviewCategories'
-import {
-  DEFAULT_IMAGE_EDIT,
-  transformImageFile,
-} from './imageUtils'
+import { resizeImageFile } from './imageUtils'
 
 export const MAX_FILE_SIZE_MB = 15
-export const IMAGE_RESIZE_OPTIONS = { maxEdge: 448, quality: 0.68 }
+const IMAGE_RESIZE_OPTIONS = { maxEdge: 448, quality: 0.68 }
 
 function getExtensionFromMimeType(type) {
   if (type === 'image/png') return 'png'
@@ -59,9 +56,7 @@ export function revokeObjectUrls(urls) {
 }
 
 export function getImageObjectUrls(images) {
-  return images.flatMap((image) =>
-    [image.previewUrl, image.editedPreviewUrl].filter(Boolean),
-  )
+  return images.map((image) => image.previewUrl)
 }
 
 export function getImageFileNames(images) {
@@ -69,12 +64,6 @@ export function getImageFileNames(images) {
 }
 
 export async function createReviewImage(file, previewUrl) {
-  const { base64 } = await transformImageFile(file, IMAGE_RESIZE_OPTIONS)
-  return {
-    file,
-    previewUrl,
-    base64Image: base64,
-    mimeType: 'image/jpeg',
-    ...DEFAULT_IMAGE_EDIT,
-  }
+  const base64Image = await resizeImageFile(file, IMAGE_RESIZE_OPTIONS)
+  return { file, previewUrl, base64Image, mimeType: 'image/jpeg' }
 }

@@ -2,6 +2,8 @@ export const MAX_PRODUCT_URL_LENGTH = 2048
 export const MAX_PRODUCT_PAGE_BYTES = 512 * 1024
 export const PRODUCT_PAGE_TIMEOUT_MS = 6000
 export const READER_PAGE_TIMEOUT_MS = 10000
+// vercel.json maxDuration(60s)보다 여유 있게 짧아야 합니다.
+export const PRODUCT_ANALYSIS_DEADLINE_MS = 45000
 export const READER_BASE_URL = 'https://r.jina.ai/'
 export const PRODUCT_ANALYSIS_CACHE_TTL_MS = 10 * 60 * 1000
 export const PRODUCT_ANALYSIS_CACHE_MAX = 80

@@ -8,10 +8,11 @@ import {
 } from './productInfo.js'
 import { buildAnalysisResult } from './result.js'
 
-export async function fetchRenderedProductAnalysis(urlString) {
+export async function fetchRenderedProductAnalysis(urlString, signal) {
   const product = await fetchRenderedProductInfo(
     urlString,
     PRODUCT_FETCH_HEADERS['User-Agent'],
+    signal,
   )
   if (!product) return null
   const normalizedProduct = buildProductInfo({

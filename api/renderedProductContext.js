@@ -18,8 +18,8 @@ async function getChromiumExecutablePath(chromium) {
   return chromium.executablePath()
 }
 
-export async function fetchRenderedProductInfo(urlString, userAgent) {
-  if (isRenderedFetchDisabled()) return null
+export async function fetchRenderedProductInfo(urlString, userAgent, signal) {
+  if (isRenderedFetchDisabled() || signal?.aborted) return null
 
   let chromium
   let playwright
@@ -33,6 +33,9 @@ export async function fetchRenderedProductInfo(urlString, userAgent) {
   }
 
   let browser
+  // 전체 deadline이 지나면 브라우저를 닫아 진행 중인 goto/wait를 즉시 실패시킵니다.
+  const closeOnAbort = () => browser?.close().catch(() => {})
+  signal?.addEventListener('abort', closeOnAbort, { once: true })
   try {
     const executablePath = await getChromiumExecutablePath(chromium.default)
     browser = await playwright.chromium.launch({
@@ -40,6 +43,7 @@ export async function fetchRenderedProductInfo(urlString, userAgent) {
       executablePath,
       headless: chromium.default.headless,
     })
+    if (signal?.aborted) return null
     const page = await browser.newPage({
       locale: 'ko-KR',
       userAgent,
@@ -172,6 +176,7 @@ export async function fetchRenderedProductInfo(urlString, userAgent) {
   } catch {
     return null
   } finally {
+    signal?.removeEventListener('abort', closeOnAbort)
     await browser?.close().catch(() => {})
   }
 }

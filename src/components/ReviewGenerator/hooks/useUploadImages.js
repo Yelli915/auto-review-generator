@@ -1,7 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { transformImageFile } from '../utils/imageUtils'
 import {
-  IMAGE_RESIZE_OPTIONS,
   createReviewImage,
   getClipboardImageFiles,
   getImageFileNames,
@@ -15,7 +13,6 @@ export function useUploadImages({ isLoading, isLinkMode, switchToImageMode }) {
   const [status, setStatus] = useState({ text: '', isError: false })
   const [isDragging, setIsDragging] = useState(false)
   const [isProcessing, setIsProcessing] = useState(false)
-  const [editingIndex, setEditingIndex] = useState(null)
   const objectUrlsRef = useRef([])
   const processTokenRef = useRef(0)
   const busy = isLoading || isProcessing
@@ -48,7 +45,6 @@ export function useUploadImages({ isLoading, isLinkMode, switchToImageMode }) {
     const nextPreviewUrls = files.map((file) => URL.createObjectURL(file))
     setTrackedImages([], { revokePrevious: true })
     objectUrlsRef.current = nextPreviewUrls
-    setEditingIndex(null)
     setIsProcessing(true)
     setStatus({ text: '', isError: false })
 
@@ -101,48 +97,11 @@ export function useUploadImages({ isLoading, isLinkMode, switchToImageMode }) {
     const nextImages = images.filter((_, i) => i !== index)
     revokeObjectUrls(getImageObjectUrls([images[index]]))
     setTrackedImages(nextImages)
-    setEditingIndex((prev) => {
-      if (prev == null) return null
-      if (prev === index) return null
-      return prev > index ? prev - 1 : prev
-    })
     setStatus({
       text: getImageFileNames(nextImages),
       isError: false,
     })
   }, [busy, images, setTrackedImages])
-
-  const handleApplyImageEdit = useCallback(async (editState) => {
-    if (editingIndex == null || !images[editingIndex] || busy) return
-    const index = editingIndex
-    const image = images[index]
-    setIsProcessing(true)
-    setStatus({ text: '이미지 편집을 적용하는 중입니다.', isError: false })
-    try {
-      const result = await transformImageFile(image.file, {
-        ...IMAGE_RESIZE_OPTIONS,
-        ...editState,
-        createPreviewUrl: true,
-      })
-      if (image.editedPreviewUrl) URL.revokeObjectURL(image.editedPreviewUrl)
-      const nextImages = images.map((item, i) =>
-        i === index
-          ? {
-              ...item,
-              ...editState,
-              base64Image: result.base64,
-              editedPreviewUrl: result.previewUrl || '',
-            }
-          : item,
-      )
-      setTrackedImages(nextImages)
-      setStatus({ text: `${index + 1}번째 이미지 편집을 적용했습니다.`, isError: false })
-    } catch {
-      setStatus({ text: '이미지 편집 적용에 실패했습니다.', isError: true })
-    } finally {
-      setIsProcessing(false)
-    }
-  }, [busy, editingIndex, images, setTrackedImages])
 
   const handlePaste = useCallback((e) => {
     if (busy) return
@@ -160,8 +119,6 @@ export function useUploadImages({ isLoading, isLinkMode, switchToImageMode }) {
 
   return {
     busy,
-    editingIndex,
-    handleApplyImageEdit,
     handleDragLeave,
     handleDragOver,
     handleDrop,
@@ -170,7 +127,6 @@ export function useUploadImages({ isLoading, isLinkMode, switchToImageMode }) {
     images,
     isDragging,
     isProcessing,
-    setEditingIndex,
     status,
   }
 }

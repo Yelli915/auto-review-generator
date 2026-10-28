@@ -1,7 +1,8 @@
 /* global process */
 import assert from 'node:assert/strict'
-import test from 'node:test'
+import test, { beforeEach } from 'node:test'
 import handler from './gemini.js'
+import { clearProductAnalysisCache } from './product/fetchProductAnalysis.js'
 import {
   createMockRequest,
   createMockResponse,
@@ -16,6 +17,9 @@ import {
 
 delete process.env.UPSTASH_REDIS_REST_URL
 delete process.env.UPSTASH_REDIS_REST_TOKEN
+
+// 테스트마다 다른 가짜 fetch를 쓰므로 이전 테스트의 상품 분석 캐시를 비웁니다.
+beforeEach(clearProductAnalysisCache)
 
 test('handler ping works without auth or Gemini environment variables', async () => {
   await withEnv(

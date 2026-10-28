@@ -1,7 +1,6 @@
 ﻿import { useId, useRef } from 'react'
 import { MAX_REVIEW_IMAGE_COUNT } from '#shared/reviewCategories'
 import ChoiceGroup from './ChoiceGroup'
-import ImageEditPanel from './ImageEditPanel'
 import ImagePreviewGrid from './ImagePreviewGrid'
 import StarRating from './StarRating'
 import { MAX_FILE_SIZE_MB } from '../utils/uploadImages'
@@ -145,19 +144,10 @@ export default function SourceSection({
               images={images}
               isBusy={busy}
               onAdd={() => inputRef.current?.click()}
-              onEdit={upload.setEditingIndex}
               onRemove={upload.handleRemoveImage}
             />
           </div>
 
-          <ImageEditPanel
-            key={upload.editingIndex == null ? 'empty' : images[upload.editingIndex]?.previewUrl}
-            image={upload.editingIndex == null ? null : images[upload.editingIndex]}
-            imageNumber={upload.editingIndex == null ? 0 : upload.editingIndex + 1}
-            isBusy={busy}
-            onApply={upload.handleApplyImageEdit}
-            onClose={() => upload.setEditingIndex(null)}
-          />
         </>
       )}
 

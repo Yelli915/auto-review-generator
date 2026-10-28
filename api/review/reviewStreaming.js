@@ -41,20 +41,30 @@ export async function streamGeminiReview({
 
   // 사용자가 연결을 끊으면 Gemini 생성도 멈춰 토큰을 아낍니다.
   const upstream = new AbortController()
-  res.on?.('close', () => upstream.abort())
-
-  const response = await fetch(makeStreamUrl(MODEL), {
-    method: 'POST',
-    signal: upstream.signal,
-    headers: createJsonHeaders({ 'x-goog-api-key': key }),
-    body: JSON.stringify({
-      contents: [{ parts: [{ text: prompt }] }],
-      generationConfig: buildReviewGenerationConfig(safeLength),
-    }),
+  // 정상 종료(res.end) 뒤에도 'close'가 오므로 끝나지 않은 응답에서만 중단합니다.
+  res.on?.('close', () => {
+    if (!res.writableFinished) upstream.abort()
   })
+
+  let response
+  try {
+    response = await fetch(makeStreamUrl(MODEL), {
+      method: 'POST',
+      signal: upstream.signal,
+      headers: createJsonHeaders({ 'x-goog-api-key': key }),
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: buildReviewGenerationConfig(safeLength),
+      }),
+    })
+  } catch (err) {
+    if (upstream.signal.aborted) return
+    throw err
+  }
 
   if (!response.ok) {
     const data = await readJsonSafely(response)
+    if (upstream.signal.aborted) return
     const raw = data?.error?.message || '리뷰 생성 실패'
     throw new Error(humanizeGeminiApiError(response.status, raw))
   }
