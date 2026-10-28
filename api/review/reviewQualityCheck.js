@@ -1,11 +1,7 @@
-import {
-  GENERIC_BAN_PHRASES_PLACE,
-  GENERIC_BAN_PHRASES_PRODUCT,
-} from './config.js'
+import { getGenericBanPhrases } from './config.js'
 
 function findGenericPhraseLeaks(category, reviewText) {
-  const phrases = category === 'place' ? GENERIC_BAN_PHRASES_PLACE : GENERIC_BAN_PHRASES_PRODUCT
-  return phrases.filter((phrase) => reviewText.includes(phrase))
+  return getGenericBanPhrases(category).filter((phrase) => reviewText.includes(phrase))
 }
 
 function findUnreflectedKeywords(keywords, reviewText) {

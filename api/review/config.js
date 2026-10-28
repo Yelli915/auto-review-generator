@@ -1,5 +1,7 @@
 /* global process */
 
+import { normalizeReviewCategory } from '../../shared/reviewCategories.js'
+
 export function getTrimmedEnv(name) {
   return typeof process.env[name] === 'string' ? process.env[name].trim() : ''
 }
@@ -24,20 +26,26 @@ export const KEYWORD_RETRY_LIMIT = 3
 export const DEBUG_LOGS =
   process.env.NODE_ENV !== 'production' || process.env.DEBUG_LOGS === '1'
 
-export const GENERIC_BAN_PHRASES_PLACE = [
+const GENERIC_BAN_PHRASES_PLACE = [
   '분위기 좋음',
   '깔끔함',
   '만족',
   '가성비',
   '무난함',
 ]
-export const GENERIC_BAN_PHRASES_PRODUCT = [
+const GENERIC_BAN_PHRASES_PRODUCT = [
   '좋음',
   '깔끔함',
   '만족',
   '가성비',
   '무난함',
 ]
+
+export function getGenericBanPhrases(category) {
+  return normalizeReviewCategory(category) === 'place'
+    ? GENERIC_BAN_PHRASES_PLACE
+    : GENERIC_BAN_PHRASES_PRODUCT
+}
 
 export const COSMETIC_CONTEXT_RE =
   /화장품|뷰티|스킨|로션|크림|수분|보습|앰플|세럼|에센스|토너|선크림|자외선|클렌징|쿠션|파운데이션|컨실러|립|틴트|마스카라|아이섀도|블러셔|향|발림성|흡수|밀착|끈적임|마무리감|지속력|피부/

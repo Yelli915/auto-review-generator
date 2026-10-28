@@ -27,7 +27,7 @@ export async function streamGeminiReview({
   rewriteInstruction,
   res,
 }) {
-  const { prompt, safeKeywords, safeLength, minReviewChars } = buildReviewPrompt({
+  const { prompt, safeCategory, safeKeywords, safeLength, minReviewChars } = buildReviewPrompt({
     rating,
     keywords,
     length,
@@ -114,9 +114,10 @@ export async function streamGeminiReview({
   }
 
   const normalizedReview = normalizeReviewText(fullText)
-  if (DEBUG_LOGS && normalizedReview) {
+  // 잘린 리뷰는 어차피 에러로 버려지므로 품질 데이터에서 제외합니다.
+  if (DEBUG_LOGS && normalizedReview && finishReason !== 'MAX_TOKENS') {
     const issues = collectReviewQualityIssues({
-      category,
+      category: safeCategory,
       keywords: safeKeywords,
       reviewText: normalizedReview,
     })
