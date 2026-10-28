@@ -25,16 +25,6 @@ async function validateProductFetchUrl(url, maxLength = MAX_PRODUCT_URL_LENGTH) 
   })
 }
 
-export async function validateRenderedRequestUrl(url, cache = new Map()) {
-  const key = String(url || '')
-  if (cache.has(key)) return cache.get(key)
-
-  const result = await validateProductFetchUrl(key)
-  const allowed = Boolean(result.ok)
-  cache.set(key, allowed)
-  return allowed
-}
-
 export async function fetchPublicUrl(url, options = {}) {
   const {
     maxLength = MAX_PRODUCT_URL_LENGTH,

@@ -34,8 +34,6 @@ export const FALLBACK_WARNINGS = {
     '페이지에서 상품 메타 정보를 찾지 못했습니다. 필요한 정보를 직접 입력해 주세요.',
   readFailed:
     '상품 페이지를 읽는 중 문제가 생겼습니다. URL에서 추정한 값 또는 직접 입력한 정보를 사용합니다.',
-  rendered:
-    '상품 페이지가 로딩 후 표시되는 구조라 브라우저 렌더링 결과에서 정보를 가져왔습니다.',
 }
 
 export const EMBEDDED_JSON_SCRIPT_IDS = new Set([

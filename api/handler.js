@@ -3,7 +3,6 @@ import { fetchProductAnalysis } from './product/fetchProductAnalysis.js'
 import { authorizeRequest } from './core/auth.js'
 import { getTrimmedEnv } from './core/config.js'
 import { getClientIp } from './core/clientIp.js'
-import { MODEL } from './review/gemini/config.js'
 import { json, readJsonBody } from './core/httpResponse.js'
 import { generateKeywordResult } from './review/keywords/keywordGeneration.js'
 import { applyDailyUsageLimit, applyRateLimit } from './core/rateLimit.js'
@@ -126,9 +125,6 @@ export default async function handler(req, res) {
   const body = await readJsonBody(req)
   if (body?.tooLarge) return sendError(res, 413, ERRORS.bodyTooLarge)
   if (!body) return sendError(res, 400, ERRORS.invalidJson)
-  if (body.action === 'ping') {
-    return json(res, 200, { ok: true, model: MODEL })
-  }
 
   const auth = await authorizeRequest(req)
   if (!auth.ok) return sendError(res, auth.status, auth.error)

@@ -27,7 +27,6 @@ const PRODUCT_FIELDS = [
 
 const ANALYSIS_STATUS_META = {
   ok: { label: '분석 완료', tone: 'ok', message: '상품 페이지에서 주요 정보를 가져왔습니다.' },
-  rendered: { label: '분석 완료', tone: 'ok', message: '동적 렌더링 결과에서 상품 정보를 가져왔습니다.' },
   reader: { label: '일부만 읽음', tone: 'warning', message: '상품 페이지 일부만 읽었습니다. 부족한 내용은 직접 보완해 주세요.' },
   fallback: { label: '일부만 읽음', tone: 'warning', message: '상품 페이지 접근이 제한되어 URL에서 추정한 정보만 사용합니다.' },
   failed: { label: '읽지 못함', tone: 'warning', message: '상품 페이지를 자동으로 읽지 못했습니다. 상품명이나 특징을 직접 입력해 주세요.' },

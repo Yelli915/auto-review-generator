@@ -6,7 +6,6 @@ import {
 } from './fetchProductAnalysis.js'
 import {
   htmlResponse,
-  withEnv,
   withFetch,
 } from '../testUtils.js'
 
@@ -14,20 +13,18 @@ import {
 beforeEach(clearProductAnalysisCache)
 
 test('fetchProductAnalysis falls back when product page returns non-ok response', async () => {
-  await withEnv({ DISABLE_RENDERED_PRODUCT_FETCH: '1' }, () =>
-    withFetch(
-      async () => new Response('blocked', { status: 403 }),
-      async () => {
-        const result = await fetchProductAnalysis(
-          'https://shop.example/products/noise-canceling-headphones',
-        )
+  await withFetch(
+    async () => new Response('blocked', { status: 403 }),
+    async () => {
+      const result = await fetchProductAnalysis(
+        'https://shop.example/products/noise-canceling-headphones',
+      )
 
-        assert.equal(result.ok, true)
-        assert.match(result.productContext, /shop\.example/)
-        assert.match(result.productContext, /noise canceling headphones/)
-        assert.match(result.productContext, /HTTP 403/)
-      },
-    ),
+      assert.equal(result.ok, true)
+      assert.match(result.productContext, /shop\.example/)
+      assert.match(result.productContext, /noise canceling headphones/)
+      assert.match(result.productContext, /HTTP 403/)
+    },
   )
 })
 
@@ -70,32 +67,30 @@ test('fetchProductAnalysis uses reader fallback when direct product page is bloc
 
 test('fetchProductAnalysis does not follow reader redirects to private-network URLs', async () => {
   const calls = []
-  await withEnv({ DISABLE_RENDERED_PRODUCT_FETCH: '1' }, () =>
-    withFetch(
-      async (url) => {
-        calls.push(String(url))
-        if (String(url).startsWith('https://r.jina.ai/')) {
-          return new Response('', {
-            status: 302,
-            headers: { location: 'http://10.0.0.5/metadata' },
-          })
-        }
-        return new Response('blocked', { status: 403 })
-      },
-      async () => {
-        const result = await fetchProductAnalysis(
-          'https://shop.example/products/noise-canceling-headphones',
-        )
+  await withFetch(
+    async (url) => {
+      calls.push(String(url))
+      if (String(url).startsWith('https://r.jina.ai/')) {
+        return new Response('', {
+          status: 302,
+          headers: { location: 'http://10.0.0.5/metadata' },
+        })
+      }
+      return new Response('blocked', { status: 403 })
+    },
+    async () => {
+      const result = await fetchProductAnalysis(
+        'https://shop.example/products/noise-canceling-headphones',
+      )
 
-        assert.equal(result.ok, true)
-        assert.equal(result.analysisStatus, 'fallback')
-        assert.equal(calls.length, 2)
-        assert.equal(
-          calls[1],
-          'https://r.jina.ai/https://shop.example/products/noise-canceling-headphones',
-        )
-      },
-    ),
+      assert.equal(result.ok, true)
+      assert.equal(result.analysisStatus, 'fallback')
+      assert.equal(calls.length, 2)
+      assert.equal(
+        calls[1],
+        'https://r.jina.ai/https://shop.example/products/noise-canceling-headphones',
+      )
+    },
   )
 })
 
@@ -109,28 +104,26 @@ test('fetchProductAnalysis ignores access challenge pages as product content', a
     '</body></html>',
   ].join('')
 
-  await withEnv({ DISABLE_RENDERED_PRODUCT_FETCH: '1' }, () =>
-    withFetch(
-      async (url) => {
-        if (String(url).startsWith('https://r.jina.ai/')) {
-          return new Response('Title: Just a moment...\nHTTP 403 Forbidden', {
-            headers: { 'content-type': 'text/plain' },
-          })
-        }
-        return htmlResponse(challengeHtml)
-      },
-      async () => {
-        const result = await fetchProductAnalysis(
-          'https://www.oliveyoung.co.kr/store/goods/getGoodsDetail.do?goodsNo=A000000223414',
-        )
+  await withFetch(
+    async (url) => {
+      if (String(url).startsWith('https://r.jina.ai/')) {
+        return new Response('Title: Just a moment...\nHTTP 403 Forbidden', {
+          headers: { 'content-type': 'text/plain' },
+        })
+      }
+      return htmlResponse(challengeHtml)
+    },
+    async () => {
+      const result = await fetchProductAnalysis(
+        'https://www.oliveyoung.co.kr/store/goods/getGoodsDetail.do?goodsNo=A000000223414',
+      )
 
-        assert.equal(result.ok, true)
-        assert.equal(result.analysisStatus, 'fallback')
-        assert.equal(result.needsManualInput, true)
-        assert.notEqual(result.product.name, 'Just a moment...')
-        assert.match(result.productContext, /Access challenge page/)
-      },
-    ),
+      assert.equal(result.ok, true)
+      assert.equal(result.analysisStatus, 'fallback')
+      assert.equal(result.needsManualInput, true)
+      assert.notEqual(result.product.name, 'Just a moment...')
+      assert.match(result.productContext, /Access challenge page/)
+    },
   )
 })
 

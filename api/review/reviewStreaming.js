@@ -1,6 +1,5 @@
 import { createJsonHeaders, readJsonSafely } from '../../shared/httpJson.js'
 import { buildReviewPrompt } from './prompts.js'
-import { DEBUG_LOGS } from '../core/config.js'
 import { MODEL } from './gemini/config.js'
 import {
   buildReviewGenerationConfig,
@@ -8,7 +7,6 @@ import {
   makeStreamUrl,
 } from './gemini/client.js'
 import { setCommonSecurityHeaders } from '../core/httpResponse.js'
-import { collectReviewQualityIssues } from './reviewQualityCheck.js'
 
 function normalizeReviewText(text) {
   return typeof text === 'string' ? text.replace(/\s+/g, ' ').trim() : ''
@@ -27,7 +25,7 @@ export async function streamGeminiReview({
   rewriteInstruction,
   res,
 }) {
-  const { prompt, safeCategory, safeKeywords, safeLength, minReviewChars } = buildReviewPrompt({
+  const { prompt, safeLength, minReviewChars } = buildReviewPrompt({
     rating,
     keywords,
     length,
@@ -124,17 +122,6 @@ export async function streamGeminiReview({
   }
 
   const normalizedReview = normalizeReviewText(fullText)
-  // 잘린 리뷰는 어차피 에러로 버려지므로 품질 데이터에서 제외합니다.
-  if (DEBUG_LOGS && normalizedReview && finishReason !== 'MAX_TOKENS') {
-    const issues = collectReviewQualityIssues({
-      category: safeCategory,
-      keywords: safeKeywords,
-      reviewText: normalizedReview,
-    })
-    if (issues) {
-      console.warn('[gemini review] quality check', issues)
-    }
-  }
   if (finishReason === 'MAX_TOKENS') {
     writeJsonLine({
       error: '리뷰가 중간에 잘렸습니다. 글자수보다 완성된 리뷰를 우선해 다시 생성해 주세요.',
