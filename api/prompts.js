@@ -13,8 +13,7 @@ import {
 import { isLikelyKeywordPhrase } from './review/keywords/keywordUtils.js'
 import {
   COSMETIC_CONTEXT_RE,
-  GENERIC_BAN_PHRASES_PLACE,
-  GENERIC_BAN_PHRASES_PRODUCT,
+  getGenericBanPhrases,
 } from './review/config.js'
 
 const REVIEW_TONE_PROMPT_MAP = {
@@ -91,7 +90,7 @@ function buildSpecificityGuide(category) {
 }
 
 function buildGenericBan(category) {
-  const phrases = category === 'place' ? GENERIC_BAN_PHRASES_PLACE : GENERIC_BAN_PHRASES_PRODUCT
+  const phrases = getGenericBanPhrases(category)
   const noun = category === 'place' ? '장소' : '상품'
   return `금지: ${phrases.map((p) => `"${p}"`).join(', ')}처럼 어느 ${noun}에나 붙는 표현.`
 }
@@ -296,6 +295,7 @@ export function buildReviewPrompt({
       `- 최소 ${minReviewChars}자 이상으로 작성합니다.`,
       '- 리뷰 본문만 출력합니다.',
     ),
+    safeCategory,
     safeKeywords,
     safeLength,
     minReviewChars,
