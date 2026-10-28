@@ -74,8 +74,15 @@ export function isBlockedIpAddress(ip) {
     }
 
     return (
-      normalized === '::' ||
-      normalized === '::1' ||
+      // ::, ::1, IPv4-compatible(::7f00:1) 등 '::'로 시작하는 예약 대역
+      normalized.startsWith('::') ||
+      // NAT64(64:ff9b::/96)와 6to4(2002::/16)는 내부 IPv4를 감쌀 수 있습니다.
+      normalized.startsWith('64:ff9b:') ||
+      normalized.startsWith('2002:') ||
+      normalized.startsWith('fec') ||
+      normalized.startsWith('fed') ||
+      normalized.startsWith('fee') ||
+      normalized.startsWith('fef') ||
       normalized.startsWith('fc') ||
       normalized.startsWith('fd') ||
       normalized.startsWith('fe8') ||

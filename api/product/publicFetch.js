@@ -42,6 +42,8 @@ export async function fetchPublicUrl(url, options = {}) {
     ...fetchOptions
   } = options
   let currentUrl = url
+  // 리다이렉트 전체가 한 번의 제한 시간을 나눠 씁니다.
+  const signal = fetchOptions.signal || AbortSignal.timeout(timeoutMs)
 
   for (
     let redirectCount = 0;
@@ -60,9 +62,7 @@ export async function fetchPublicUrl(url, options = {}) {
     const response = await fetch(validated.url, {
       ...fetchOptions,
       redirect: 'manual',
-      signal:
-        fetchOptions.signal ||
-        AbortSignal.timeout(timeoutMs),
+      signal,
     })
 
     if (!REDIRECT_STATUSES.has(response.status)) {

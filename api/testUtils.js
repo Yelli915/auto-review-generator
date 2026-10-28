@@ -1,6 +1,7 @@
 /* global process */
 import { Buffer } from 'node:buffer'
 import { Readable } from 'node:stream'
+import { clearProductAnalysisCache } from './product/fetchProductAnalysis.js'
 
 export const png1x1Base64 =
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII='
@@ -51,6 +52,8 @@ export function withEnv(updates, fn) {
 
 export async function withFetch(mockFetch, fn) {
   const oldFetch = globalThis.fetch
+  // 테스트마다 다른 가짜 fetch를 쓰므로 이전 테스트의 상품 분석 캐시를 비웁니다.
+  clearProductAnalysisCache()
   globalThis.fetch = mockFetch
   try {
     return await fn()

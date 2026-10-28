@@ -1,7 +1,6 @@
 import { createJsonHeaders, readJsonSafely } from '../../shared/httpJson.js'
 import {
-  DAILY_USAGE_ACTIONS,
-  DAILY_USAGE_MAX_REQUESTS,
+  DAILY_USAGE_LIMITS,
   getTrimmedEnv,
   RATE_LIMIT_MAX_REQUESTS,
   RATE_LIMIT_WINDOW_MS,
@@ -108,20 +107,18 @@ function secondsUntilNextLocalDay(date = new Date()) {
   return Math.max(1, Math.ceil((nextDay.getTime() - date.getTime()) / 1000))
 }
 
-function applyMemoryDailyUsageLimit(identifier, action) {
-  if (!DAILY_USAGE_ACTIONS.has(action)) return { ok: true }
-
+function applyMemoryDailyUsageLimit(identifier, action, limit) {
   const now = new Date()
   const today = getLocalDayKey(now)
-  const key = typeof identifier === 'string' && identifier ? identifier : 'unknown'
+  const key = `${action}:${typeof identifier === 'string' && identifier ? identifier : 'unknown'}`
   const prev = DAILY_USAGE_STORE.get(key)
   const count = prev?.dayKey === today ? Number(prev.count) || 0 : 0
 
-  if (count >= DAILY_USAGE_MAX_REQUESTS) {
+  if (count >= limit) {
     return {
       ok: false,
       retryAfterSec: secondsUntilNextLocalDay(now),
-      limit: DAILY_USAGE_MAX_REQUESTS,
+      limit,
     }
   }
 
@@ -141,10 +138,13 @@ function applyMemoryDailyUsageLimit(identifier, action) {
 }
 
 export async function applyDailyUsageLimit(identifier, action) {
-  if (!DAILY_USAGE_ACTIONS.has(action)) return { ok: true }
+  const limit = Object.hasOwn(DAILY_USAGE_LIMITS, action)
+    ? DAILY_USAGE_LIMITS[action]
+    : 0
+  if (!limit) return { ok: true }
 
   const config = getSharedUsageStoreConfig()
-  if (!config) return applyMemoryDailyUsageLimit(identifier, action)
+  if (!config) return applyMemoryDailyUsageLimit(identifier, action, limit)
 
   const now = new Date()
   const key = [
@@ -157,7 +157,7 @@ export async function applyDailyUsageLimit(identifier, action) {
   return incrementSharedUsageLimit({
     config,
     key,
-    limit: DAILY_USAGE_MAX_REQUESTS,
+    limit,
     ttlSec: secondsUntilNextLocalDay(now),
     retryAfterSec: secondsUntilNextLocalDay(now),
   })

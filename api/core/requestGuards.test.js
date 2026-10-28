@@ -87,10 +87,17 @@ test('applyDailyUsageLimit allows only counted actions up to the daily limit', a
     assert.equal((await applyDailyUsageLimit(id, 'keywords')).ok, true)
   }
 
-  const blocked = await applyDailyUsageLimit(id, 'review')
+  const blocked = await applyDailyUsageLimit(id, 'keywords')
   assert.equal(blocked.ok, false)
   assert.equal(blocked.limit, 20)
   assert.equal(Number.isInteger(blocked.retryAfterSec), true)
+
+  // action마다 따로 세므로 다른 action은 계속 허용됩니다.
+  assert.equal((await applyDailyUsageLimit(id, 'review')).ok, true)
+  for (let i = 0; i < 60; i += 1) {
+    assert.equal((await applyDailyUsageLimit(id, 'analyze-product')).ok, true)
+  }
+  assert.equal((await applyDailyUsageLimit(id, 'analyze-product')).limit, 60)
 })
 
 // imageInput.js

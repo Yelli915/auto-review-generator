@@ -68,10 +68,11 @@ async function rejectDailyUsageLimit(res, identifier, action) {
   return true
 }
 
-async function handleAnalyzeProduct(body, res) {
+async function handleAnalyzeProduct(body, res, rateKey) {
   const productUrl =
     typeof body.productUrl === 'string' ? body.productUrl.trim() : ''
   if (!productUrl) return sendError(res, 400, ERRORS.productUrlRequired)
+  if (await rejectDailyUsageLimit(res, rateKey, body.action)) return
 
   const analysis = await fetchProductAnalysis(productUrl)
   if (!analysis.ok) return sendError(res, analysis.status, analysis.error)
@@ -129,7 +130,7 @@ export default async function handler(req, res) {
   if (await rejectRateLimit(res, rateKey)) return
 
   if (body.action === 'analyze-product') {
-    return handleAnalyzeProduct(body, res)
+    return handleAnalyzeProduct(body, res, rateKey)
   }
 
   const key = getTrimmedEnv('GEMINI_API_KEY')
