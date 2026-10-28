@@ -2,12 +2,12 @@ import {
   createJsonHeaders,
   pickErrorMessage,
   readJsonSafely,
-} from '../../../../shared/httpJson.js'
+} from '#shared/httpJson'
 import {
   getReviewMinChars,
   normalizeReviewLength,
   normalizeReviewTone,
-} from '../../../../shared/reviewOptions.js'
+} from '#shared/reviewOptions'
 import { createReviewStreamAccumulator } from './reviewStream.js'
 
 const API_PATH = '/api/gemini'

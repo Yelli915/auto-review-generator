@@ -1,30 +1,16 @@
-/* global process */
-
 import { normalizeReviewCategory } from '../../shared/reviewCategories.js'
 
-export function getTrimmedEnv(name) {
-  return typeof process.env[name] === 'string' ? process.env[name].trim() : ''
-}
-
-export const MAX_REQUEST_BODY_BYTES = 2 * 1024 * 1024
 export const MAX_IMAGE_BYTES = 1536 * 1024
 export const ALLOWED_IMAGE_MIME_TYPES = new Set([
   'image/jpeg',
   'image/png',
   'image/webp',
 ])
-export const RATE_LIMIT_WINDOW_MS = 60 * 1000
-export const RATE_LIMIT_MAX_REQUESTS = 20
-export const DAILY_USAGE_MAX_REQUESTS = 20
-export const DAILY_USAGE_ACTIONS = new Set(['keywords', 'review'])
-export const USAGE_STORE_KEY_PREFIX = 'auto-review-generator'
 export const KEYWORDS_MIN_COUNT = 3
 export const KEYWORDS_MAX_COUNT = 8
 export const KEYWORD_LEN_MIN = 2
 export const KEYWORD_LEN_MAX = 30
 export const KEYWORD_RETRY_LIMIT = 3
-export const DEBUG_LOGS =
-  process.env.NODE_ENV !== 'production' || process.env.DEBUG_LOGS === '1'
 
 const GENERIC_BAN_PHRASES_PLACE = [
   '분위기 좋음',

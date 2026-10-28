@@ -6,7 +6,7 @@ import ReviewStep from './steps/ReviewStep'
 import {
   DEFAULT_REVIEW_LENGTH,
   DEFAULT_REVIEW_TONE,
-} from '../../../shared/reviewOptions'
+} from '#shared/reviewOptions'
 import {
   STEP_ORDER,
   STEPS,

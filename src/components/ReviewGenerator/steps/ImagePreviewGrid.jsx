@@ -1,4 +1,4 @@
-import { MAX_REVIEW_IMAGE_COUNT } from '../../../../shared/reviewCategories'
+import { MAX_REVIEW_IMAGE_COUNT } from '#shared/reviewCategories'
 
 export default function ImagePreviewGrid({
   images,

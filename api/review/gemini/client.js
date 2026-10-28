@@ -1,5 +1,5 @@
-import { createJsonHeaders, readJsonSafely } from '../../../../shared/httpJson.js'
-import { KEYWORDS_MAX_COUNT, KEYWORDS_MIN_COUNT } from '../../config.js'
+import { createJsonHeaders, readJsonSafely } from '../../../shared/httpJson.js'
+import { KEYWORDS_MAX_COUNT, KEYWORDS_MIN_COUNT } from '../config.js'
 import {
   KEYWORDS_MAX_OUTPUT_TOKENS,
   MAX_RETRIES,
