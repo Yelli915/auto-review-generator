@@ -6,8 +6,6 @@ const REVIEW_REWRITE_ACTIONS = [
   { id: 'natural', label: '더 자연스럽게', instruction: '문장을 더 자연스럽고 실제 후기처럼 다듬어 주세요.' },
   { id: 'less-ad', label: '광고 느낌 줄이기', instruction: '광고 문구처럼 보이는 표현을 줄이고 담백한 사용 후기로 바꿔 주세요.' },
   { id: 'shorter', label: '짧게 줄이기', instruction: '핵심 경험은 유지하되 더 짧고 간결하게 줄여 주세요.' },
-  { id: 'detail', label: '더 자세히', instruction: '입력 근거와 선택 키워드 안에서 구체적인 장면과 체감을 조금 더 자세히 풀어 주세요.' },
-  { id: 'critical', label: '아쉬운 점 강조', instruction: '전체 톤은 유지하되 실제로 아쉬웠던 점이 더 분명히 드러나게 다듬어 주세요.' },
 ]
 
 export default function ResultPanel({
@@ -81,9 +79,6 @@ export default function ResultPanel({
         초안
         {isStreaming && <span className="status-pill status-pill--ok">작성 중</span>}
       </h2>
-      {version && (
-        <p className="panel__lede">입력한 내용으로 만든 초안입니다. 고른 키워드가 들어간 부분을 강조합니다.</p>
-      )}
 
       {versions.length > 1 && (
         <div className="version-tabs" role="group" aria-label="리뷰 버전">

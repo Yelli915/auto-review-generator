@@ -4,7 +4,6 @@ export default function ImagePreviewGrid({
   images,
   isBusy,
   onAdd,
-  onEdit,
   onRemove,
 }) {
   if (!images.length) return null
@@ -23,19 +22,7 @@ export default function ImagePreviewGrid({
       <div className="preview-grid">
         {images.map((image, index) => (
           <div className="preview-frame preview-frame--thumb" key={image.previewUrl}>
-            <button
-              type="button"
-              className="preview-frame__image-button"
-              onClick={() => onEdit(index)}
-              disabled={isBusy}
-              aria-label={`${index + 1}번째 이미지 수정`}
-            >
-              <img
-                src={image.editedPreviewUrl || image.previewUrl}
-                alt={`선택한 이미지 ${index + 1}`}
-              />
-              <span className="preview-frame__edit">편집</span>
-            </button>
+            <img src={image.previewUrl} alt={`선택한 이미지 ${index + 1}`} />
             <button
               type="button"
               className="preview-frame__remove"

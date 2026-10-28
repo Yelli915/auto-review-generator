@@ -11,7 +11,8 @@ function isValidIp(ip) {
 }
 
 function shouldTrustProxyHeaders() {
-  return process.env.TRUST_PROXY_HEADERS === '1'
+  // Vercel은 x-forwarded-for를 실제 클라이언트 IP로 덮어써서 위조할 수 없습니다.
+  return process.env.TRUST_PROXY_HEADERS === '1' || process.env.VERCEL === '1'
 }
 
 export function getClientIp(req) {

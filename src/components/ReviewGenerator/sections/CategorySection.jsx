@@ -19,7 +19,7 @@ export default function CategorySection({
     <section className="panel" aria-labelledby="section-category">
       <h2 className="panel__title" id="section-category">
         <span className="panel__step" aria-hidden="true">1</span>
-        무엇을 리뷰하나요?
+        분야
       </h2>
       <ChoiceGroup
         legend="분야"

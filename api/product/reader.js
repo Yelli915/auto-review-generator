@@ -66,13 +66,14 @@ function buildReaderProductInfo(text, urlString) {
   })
 }
 
-export async function fetchReaderProductAnalysis(urlString, reason = '') {
+export async function fetchReaderProductAnalysis(urlString, reason = '', signal) {
   let response
   try {
     const fetched = await fetchPublicUrl(buildReaderUrl(urlString), {
       headers: READER_FETCH_HEADERS,
       maxLength: MAX_PRODUCT_URL_LENGTH + READER_BASE_URL.length,
       timeoutMs: READER_PAGE_TIMEOUT_MS,
+      signal,
     })
     if (!fetched.ok) return null
     response = fetched.response

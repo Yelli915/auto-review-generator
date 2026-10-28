@@ -42,8 +42,11 @@ export async function fetchPublicUrl(url, options = {}) {
     ...fetchOptions
   } = options
   let currentUrl = url
-  // 리다이렉트 전체가 한 번의 제한 시간을 나눠 씁니다.
-  const signal = fetchOptions.signal || AbortSignal.timeout(timeoutMs)
+  // 리다이렉트 전체가 한 번의 제한 시간을 나눠 쓰고, 호출자의 signal(전체 deadline)도 따릅니다.
+  const timeout = AbortSignal.timeout(timeoutMs)
+  const signal = fetchOptions.signal
+    ? AbortSignal.any([fetchOptions.signal, timeout])
+    : timeout
 
   for (
     let redirectCount = 0;

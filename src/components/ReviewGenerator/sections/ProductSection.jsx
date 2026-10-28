@@ -72,13 +72,6 @@ export default function ProductSection({
         </div>
       </div>
 
-      {analysis.productContext && (
-        <details className="disclosure">
-          <summary>자동 수집한 원문 보기</summary>
-          <p className="disclosure__body">{analysis.productContext}</p>
-        </details>
-      )}
-
       <div className="options-row options-row--2">
         {PRODUCT_FIELDS.map((field) => (
           <div className="field" key={field.key}>

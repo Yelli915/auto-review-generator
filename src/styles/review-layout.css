@@ -391,21 +391,6 @@
   margin: 0;
 }
 
-.disclosure summary {
-  cursor: pointer;
-  font-size: 0.8125rem;
-  color: var(--text-muted);
-}
-
-.disclosure__body {
-  margin-top: 8px;
-  max-height: 10rem;
-  overflow-y: auto;
-  white-space: pre-wrap;
-  font-size: 0.8125rem;
-  color: var(--text);
-}
-
 .product-info-card__url {
   overflow-wrap: anywhere;
 }

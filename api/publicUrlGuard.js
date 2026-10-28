@@ -31,6 +31,22 @@ function isInIpv4Cidr(ip, base, bits) {
   return (value & mask) === (baseValue & mask)
 }
 
+// 압축(::)·IPv4 꼬리 표기를 모두 8개의 16비트 그룹으로 펼칩니다. 해석 못 하면 null.
+function expandIpv6(ip) {
+  let canonical
+  try {
+    // URL 파서가 IPv4 꼬리(::ffff:1.2.3.4)를 hex 그룹으로 바꿔 줍니다.
+    canonical = new URL(`http://[${ip}]`).hostname.slice(1, -1)
+  } catch {
+    return null
+  }
+  const [head, tail] = canonical.split('::')
+  const headGroups = head ? head.split(':') : []
+  const tailGroups = tail ? tail.split(':') : []
+  const zeros = tail === undefined ? [] : Array(8 - headGroups.length - tailGroups.length).fill('0')
+  return [...headGroups, ...zeros, ...tailGroups].map((group) => parseInt(group, 16))
+}
+
 export function isBlockedIpAddress(ip) {
   const normalized = normalizeHostname(ip)
   const ipVersion = net.isIP(normalized)
@@ -54,31 +70,27 @@ export function isBlockedIpAddress(ip) {
   }
 
   if (ipVersion === 6) {
-    const dottedMapped = normalized.match(/^::ffff:(\d{1,3}(?:\.\d{1,3}){3})$/)
-    if (dottedMapped) return isBlockedIpAddress(dottedMapped[1])
+    const groups = expandIpv6(normalized)
+    if (!groups) return true
+    const toIpv4 = (high, low) =>
+      [high >> 8, high & 0xff, low >> 8, low & 0xff].join('.')
 
-    // The WHATWG URL parser normalizes IPv4-mapped IPv6 hosts to hex groups
-    // (e.g. ::ffff:127.0.0.1 -> ::ffff:7f00:1), so url.hostname never matches
-    // the dotted-decimal form above and must be decoded separately.
-    const hexMapped = normalized.match(/^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/)
-    if (hexMapped) {
-      const high = parseInt(hexMapped[1], 16)
-      const low = parseInt(hexMapped[2], 16)
-      const dotted = [
-        (high >> 8) & 0xff,
-        high & 0xff,
-        (low >> 8) & 0xff,
-        low & 0xff,
-      ].join('.')
-      return isBlockedIpAddress(dotted)
+    // IPv4-mapped(::ffff:a.b.c.d)는 감싼 IPv4로 판단합니다.
+    if (groups.slice(0, 5).every((group) => group === 0) && groups[5] === 0xffff) {
+      return isBlockedIpAddress(toIpv4(groups[6], groups[7]))
     }
+    // 6to4(2002:aabb:ccdd::/48)는 2~3번째 그룹에 IPv4를 담습니다.
+    if (groups[0] === 0x2002) {
+      return isBlockedIpAddress(toIpv4(groups[1], groups[2]))
+    }
+    // Teredo(2001:0::/32)는 난독화된 IPv4를 담고 있어 통째로 막습니다.
+    if (groups[0] === 0x2001 && groups[1] === 0) return true
 
     return (
       // ::, ::1, IPv4-compatible(::7f00:1) 등 '::'로 시작하는 예약 대역
       normalized.startsWith('::') ||
-      // NAT64(64:ff9b::/96)와 6to4(2002::/16)는 내부 IPv4를 감쌀 수 있습니다.
+      // NAT64(64:ff9b::/96)는 내부 IPv4를 감쌀 수 있습니다.
       normalized.startsWith('64:ff9b:') ||
-      normalized.startsWith('2002:') ||
       normalized.startsWith('fec') ||
       normalized.startsWith('fed') ||
       normalized.startsWith('fee') ||
