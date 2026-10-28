@@ -1,12 +1,14 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import { getReviewMinChars } from '#shared/reviewOptions'
-import { splitKeywordHighlights } from '../utils/keywordHighlight'
+import { findMissingKeywords, splitKeywordHighlights } from '../utils/keywordHighlight'
 
 const REVIEW_REWRITE_ACTIONS = [
   { id: 'natural', label: '더 자연스럽게', instruction: '문장을 더 자연스럽고 실제 후기처럼 다듬어 주세요.' },
   { id: 'less-ad', label: '광고 느낌 줄이기', instruction: '광고 문구처럼 보이는 표현을 줄이고 담백한 사용 후기로 바꿔 주세요.' },
   { id: 'shorter', label: '짧게 줄이기', instruction: '핵심 경험은 유지하되 더 짧고 간결하게 줄여 주세요.' },
 ]
+// 서버(prompts.js)가 요청 문장을 300자로 자릅니다.
+const CUSTOM_INSTRUCTION_MAX = 300
 
 export default function ResultPanel({
   panelRef,
@@ -21,10 +23,13 @@ export default function ResultPanel({
   onReset,
   disabled,
   error,
+  remaining,
 }) {
   const [copyState, setCopyState] = useState('idle')
   const [isEditing, setIsEditing] = useState(false)
   const [picked, setPicked] = useState(null)
+  const [customInstruction, setCustomInstruction] = useState('')
+  const customInstructionId = useId()
   const copyTimerRef = useRef(null)
   useEffect(() => () => clearTimeout(copyTimerRef.current), [])
 
@@ -42,6 +47,11 @@ export default function ResultPanel({
   const canAct = !disabled && !isStreaming && Boolean(trimmed)
   const segments = splitKeywordHighlights(text, version?.keywords)
   const hasHighlights = segments.some((segment) => segment.keyword)
+  const missingKeywords = isStreaming ? [] : findMissingKeywords(text, version?.keywords)
+  // 다듬은 버전은 원본과, 새로 생성한 버전은 바로 앞 버전과 비교합니다.
+  const compareVersion = version
+    ? versions.find((item) => item.n === version.from) || versions[activeVersion - 1]
+    : null
 
   const rewrite = (action) => {
     setPicked(null)
@@ -60,6 +70,19 @@ export default function ResultPanel({
           instruction: `리뷰에서 "${picked.keyword}"에 관한 내용만 빼고, 나머지 문장은 최대한 그대로 두세요.`,
         }
     rewrite(action)
+  }
+
+  const rewriteMissing = () =>
+    rewrite({
+      label: '빠진 키워드 넣기',
+      instruction: `리뷰에 "${missingKeywords.join('", "')}" 내용이 자연스럽게 들어가도록 보완하고, 나머지 문장은 최대한 그대로 두세요.`,
+    })
+
+  const rewriteCustom = () => {
+    const instruction = customInstruction.trim()
+    if (!instruction || !canAct) return
+    rewrite({ label: `요청: ${instruction.slice(0, 20)}`, instruction })
+    setCustomInstruction('')
   }
 
   const handleCopy = async () => {
@@ -182,6 +205,22 @@ export default function ResultPanel({
           {hasHighlights && !isEditing && !isStreaming && (
             <p className="field__hint review-hint">강조된 단어를 누르면 그 부분만 바꾸거나 뺄 수 있습니다.</p>
           )}
+          {missingKeywords.length > 0 && !isEditing && (
+            <div className="mark-actions" role="group" aria-label="빠진 키워드">
+              <span className="mark-actions__label">
+                빠진 키워드 · <strong>{missingKeywords.join(', ')}</strong>
+              </span>
+              <button type="button" className="chip chip--action" onClick={rewriteMissing} disabled={!canAct}>
+                넣어서 다듬기
+              </button>
+            </div>
+          )}
+          {compareVersion && !isStreaming && (
+            <details className="version-compare">
+              <summary className="btn-link">v{compareVersion.n} 버전과 비교</summary>
+              <p className="review-output version-compare__text">{compareVersion.text}</p>
+            </details>
+          )}
 
           {error && <p className="banner banner--error" role="alert">{error}</p>}
 
@@ -203,6 +242,9 @@ export default function ResultPanel({
               새로 생성
             </button>
           </div>
+          {Number.isFinite(remaining) && (
+            <p className="field__hint result-remaining">오늘 남은 리뷰 생성·다듬기 {remaining}회</p>
+          )}
 
           <div className="rewrite">
             <p className="field__label">이 버전 다듬기</p>
@@ -218,6 +260,32 @@ export default function ResultPanel({
                   {action.label}
                 </button>
               ))}
+            </div>
+            <label className="visually-hidden" htmlFor={customInstructionId}>다듬기 요청 직접 쓰기</label>
+            <div className="keyword-add__row">
+              <input
+                id={customInstructionId}
+                className="text-input"
+                value={customInstruction}
+                maxLength={CUSTOM_INSTRUCTION_MAX}
+                placeholder="예: 가격 얘기는 빼 주세요"
+                disabled={disabled || isStreaming}
+                onChange={(e) => setCustomInstruction(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
+                    e.preventDefault()
+                    rewriteCustom()
+                  }
+                }}
+              />
+              <button
+                type="button"
+                className="btn btn--secondary keyword-add__button"
+                onClick={rewriteCustom}
+                disabled={!canAct || !customInstruction.trim()}
+              >
+                다듬기
+              </button>
             </div>
             <p className="field__hint">내용은 유지하고 표현만 바꿔 새 버전으로 남깁니다.</p>
           </div>

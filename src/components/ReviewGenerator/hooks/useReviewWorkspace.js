@@ -92,6 +92,7 @@ export function useReviewWorkspace({ requestLogin }) {
   const [missingImageCount, setMissingImageCount] = useState(() =>
     draft?.inputMode === 'link' ? 0 : draft?.imageCount || 0,
   )
+  const [reviewsRemaining, setReviewsRemaining] = useState(null)
   const [busy, setBusy] = useState(null)
   const [error, setError] = useState(null)
   const keywordSectionRef = useRef(null)
@@ -339,6 +340,8 @@ export function useReviewWorkspace({ requestLogin }) {
         n: (versions.at(-1)?.n || 0) + 1,
         text: '',
         note: rewriteAction?.label || '',
+        // 다듬은 버전은 비교할 원본 버전 번호를 남깁니다.
+        from: rewriteAction ? base?.n : undefined,
         keywords: selectedKeywords,
         length,
         tone,
@@ -353,7 +356,7 @@ export function useReviewWorkspace({ requestLogin }) {
 
       let isSuccess = false
       try {
-        await generateReview({
+        const { remaining } = await generateReview({
           rating: sourceData.rating,
           keywords: selectedKeywords,
           length,
@@ -369,6 +372,7 @@ export function useReviewWorkspace({ requestLogin }) {
             )
           },
         })
+        setReviewsRemaining(remaining)
         isSuccess = true
       } finally {
         if (!isSuccess) {
@@ -434,5 +438,6 @@ export function useReviewWorkspace({ requestLogin }) {
     activeVersion,
     setActiveVersion,
     editActiveVersion,
+    reviewsRemaining,
   }
 }

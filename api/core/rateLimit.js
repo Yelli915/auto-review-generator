@@ -134,7 +134,7 @@ function applyMemoryDailyUsageLimit(identifier, action, limit) {
     }
   }
 
-  return { ok: true }
+  return { ok: true, count: count + 1, limit }
 }
 
 export async function applyDailyUsageLimit(identifier, action) {

@@ -141,6 +141,7 @@ function Workspace({ requestLogin, onReset }) {
           onReset={onReset}
           disabled={isBusy}
           error={errorFor('review')}
+          remaining={ws.reviewsRemaining}
         />
       </div>
     </main>
