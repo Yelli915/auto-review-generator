@@ -10,13 +10,14 @@ export function decodeHtmlEntities(text) {
   }
 
   return text
-    .replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (_, entity) => {
+    .replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (match, entity) => {
       const key = String(entity).toLowerCase()
-      if (key.startsWith('#x')) {
-        return String.fromCodePoint(Number.parseInt(key.slice(2), 16))
-      }
       if (key.startsWith('#')) {
-        return String.fromCodePoint(Number.parseInt(key.slice(1), 10))
+        const code = key.startsWith('#x')
+          ? Number.parseInt(key.slice(2), 16)
+          : Number.parseInt(key.slice(1), 10)
+        // 범위를 벗어난 코드("&#99999999;")는 RangeError를 내므로 원문 그대로 둡니다.
+        return code <= 0x10ffff ? String.fromCodePoint(code) : match
       }
       return named[key] ?? ''
     })

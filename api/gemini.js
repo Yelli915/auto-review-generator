@@ -18,6 +18,8 @@ const ERRORS = {
   usageStoreUnavailable:
     '사용량 제한 저장소를 확인할 수 없습니다. 잠시 후 다시 시도해 주세요.',
   rateLimited: '요청이 너무 많습니다. 잠시 후 다시 시도해 주세요.',
+  productFailed: '상품 정보를 분석하지 못했습니다.',
+  keywordsFailed: '키워드 생성 실패',
   missingGeminiKey: '서버 환경변수 GEMINI_API_KEY가 없습니다.',
   reviewFailed: '리뷰 생성 실패',
   unsupportedAction: '지원하지 않는 action입니다.',
@@ -94,9 +96,18 @@ async function handleAnalyzeProduct(body, res, rateKey) {
   if (prepared.cached) return json(res, 200, prepared.cached)
 
   // 빈 링크·잘못된 URL·캐시 적중은 한도를 쓰지 않도록 실제로 페이지를 읽기 직전에만 차감합니다.
-  if (!(await chargeDailyUsage(res, rateKey, body.action))) return
-  const analysis = await readProductAnalysis(prepared.url)
-  if (!analysis.ok) return sendError(res, analysis.status, analysis.error)
+  const dailyUsage = await chargeDailyUsage(res, rateKey, body.action)
+  if (!dailyUsage) return
+  let analysis
+  try {
+    analysis = await readProductAnalysis(prepared.url)
+  } catch {
+    analysis = { ok: false, status: 502, error: ERRORS.productFailed }
+  }
+  if (!analysis.ok) {
+    await refundDailyUsage(dailyUsage)
+    return sendError(res, analysis.status, analysis.error)
+  }
 
   return json(res, 200, analysis)
 }
@@ -104,7 +115,12 @@ async function handleAnalyzeProduct(body, res, rateKey) {
 async function handleKeywords(body, res, key, rateKey) {
   const dailyUsage = await chargeDailyUsage(res, rateKey, body.action)
   if (!dailyUsage) return
-  const result = await generateKeywordResult({ body, key })
+  let result
+  try {
+    result = await generateKeywordResult({ body, key })
+  } catch {
+    result = { status: 502, body: { ok: false, error: ERRORS.keywordsFailed } }
+  }
   if (result.status !== 200) await refundDailyUsage(dailyUsage)
   return json(res, result.status, result.body)
 }
@@ -112,10 +128,16 @@ async function handleKeywords(body, res, key, rateKey) {
 async function handleReview(body, res, key, rateKey) {
   const dailyUsage = await chargeDailyUsage(res, rateKey, body.action)
   if (!dailyUsage) return
+  // 스트리밍 중 실패(잘림·분량 미달·읽기 오류)나 첫 글자 전 연결 끊김은 화면이 초안을 버리므로 되돌립니다.
+  // 돌려준 남은 횟수는 스트림의 error 줄에 실어 화면이 바로 고치게 합니다.
+  const refund = async () => {
+    const count = await refundDailyUsage(dailyUsage)
+    return count !== null && dailyUsage.limit ? Math.max(0, dailyUsage.limit - count) : null
+  }
   try {
-    await streamGeminiReview({ key, input: body, res })
+    await streamGeminiReview({ key, input: body, res, refund })
   } catch (err) {
-    // 스트리밍 전에 실패해 글을 받지 못했으므로 되돌립니다. 스트리밍 중 실패는 글이 이미 전달돼 차감합니다.
+    // 스트리밍 전에 실패해 글을 받지 못했으므로 되돌립니다.
     const count = await refundDailyUsage(dailyUsage)
     if (count !== null && dailyUsage.limit) setReviewUsageHeaders(res, dailyUsage, count)
     return sendError(

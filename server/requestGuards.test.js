@@ -252,3 +252,27 @@ test('shared rate limit weighs the previous window so bursts cannot double at th
     },
   )
 })
+
+test('shared stores undo rejected rate hits and re-expire refunded daily keys', async (t) => {
+  t.mock.method(Date, 'now', () => 60_000 * 1000 + 6_000)
+  const commands = []
+  const redis = (results) => async (_url, init) => {
+    commands.push(JSON.parse(init.body))
+    return jsonResponse(results)
+  }
+
+  await withEnv(
+    { UPSTASH_REDIS_REST_URL: 'https://redis.test', UPSTASH_REDIS_REST_TOKEN: 'token' },
+    async () => {
+      await withFetch(redis([{ result: 3 }, { result: 1 }, { result: '20' }]), () => applyRateLimit('burst'))
+      assert.equal(commands.at(-1)[0][0], 'DECR')
+
+      const usage = await withFetch(redis([{ result: 1 }, { result: 1 }]), () =>
+        applyDailyUsageLimit('refund-user', 'review'),
+      )
+      // 키가 만료된 뒤 환불하면 DECR이 -1을 돌려줍니다.
+      assert.equal(await withFetch(redis([{ result: -1 }, { result: 1 }]), () => usage.refund()), 0)
+      assert.deepEqual(commands.at(-1).map(([command]) => command), ['DECR', 'EXPIRE'])
+    },
+  )
+})

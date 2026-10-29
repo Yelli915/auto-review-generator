@@ -91,6 +91,23 @@ export function buildReviewGenerationConfig(length) {
   }
 }
 
+// Gemini SSE의 "data: ..." 한 줄을 { text, finishReason }으로 바꿉니다. 해석할 수 없는 줄은 null입니다.
+// 서버 스트리밍(reviewStreaming.js)과 eval이 같이 씁니다.
+export function parseGeminiSseLine(line) {
+  if (!line.startsWith('data: ')) return null
+  const payload = line.slice(6).trim()
+  if (!payload || payload === '[DONE]') return null
+  try {
+    const candidate = JSON.parse(payload)?.candidates?.[0]
+    return {
+      text: candidate?.content?.parts?.[0]?.text || '',
+      finishReason: candidate?.finishReason ?? null,
+    }
+  } catch {
+    return null
+  }
+}
+
 export async function requestGemini({ key, payload, signal }) {
   let lastError = null
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt += 1) {

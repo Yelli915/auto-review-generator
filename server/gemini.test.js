@@ -328,3 +328,23 @@ test('handler retries keyword generation and reports the last failure reason', a
     )
   }
 })
+
+test('handler refunds the daily review count when the stream ends truncated', async () => {
+  const sse = `data: ${JSON.stringify({ candidates: [{ content: { parts: [{ text: '잘린 리뷰' }] }, finishReason: 'MAX_TOKENS' }] })}\n\n`
+  await withTestEnv(() =>
+    withFetch(
+      async () => new Response(sse, { status: 200 }),
+      async () => {
+        const lines = []
+        for (let i = 0; i < 2; i += 1) {
+          const res = createMockResponse()
+          await handler(createMockRequest({ action: 'review', rating: 4, keywords: ['배터리 오래감'] }), res)
+          lines.push(JSON.parse(res.body.trim().split('\n').at(-1)))
+        }
+        assert.match(lines[0].error, /잘렸습니다/)
+        assert.ok(Number.isFinite(lines[0].remaining))
+        assert.equal(lines[0].remaining, lines[1].remaining)
+      },
+    ),
+  )
+})

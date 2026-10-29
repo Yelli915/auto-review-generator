@@ -45,7 +45,8 @@ function clipText(value, maxLength) {
 }
 
 function buildRewriteBlock(previousReview, rewriteInstruction) {
-  const safePreviousReview = clipText(previousReview, 1600)
+  // 아주 길게(xlong) 리뷰도 잘리지 않도록 여유 있게 둡니다. 요청 본문 한도(2MB)보다 한참 작습니다.
+  const safePreviousReview = clipText(previousReview, 4000)
   const safeRewriteInstruction = clipText(rewriteInstruction, 300)
   if (!safePreviousReview || !safeRewriteInstruction) return ''
   return joinPromptLines(

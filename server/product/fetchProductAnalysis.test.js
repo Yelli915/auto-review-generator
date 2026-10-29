@@ -325,3 +325,13 @@ test('fetchProductAnalysis falls back to the reader and always asks for confirma
     },
   )
 })
+
+test('extractProductInfoFromHtml keeps escaped quotes in embedded JSON and survives invalid entities', () => {
+  const data = { props: { product: { name: '27&quot; 모니터 &#99999999;', brand: '루미', price: '199000' } } }
+  const html = `<html><head><title>x</title><script id="__NEXT_DATA__" type="application/json">${JSON.stringify(data)}</script></head></html>`
+
+  const info = extractProductInfoFromHtml(html, 'https://shop.example.com/p/1')
+
+  assert.equal(info.name, '27" 모니터 &#99999999;')
+  assert.equal(info.brand, '루미')
+})

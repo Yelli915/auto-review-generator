@@ -55,9 +55,13 @@ async function incrementSharedUsageLimit({ config, key, limit, ttlSec }) {
     return { ok: false, retryAfterSec: ttlSec, limit }
   }
   // 날짜가 들어간 같은 키를 되돌리므로 자정을 넘긴 뒤 환불해도 새 날 횟수에는 영향이 없습니다.
+  // 그 사이 키가 만료됐으면 DECR이 -1 키를 새로 만드므로 EXPIRE NX로 다시 만료되게 합니다.
   const refund = async () => {
-    const [result] = await callSharedUsageStore(config, [['DECR', key]])
-    return Number(result?.result)
+    const [result] = await callSharedUsageStore(config, [
+      ['DECR', key],
+      ['EXPIRE', key, ttlSec, 'NX'],
+    ])
+    return Math.max(0, readStoreCount(result))
   }
   return { ok: true, count, limit, refund }
 }
@@ -104,6 +108,8 @@ export async function applyRateLimit(rawIdentifier) {
   const current = readStoreCount(results[0])
   const previous = Number(results[2]?.result) || 0
   if (previous * (1 - elapsed) + current > RATE_LIMIT_MAX_REQUESTS) {
+    // 인메모리처럼 거절된 요청은 세지 않습니다. 세면 다음 창의 직전 창 가중치로 넘어가 차단이 길어집니다.
+    await callSharedUsageStore(config, [['DECR', keyFor(windowId)]])
     return { ok: false, retryAfterSec: Math.max(1, Math.ceil((1 - elapsed) * windowSec)) }
   }
   return { ok: true }
