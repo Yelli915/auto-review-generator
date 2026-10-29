@@ -20,6 +20,7 @@ React SPA + Vercel 서버리스 API 하나(`/api/gemini`)로 구성하고, Gemin
 - 사진 최대 3장 업로드·붙여넣기, 서버는 MIME·base64·시그니처·크기 재검증
 - 키워드 선택·직접 추가·다시 추천, 분량·말투 선택 후 리뷰를 스트리밍으로 표시
 - 새로 생성·다듬기·강조 단어 바꾸기 결과를 버전(v1, v2…)으로 최대 10개 보관
+- 리뷰에 입력 근거(상품 정보·직접 경험·키워드)에 없는 숫자·영문이 들어가면 표시하고 빼서 다듬기 (`shared/evidenceCheck.js`, eval 환각 채점과 같은 규칙)
 - 리뷰에 빠진 키워드 표시·보완, 다듬기 요청 직접 입력, 원본 버전과 비교, 오늘 남은 생성 횟수 표시
 - 입력과 결과를 탭 단위(`sessionStorage`)로 저장해 새로고침 후에도 이어 쓰기
 - Google ID Token 인증, Origin 제한, 사용자/IP별 rate limit·일일 사용량 제한, SSRF 방어
@@ -106,8 +107,17 @@ npm run dev:vercel   # 서버리스 API 포함 (vercel env pull .env.local 후)
 테스트 (API 키·Redis 불필요):
 
 ```bash
-npm test && npm run lint && npm run build   # 94 tests
+npm test && npm run lint && npm run build   # 113 tests
 ```
+
+리뷰 품질 평가 (실제 Gemini 호출, `GEMINI_API_KEY` 필요):
+
+```bash
+npm run eval -- --label before --runs 2           # eval/cases.json 20개 케이스로 생성·채점
+npm run eval -- --label after --runs 2 --baseline eval/results/before.json   # 프롬프트 수정 전후 비교 표
+```
+
+근거에 없는 숫자·영문·케이스별 금지어(환각), 키워드 반영률, 최소 분량 미달, `MAX_TOKENS` 잘림, 상투 문구, 첫 조각 지연·전체 생성 시간을 측정해 Markdown 표로 출력.
 
 Vercel Production 빌드는 `scripts/verify-vercel-env.js`가 필수 환경 변수를 먼저 확인하고, 없으면 배포 전에 실패.
 
@@ -131,4 +141,5 @@ Vercel Production 빌드는 `scripts/verify-vercel-env.js`가 필수 환경 변�
 - 이미지는 용량 때문에 초안에 저장하지 않아 새로고침 후 다시 올려야 함 → IndexedDB 저장
 - 상품 분석은 사이트 구조에 의존, JS로 그리는 페이지는 읽지 못하고 직접 입력으로 전환 → 사이트별 어댑터, 결과 공유 캐시
 - 키워드 응답은 JSON 스키마만 해석, 형식이 어긋나면 실패 처리 → 실패율 모니터링
-- 단위 테스트만 있고 E2E 없음, Gemini 첫 chunk·전체 생성 시간 미측정 → Playwright E2E, 지연 시간 계측
+- 단위 테스트만 있고 E2E 없음 → Playwright E2E
+- 근거 검사(화면·eval)는 규칙 기반(숫자·영문·금지어)이라 근거 없는 서술형 문장은 못 잡음 → LLM 채점 추가

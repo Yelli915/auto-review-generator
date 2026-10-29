@@ -9,6 +9,7 @@ export const REVIEW_MAX_OUTPUT_TOKENS = {
   short: 2048,
   medium: 3072,
   long: 4096,
+  xlong: 6144,
 }
 
 export const MAX_IMAGE_BYTES = 1536 * 1024

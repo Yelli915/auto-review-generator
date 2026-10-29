@@ -49,6 +49,7 @@ export default function KeywordSection({
   onGenerate,
   canGenerate,
   isGenerating,
+  hasExperience,
   error,
 }) {
   const customKeywordId = useId()
@@ -204,6 +205,11 @@ export default function KeywordSection({
               disabled={disabled}
             />
           </div>
+          {['long', 'xlong'].includes(length) && !hasExperience && (
+            <p className="field__hint" role="status">
+              직접 경험을 적지 않으면 긴 리뷰도 사진·상품 정보·키워드에서 확인된 내용만으로 씁니다. 겪은 일을 적으면 더 구체적인 리뷰가 됩니다.
+            </p>
+          )}
           {isSparseLongReview(length, selected.length) && (
             <p className="field__hint" role="status">
               선택한 키워드가 적어 긴 리뷰는 조금 더 일반적으로 작성될 수 있습니다.

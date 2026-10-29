@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, useState } from 'react'
+import { findUnsupportedTokens } from '#shared/evidenceCheck'
 import { getReviewMinChars } from '#shared/reviewOptions'
 import { findMissingKeywords, splitKeywordHighlights } from '../utils/keywordHighlight'
 
@@ -50,6 +51,10 @@ export default function ResultPanel({
   const hasHighlights = segments.some((segment) => segment.keyword)
   // 편집 중에는 결과를 보여 주지 않으므로 키를 누를 때마다 다시 계산하지 않습니다.
   const missingKeywords = isStreaming || isEditing ? [] : findMissingKeywords(text, version?.keywords)
+  // 입력(상품 정보·직접 경험·키워드)에 없는 숫자·영문은 모델이 지어냈을 수 있어 확인을 요청합니다.
+  const unsupportedTokens = isStreaming || isEditing
+    ? []
+    : findUnsupportedTokens(text, [version?.evidence, ...(version?.keywords || [])].join('\n'))
   // 다듬은 버전은 원본과, 새로 생성한 버전은 바로 앞 버전과 비교합니다.
   // 원본이 버전 개수 제한으로 잘려 나갔으면 다른 버전과 엉뚱하게 비교하지 않고 숨깁니다.
   const compareVersion = !version
@@ -81,6 +86,12 @@ export default function ResultPanel({
     rewrite({
       label: '빠진 키워드 넣기',
       instruction: `리뷰에 "${missingKeywords.join('", "')}" 내용이 자연스럽게 들어가도록 보완하고, 나머지 문장은 최대한 그대로 두세요.`,
+    })
+
+  const rewriteUnsupported = () =>
+    rewrite({
+      label: '근거 없는 내용 빼기',
+      instruction: `리뷰에서 "${unsupportedTokens.join('", "')}"처럼 입력 근거에 없는 숫자·이름이 들어간 내용만 빼고, 나머지 문장은 최대한 그대로 두세요.`,
     })
 
   const rewriteCustom = async () => {
@@ -219,6 +230,16 @@ export default function ResultPanel({
               </span>
               <button type="button" className="chip chip--action" onClick={rewriteMissing} disabled={!canAct}>
                 넣어서 다듬기
+              </button>
+            </div>
+          )}
+          {unsupportedTokens.length > 0 && !isEditing && (
+            <div className="mark-actions" role="group" aria-label="입력에 없는 내용">
+              <span className="mark-actions__label">
+                입력에 없는 내용 · <strong>{unsupportedTokens.join(', ')}</strong> · 실제와 맞는지 확인하세요
+              </span>
+              <button type="button" className="chip chip--action" onClick={rewriteUnsupported} disabled={!canAct}>
+                빼서 다듬기
               </button>
             </div>
           )}

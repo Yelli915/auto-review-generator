@@ -44,6 +44,7 @@ export function sanitizeDraft(raw) {
             ...item,
             note: pickString(item.note),
             keywords: pickStrings(item.keywords),
+            evidence: pickString(item.evidence),
           }))
       : [],
     activeVersion: Number(raw.activeVersion) || 0,

@@ -28,3 +28,6 @@ dist-ssr
 
 .vercel
 
+
+# Eval 결과
+eval/results/
