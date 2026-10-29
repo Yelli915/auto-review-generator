@@ -122,6 +122,7 @@ function Workspace({ requestLogin, onReset }) {
           onGenerate={() => ws.writeReview(null, () => goTo('draft'))}
           canGenerate={ws.canGenerateReview}
           isGenerating={ws.busy === 'review'}
+          hasExperience={Boolean(ws.userExperience.trim())}
           error={errorFor('refresh')}
         />
       </div>

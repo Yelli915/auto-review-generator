@@ -321,3 +321,19 @@ test('buildReviewPrompt guides sparse long reviews without blocking them', () =>
   assert.match(prompt, /키워드가 적어도 같은 말을 늘리지 말고/)
   assert.match(prompt, /최소 90자 이상/)
 })
+
+test('buildReviewPrompt includes helpful-review structure', () => {
+  const { prompt } = buildReviewPrompt({ rating: 5, keywords: ['저소음 키감'], category: 'product' })
+
+  assert.match(prompt, /도움이 되는 리뷰 구성:/)
+  assert.match(prompt, /첫 문장에 전체 평가/)
+  assert.match(prompt, /아쉬운 점이나 주의할 점/)
+})
+
+test('buildReviewPrompt supports xlong length', () => {
+  const { prompt, safeLength, minReviewChars } = buildReviewPrompt({ rating: 5, keywords: ['저소음 키감'], length: 'xlong', category: 'product' })
+
+  assert.equal(safeLength, 'xlong')
+  assert.equal(minReviewChars, 200)
+  assert.match(prompt, /최소 200자 이상/)
+})

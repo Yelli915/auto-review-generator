@@ -1,0 +1,126 @@
+[
+  {
+    "id": "restaurant-5-medium",
+    "category": "place", "subcategory": "restaurant", "rating": 5, "length": "medium", "tone": "friendly",
+    "keywords": ["국물 진함", "면 쫄깃함", "직원 응대 친절함"],
+    "forbidden": ["주차", "예약", "원산지"]
+  },
+  {
+    "id": "restaurant-2-long",
+    "category": "place", "subcategory": "restaurant", "rating": 2, "length": "long", "tone": "neutral",
+    "keywords": ["대기 오래 걸림", "음식 미지근함", "양 적음"],
+    "forbidden": ["주차", "가격", "원산지"]
+  },
+  {
+    "id": "restaurant-4-short",
+    "category": "place", "subcategory": "restaurant", "rating": 4, "length": "short", "tone": "casual",
+    "keywords": ["튀김 바삭함", "소스 짭짤함"],
+    "forbidden": ["메뉴판", "가격"]
+  },
+  {
+    "id": "cafe-5-long-sparse",
+    "category": "place", "subcategory": "cafe", "rating": 5, "length": "long", "tone": "friendly",
+    "keywords": ["창가 좌석 넓음"],
+    "forbidden": ["원두", "핸드드립", "영업 시간", "콘센트"]
+  },
+  {
+    "id": "cafe-3-medium",
+    "category": "place", "subcategory": "cafe", "rating": 3, "length": "medium", "tone": "neutral",
+    "keywords": ["라떼 고소함", "매장 시끄러움", "디저트 달달함"],
+    "forbidden": ["원두", "영업 시간"]
+  },
+  {
+    "id": "stay-4-xlong",
+    "category": "place", "subcategory": "stay", "rating": 4, "length": "xlong", "tone": "formal",
+    "keywords": ["침구 깨끗함", "방음 아쉬움", "체크인 빠름", "역에서 가까움"],
+    "forbidden": ["수영장", "조식", "가격", "등급"]
+  },
+  {
+    "id": "stay-1-medium",
+    "category": "place", "subcategory": "stay", "rating": 1, "length": "medium", "tone": "neutral",
+    "keywords": ["욕실 곰팡이", "에어컨 소음"],
+    "forbidden": ["환불", "가격", "조식"]
+  },
+  {
+    "id": "service-5-medium",
+    "category": "place", "subcategory": "service", "rating": 5, "length": "medium", "tone": "formal",
+    "keywords": ["설명 자세함", "대기 짧음", "시설 깔끔함"],
+    "forbidden": ["효과", "완치", "통증 사라"]
+  },
+  {
+    "id": "general-place-3-short",
+    "category": "place", "subcategory": "general-place", "rating": 3, "length": "short", "tone": "casual",
+    "keywords": ["산책로 한적함", "화장실 멀음"],
+    "forbidden": ["입장료", "주차"]
+  },
+  {
+    "id": "beauty-5-long-context",
+    "category": "product", "subcategory": "beauty", "rating": 5, "length": "long", "tone": "friendly",
+    "productContext": "사이트: 예시몰\n상품명: 데일리 수분 크림 50ml\n브랜드: 루미에\n가격 정보: 23,000원",
+    "keywords": ["흡수 빠름", "끈적임 적음", "은은한 향"],
+    "forbidden": ["지성", "건성", "민감성", "주름", "미백", "피부과"]
+  },
+  {
+    "id": "beauty-2-medium",
+    "category": "product", "subcategory": "beauty", "rating": 2, "length": "medium", "tone": "neutral",
+    "keywords": ["밀착력 약함", "각질 부각"],
+    "forbidden": ["지성", "건성", "트러블 진정", "피부과"]
+  },
+  {
+    "id": "beauty-4-xlong-sparse",
+    "category": "product", "subcategory": "beauty", "rating": 4, "length": "xlong", "tone": "casual",
+    "keywords": ["발림성 부드러움", "지속력 보통"],
+    "forbidden": ["지성", "건성", "주름", "미백", "효능"]
+  },
+  {
+    "id": "fashion-4-medium-context",
+    "category": "product", "subcategory": "fashion", "rating": 4, "length": "medium", "tone": "friendly",
+    "productContext": "상품명: 오버핏 코튼 셔츠\n설명: 면 100%, 옵션 S/M/L\n가격 정보: 39,900원",
+    "keywords": ["원단 도톰함", "어깨 여유 있음", "세탁 후 줄어듦"],
+    "forbidden": ["키", "몸무게", "배송"]
+  },
+  {
+    "id": "fashion-1-short",
+    "category": "product", "subcategory": "fashion", "rating": 1, "length": "short", "tone": "neutral",
+    "keywords": ["봉제 불량", "색상 사진과 다름"],
+    "forbidden": ["환불", "교환", "배송"]
+  },
+  {
+    "id": "electronics-5-xlong-context",
+    "category": "product", "subcategory": "electronics", "rating": 5, "length": "xlong", "tone": "formal",
+    "productContext": "상품명: 무선 기계식 키보드 K8\n브랜드: Keychron\n설명: 블루투스 5.1, 갈축\n가격 정보: 119,000원",
+    "keywords": ["저소음 키감", "멀티페어링 편함", "배터리 오래감"],
+    "forbidden": ["배송", "시간 사용", "mAh"]
+  },
+  {
+    "id": "electronics-3-long",
+    "category": "product", "subcategory": "electronics", "rating": 3, "length": "long", "tone": "neutral",
+    "keywords": ["화질 선명함", "발열 있음", "스피커 작음"],
+    "forbidden": ["배송", "인치", "해상도", "가격"]
+  },
+  {
+    "id": "daily-4-medium",
+    "category": "product", "subcategory": "daily", "rating": 4, "length": "medium", "tone": "casual",
+    "keywords": ["흡수력 좋음", "도톰한 두께"],
+    "forbidden": ["배송", "가격", "매수"]
+  },
+  {
+    "id": "food-5-medium-context",
+    "category": "product", "subcategory": "food", "rating": 5, "length": "medium", "tone": "friendly",
+    "productContext": "상품명: 국내산 냉동 블루베리 1kg\n가격 정보: 14,900원",
+    "keywords": ["알이 큼", "새콤달콤함", "소분 보관 편함"],
+    "forbidden": ["배송", "유통기한", "항산화", "눈 건강"]
+  },
+  {
+    "id": "food-2-short",
+    "category": "product", "subcategory": "food", "rating": 2, "length": "short", "tone": "neutral",
+    "keywords": ["너무 짬", "양 적음"],
+    "forbidden": ["배송", "유통기한", "가격"]
+  },
+  {
+    "id": "general-product-3-long",
+    "category": "product", "subcategory": "general-product", "rating": 3, "length": "long", "tone": "neutral",
+    "keywords": ["조립 쉬움", "흔들림 있음", "마감 거침"],
+    "forbidden": ["배송", "가격", "내구성 보증"]
+  }
+]

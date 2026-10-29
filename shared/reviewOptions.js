@@ -24,6 +24,13 @@ export const REVIEW_LENGTH_OPTIONS = [
     promptLabel: '90자 이상으로 자세하게',
     minChars: 90,
   },
+  {
+    value: 'xlong',
+    label: '아주 길게',
+    controlLabel: '아주 길게 (최소 200자)',
+    promptLabel: '200자 이상으로 상세하게',
+    minChars: 200,
+  },
 ]
 
 export const REVIEW_TONE_OPTIONS = [
@@ -78,7 +85,7 @@ export function getReviewMinChars(value) {
 export function isSparseLongReview(length, keywordCount) {
   const count = Number(keywordCount)
   return (
-    normalizeReviewLength(length) === 'long' &&
+    ['long', 'xlong'].includes(normalizeReviewLength(length)) &&
     Number.isFinite(count) &&
     count > 0 &&
     count < SPARSE_LONG_REVIEW_KEYWORD_MIN

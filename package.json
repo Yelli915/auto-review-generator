@@ -17,7 +17,8 @@
     "build": "vite build",
     "lint": "eslint .",
     "test": "node --test",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "eval": "node --env-file-if-exists=.env.local eval/run.js"
   },
   "repository": {
     "type": "git",
