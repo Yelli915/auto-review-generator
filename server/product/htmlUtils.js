@@ -35,38 +35,33 @@ export function parseAttributes(attrText) {
   return attrs
 }
 
-export function extractMetaContent(html, selector) {
+// <meta>를 한 번만 훑어 property/name(소문자) → content 맵을 만듭니다. 같은 키는 처음 값을 씁니다.
+export function readMetaTags(html) {
+  const meta = new Map()
   const metaRe = /<meta\b([^>]*)>/gi
   let match
   while ((match = metaRe.exec(html)) !== null) {
     const attrs = parseAttributes(match[1] || '')
-    const key = attrs.property || attrs.name
-    if (key?.toLowerCase() === selector.toLowerCase() && attrs.content) {
-      return decodeHtmlEntities(attrs.content)
+    const key = (attrs.property || attrs.name)?.toLowerCase()
+    if (key && attrs.content && !meta.has(key)) {
+      meta.set(key, decodeHtmlEntities(attrs.content))
     }
   }
-  return ''
+  return meta
 }
 
-export function extractTitle(html) {
-  const ogTitle = extractMetaContent(html, 'og:title')
+export function extractTitle(html, meta = readMetaTags(html)) {
+  const ogTitle = meta.get('og:title')
   if (ogTitle) return ogTitle
   const title = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1]
   return decodeHtmlEntities(title || '')
 }
 
-export function sliceBalancedSegment(text, { startIndex, openCh, closeCh } = {}) {
-  if (typeof text !== 'string') return ''
-
-  const start = Number.isInteger(startIndex)
-    ? startIndex
-    : text.indexOf(openCh)
-  if (start < 0 || start >= text.length) return ''
-
-  const opening = openCh || text[start]
-  const closing =
-    closeCh || (opening === '{' ? '}' : opening === '[' ? ']' : '')
-  if (!opening || !closing || text[start] !== opening) return ''
+// start 위치의 { 또는 [ 부터 짝이 맞는 닫는 괄호까지 잘라 냅니다. 문자열 안의 괄호는 무시합니다.
+export function sliceBalancedSegment(text, start) {
+  const opening = text[start]
+  const closing = opening === '{' ? '}' : opening === '[' ? ']' : ''
+  if (!closing) return ''
 
   let depth = 0
   let inString = false
@@ -100,4 +95,12 @@ export function sliceBalancedSegment(text, { startIndex, openCh, closeCh } = {})
   }
 
   return ''
+}
+
+export function tryParseJson(text) {
+  try {
+    return JSON.parse(text)
+  } catch {
+    return undefined
+  }
 }

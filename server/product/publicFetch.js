@@ -7,7 +7,7 @@ import {
 } from './config.js'
 
 // 연결할 때마다 주소를 다시 검사하는 dispatcher. 리다이렉트도 모두 이 연결을 거칩니다.
-const PUBLIC_ONLY_DISPATCHER = new Agent({ connect: { lookup: lookupPublicAddress } })
+export const PUBLIC_ONLY_DISPATCHER = new Agent({ connect: { lookup: lookupPublicAddress } })
 const MAX_PUBLIC_FETCH_REDIRECTS = 5
 const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308])
 const REDIRECT_BLOCKED_ERROR =
@@ -23,9 +23,11 @@ function buildRedirectUrl(location, baseUrl) {
   }
 }
 
+// 주소 검사는 연결 직전 dispatcher(lookupPublicAddress)가 하므로 여기서 DNS를 따로 조회하지 않습니다.
 async function validateProductFetchUrl(url, maxLength = MAX_PRODUCT_URL_LENGTH) {
   return validatePublicHttpUrl(url, {
     maxLength,
+    resolveDns: false,
   })
 }
 
@@ -67,6 +69,8 @@ export async function fetchPublicUrl(url, options = {}) {
       return { ok: true, response, url: validated.url }
     }
 
+    // 읽지 않은 본문이 소켓을 붙잡지 않도록 버립니다.
+    await response.body?.cancel()
     const location = response.headers.get('location') || ''
     const nextUrl = buildRedirectUrl(location, validated.url)
     if (!nextUrl) {
@@ -89,6 +93,7 @@ export async function readResponseTextLimited(response) {
     if (done) break
     total += value.byteLength
     if (total > MAX_PRODUCT_PAGE_BYTES) {
+      await reader.cancel()
       throw new Error('상품 페이지가 너무 큽니다.')
     }
     chunks.push(value)

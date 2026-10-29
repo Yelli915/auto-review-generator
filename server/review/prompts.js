@@ -8,6 +8,7 @@ import {
   getReviewLengthPrompt,
   isSparseLongReview,
   normalizeReviewLength,
+  normalizeReviewRating,
   normalizeReviewTone,
 } from '../../shared/reviewOptions.js'
 import { isLikelyKeywordPhrase } from '../../shared/keywordPhrase.js'
@@ -242,6 +243,7 @@ export function buildReviewPrompt({
   previousReview = '',
   rewriteInstruction = '',
 }) {
+  const safeRating = normalizeReviewRating(rating)
   const safeKeywords = normalizeKeywordPhrases(keywords)
   const safeLength = normalizeReviewLength(length)
   const safeTone = normalizeReviewTone(tone)
@@ -269,7 +271,7 @@ export function buildReviewPrompt({
       rewriteBlock,
       '입력값:',
       `- selectedKeywords: ${safeKeywords.join(', ')}`,
-      `- 별점: ${rating}점`,
+      `- 별점: ${safeRating}점`,
       `- 길이: ${getReviewLengthPrompt(safeLength)}`,
       `- 톤: ${REVIEW_TONE_PROMPT_MAP[safeTone]}`,
       '작성 기준:',

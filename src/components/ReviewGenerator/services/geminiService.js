@@ -7,9 +7,9 @@ import {
   normalizeReviewLength,
   normalizeReviewTone,
 } from '#shared/reviewOptions'
+import { readLines } from '#shared/streamLines'
 
 const API_PATH = '/api/gemini'
-
 
 export function createReviewStreamAccumulator(onChunk) {
   const safeOnChunk = typeof onChunk === 'function' ? onChunk : () => {}
@@ -19,9 +19,6 @@ export function createReviewStreamAccumulator(onChunk) {
   return {
     getError() {
       return streamError
-    },
-    getText() {
-      return fullText
     },
     appendLine(line) {
       const payload = line.trim()
@@ -127,7 +124,6 @@ export async function analyzeProductUrl(productUrl) {
 
 export async function generateKeywords({
   images,
-  productUrl,
   productContext,
   rating,
   category,
@@ -142,10 +138,9 @@ export async function generateKeywords({
           mimeType: image.mimeType || 'image/jpeg',
         }))
     : []
-  const safeProductUrl = normalizeString(productUrl)
   const safeProductContext = normalizeString(productContext)
 
-  if (!safeImages.length && !safeProductUrl && !safeProductContext) {
+  if (!safeImages.length && !safeProductContext) {
     return { ok: false, error: '이미지나 상품 링크를 1개 이상 선택해 주세요.' }
   }
 
@@ -153,7 +148,6 @@ export async function generateKeywords({
   return callApi({
     action: 'keywords',
     images: safeImages,
-    productUrl: safeProductUrl,
     productContext: safeProductContext,
     rating,
     category,
@@ -206,33 +200,16 @@ export async function generateReview({
 
   if (!response.ok) {
     const error = await readJsonSafely(response)
-    throw new Error(pickErrorMessage(error, '리뷰 생성 실패') || '리뷰 생성 실패')
+    throw new Error(pickErrorMessage(error, '리뷰 생성 실패'))
   }
 
   if (!response.body) {
     throw new Error('스트리밍 응답을 읽을 수 없습니다.')
   }
 
-  const reader = response.body.getReader()
-  const decoder = new TextDecoder()
   const stream = createReviewStreamAccumulator(onChunk)
-  let buffer = ''
-
-  while (true) {
-    const { done, value } = await reader.read()
-    if (done) break
-
-    buffer += decoder.decode(value, { stream: true })
-    const lines = buffer.split('\n')
-    buffer = lines.pop() || ''
-
-    for (const line of lines) {
-      stream.appendLine(line)
-    }
-  }
-
-  if (buffer.trim()) {
-    stream.appendLine(buffer)
+  for await (const line of readLines(response.body)) {
+    stream.appendLine(line)
   }
 
   // 잘림·최소 글자수 검사는 서버(reviewStreaming)가 하고, 실패하면 스트림에 error로 보냅니다.

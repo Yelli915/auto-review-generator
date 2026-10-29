@@ -24,10 +24,6 @@ function parseAllowOrigins() {
   return list.length ? new Set(list) : null
 }
 
-function hasConfiguredAllowOrigins() {
-  return parseAllowOrigins() !== null
-}
-
 function isTrustedOrigin(req) {
   const origin = normalizeOrigin(req.headers?.origin)
   if (!origin) return false
@@ -65,21 +61,21 @@ async function verifyGoogleToken(idToken, audience) {
     })
     const payload = ticket.getPayload()
     if (!payload?.sub) {
-      return { ok: false, status: 401, error: 'Invalid login token.' }
+      return { ok: false, status: 401, error: '로그인 정보가 올바르지 않습니다. 다시 로그인해 주세요.' }
     }
     return { ok: true, userId: payload.sub }
   } catch {
     return {
       ok: false,
       status: 401,
-      error: 'Login expired or token is invalid.',
+      error: '로그인이 만료되었거나 올바르지 않습니다. 다시 로그인해 주세요.',
     }
   }
 }
 
 function rejectUntrustedProductionOrigin(req) {
   if (process.env.NODE_ENV !== 'production' || isTrustedOrigin(req)) return null
-  return { ok: false, status: 403, error: 'Origin is not allowed.' }
+  return { ok: false, status: 403, error: '허용되지 않은 출처의 요청입니다.' }
 }
 
 function rejectMissingProductionConfig(googleClientId, appAuthToken) {
@@ -88,14 +84,14 @@ function rejectMissingProductionConfig(googleClientId, appAuthToken) {
     return {
       ok: false,
       status: 500,
-      error: 'Server configuration error: GOOGLE_CLIENT_ID is required.',
+      error: '서버 설정 오류: GOOGLE_CLIENT_ID가 필요합니다.',
     }
   }
-  if (!hasConfiguredAllowOrigins()) {
+  if (!parseAllowOrigins()) {
     return {
       ok: false,
       status: 500,
-      error: 'Server configuration error: ALLOWED_ORIGINS is required.',
+      error: '서버 설정 오류: ALLOWED_ORIGINS가 필요합니다.',
     }
   }
   return null
@@ -110,26 +106,24 @@ export async function authorizeRequest(req) {
   )
   if (missingProductionConfig) return missingProductionConfig
 
-  const bearer = getBearerToken(req)
-  if (googleClientId && bearer) {
-    const verified = await verifyGoogleToken(bearer, googleClientId)
-    if (!verified.ok) return verified
-    const untrustedOrigin = rejectUntrustedProductionOrigin(req)
-    if (untrustedOrigin) return untrustedOrigin
-    return { ok: true, userId: verified.userId }
-  }
+  // 누구인지 먼저 확인하고, 출처 검사는 모든 경로에서 한 번만 합니다.
+  const identity = await identifyRequest(req, googleClientId, appAuthToken)
+  if (!identity.ok) return identity
+  return rejectUntrustedProductionOrigin(req) ?? identity
+}
 
+// Google 로그인 토큰이 있으면 우선 쓰고, 없으면 앱 토큰을 확인합니다. 둘 다 설정되지 않았으면(개발 환경) 익명으로 통과합니다.
+async function identifyRequest(req, googleClientId, appAuthToken) {
+  const bearer = getBearerToken(req)
+  if (googleClientId && bearer) return verifyGoogleToken(bearer, googleClientId)
   if (appAuthToken) {
-    const headerToken = req.headers?.['x-api-auth-token']
-    if (!isSameToken(headerToken, appAuthToken)) {
-      return { ok: false, status: 401, error: 'Request is not authenticated.' }
-    }
+    return isSameToken(req.headers?.['x-api-auth-token'], appAuthToken)
+      ? { ok: true, userId: null }
+      : { ok: false, status: 401, error: '인증되지 않은 요청입니다.' }
   }
-  if (googleClientId && !appAuthToken) {
-    return { ok: false, status: 401, error: 'Google login is required.' }
+  if (googleClientId) {
+    return { ok: false, status: 401, error: 'Google 로그인이 필요합니다.' }
   }
-  const untrustedOrigin = rejectUntrustedProductionOrigin(req)
-  if (untrustedOrigin) return untrustedOrigin
   return { ok: true, userId: null }
 }
 

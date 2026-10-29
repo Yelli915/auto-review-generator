@@ -79,7 +79,7 @@ export function normalizeOptionGroups(optionGroups) {
   return Array.isArray(optionGroups) ? optionGroups : []
 }
 
-export function normalizeProductInfo(product, fallbackUrl = '') {
+function normalizeProductInfo(product, fallbackUrl = '') {
   const source = product && typeof product === 'object' ? product : {}
   return {
     name: source.name || '',
@@ -123,4 +123,45 @@ export function canContinueWithProductInfo({
     (!requiresManualProductInfo || hasConfirmedProductInfo(product)) &&
     hasValidOptionSelections(normalizeOptionGroups(optionGroups), selections)
   )
+}
+
+// -- 키워드 선택: 이전 상태(keywords·customKeywords·selectedKeywords)를 받아 바꿀 필드만 돌려줍니다. --
+
+// 이어서 고를 선택이 남아 있지 않으면(처음 만들 때 등) 전부 골라 둬서 바로 리뷰를 만들 수 있게 합니다.
+export function withNewKeywords(prev, nextKeywords) {
+  const kept = prev.selectedKeywords.filter(
+    (k) => nextKeywords.includes(k) || prev.customKeywords.includes(k),
+  )
+  return {
+    keywords: nextKeywords,
+    selectedKeywords: kept.length ? kept : [...new Set([...nextKeywords, ...prev.customKeywords])],
+  }
+}
+
+export function withToggledKeyword(prev, keyword) {
+  const selected = prev.selectedKeywords
+  return {
+    selectedKeywords: selected.includes(keyword)
+      ? selected.filter((k) => k !== keyword)
+      : [...selected, keyword],
+  }
+}
+
+export function withAllKeywordsToggled(prev) {
+  const all = [...new Set([...prev.keywords, ...prev.customKeywords])]
+  return { selectedKeywords: prev.selectedKeywords.length === all.length ? [] : all }
+}
+
+export function withCustomKeyword(prev, keyword) {
+  return {
+    customKeywords: [...prev.customKeywords, keyword],
+    selectedKeywords: [...new Set([...prev.selectedKeywords, keyword])],
+  }
+}
+
+export function withoutCustomKeyword(prev, keyword) {
+  return {
+    customKeywords: prev.customKeywords.filter((k) => k !== keyword),
+    selectedKeywords: prev.selectedKeywords.filter((k) => k !== keyword),
+  }
 }

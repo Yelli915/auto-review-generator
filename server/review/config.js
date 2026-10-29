@@ -20,6 +20,8 @@ export const ALLOWED_IMAGE_MIME_TYPES = new Set([
 export const KEYWORDS_MIN_COUNT = 3
 export const KEYWORDS_MAX_COUNT = 8
 export const KEYWORD_RETRY_LIMIT = 3
+// vercel.json maxDuration(60s)보다 여유 있게 짧아야 합니다.
+export const KEYWORDS_DEADLINE_MS = 50000
 
 const GENERIC_BAN_PHRASES_PLACE = [
   '분위기 좋음',

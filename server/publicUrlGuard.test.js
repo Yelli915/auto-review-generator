@@ -14,8 +14,8 @@ test('isBlockedIpAddress blocks IPv6 forms that can wrap internal IPv4', () => {
     assert.equal(isBlockedIpAddress(ip), true, ip)
   }
   assert.equal(isBlockedIpAddress('::ffff:8.8.8.8'), false)
-  // 공인 IPv4(8.8.8.8)를 감싼 6to4는 허용합니다.
-  assert.equal(isBlockedIpAddress('2002:808:808::1'), false)
+  // 6to4는 폐기된 대역이라 공인 IPv4를 감싸도 막습니다.
+  assert.equal(isBlockedIpAddress('2002:808:808::1'), true)
   assert.equal(isBlockedIpAddress('2606:4700:4700::1111'), false)
 })
 

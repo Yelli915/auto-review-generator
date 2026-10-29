@@ -4,23 +4,19 @@ import {
   PRODUCT_FIELD_KEYS,
   PRODUCT_KEYWORDS_RE,
 } from './config.js'
-import { decodeHtmlEntities, parseAttributes } from './htmlUtils.js'
+import { decodeHtmlEntities, sliceBalancedSegment, tryParseJson } from './htmlUtils.js'
 import {
   buildProductInfo,
   firstImageValue,
   firstValueByKeys,
   normalizeImageUrl,
 } from './productInfo.js'
-import { sliceBalancedSegment } from './htmlUtils.js'
 
-function collectScriptPayloads(html) {
+function collectScriptPayloads(scripts) {
   const payloads = []
-  const scriptRe = /<script\b([^>]*)>([\s\S]*?)<\/script>/gi
-  let match
-  while ((match = scriptRe.exec(html)) !== null) {
-    const attrs = parseAttributes(match[1] || '')
+  for (const { attrs, body: rawBody } of scripts) {
     if ('src' in attrs) continue
-    const body = decodeHtmlEntities(match[2] || '').trim()
+    const body = decodeHtmlEntities(rawBody).trim()
     if (!body) continue
     const type = String(attrs.type || '').toLowerCase()
     const id = String(attrs.id || '')
@@ -38,7 +34,7 @@ function collectScriptPayloads(html) {
       const start = body.slice(assignment.index + assignment[0].length).search(/[[{]/)
       if (start < 0) continue
       const jsonStart = assignment.index + assignment[0].length + start
-      const jsonLike = sliceBalancedSegment(body, { startIndex: jsonStart })
+      const jsonLike = sliceBalancedSegment(body, jsonStart)
       if (jsonLike) payloads.push(jsonLike)
     }
   }
@@ -50,14 +46,8 @@ function parseEmbeddedJsonPayload(payload) {
   const trimmed = payload.trim()
   const start = trimmed.search(/[[{]/)
   if (start < 0) return null
-  const jsonLike = sliceBalancedSegment(trimmed, { startIndex: start })
-  if (!jsonLike) return null
-
-  try {
-    return JSON.parse(jsonLike)
-  } catch {
-    return null
-  }
+  const jsonLike = sliceBalancedSegment(trimmed, start)
+  return jsonLike ? tryParseJson(jsonLike) ?? null : null
 }
 
 function scoreProductCandidate(product, keyPath = '') {
@@ -74,12 +64,14 @@ function scoreProductCandidate(product, keyPath = '') {
 function productInfoFromObject(value, pageUrl) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null
 
-  const imageRaw =
-    firstImageValue(firstValueByKeys(value, PRODUCT_FIELD_KEYS.imageUrl)) ||
-    firstImageValue(value.image) ||
-    firstImageValue(value.images) ||
-    firstImageValue(value.imageList) ||
-    firstImageValue(value.goodsImages)
+  // 배열을 받으면 앞에서부터 처음 찾은 이미지를 씁니다.
+  const imageRaw = firstImageValue([
+    firstValueByKeys(value, PRODUCT_FIELD_KEYS.imageUrl),
+    value.image,
+    value.images,
+    value.imageList,
+    value.goodsImages,
+  ])
   const brandRaw =
     firstValueByKeys(value, PRODUCT_FIELD_KEYS.brand) ||
     firstValueByKeys(value.brand, ['name', 'brandName', 'brandNm'])
@@ -118,9 +110,9 @@ function findBestEmbeddedProduct(value, pageUrl, keyPath = '', state = { best: n
   return state.best
 }
 
-export function extractEmbeddedProductData(html, pageUrl) {
+export function extractEmbeddedProductData(scripts, pageUrl) {
   let best = null
-  for (const payload of collectScriptPayloads(html)) {
+  for (const payload of collectScriptPayloads(scripts)) {
     const parsed = parseEmbeddedJsonPayload(payload)
     if (!parsed) continue
     const candidate = findBestEmbeddedProduct(parsed, pageUrl)

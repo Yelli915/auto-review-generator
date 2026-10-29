@@ -10,11 +10,11 @@ import {
   CONTAINER_REVIEW_EXCEPTION_RE,
   COSMETIC_CONTEXT_RE,
   KEYWORD_RETRY_LIMIT,
+  KEYWORDS_DEADLINE_MS,
   KEYWORDS_MAX_COUNT,
   KEYWORDS_MIN_COUNT,
 } from './config.js'
 import { normalizeReviewRating } from '../../shared/reviewOptions.js'
-import { fetchProductAnalysis } from '../product/fetchProductAnalysis.js'
 import { buildKeywordPrompt } from './prompts.js'
 import { DEBUG_LOGS } from '../config.js'
 import { buildImageParts, validateImagesInput } from './imageInput.js'
@@ -38,7 +38,7 @@ export function sanitizeKeywordArray(arr) {
   return cleaned.length ? Array.from(new Set(cleaned)) : null
 }
 
-export function normalizeKeywordSet(keywords) {
+function normalizeKeywordSet(keywords) {
   const normalized = Array.isArray(keywords)
     ? keywords.map(normalizeKeywordText).filter(Boolean)
     : []
@@ -75,37 +75,21 @@ export function appendKeywordRetryGuidance(prompt, rejectedSets) {
   )
 }
 
-function isProductCategory(category) {
-  return String(category || '').trim() === 'product'
-}
-
-function shouldFilterCosmeticContainerKeywords({
-  category,
-  productContext,
-  keywords,
-}) {
-  if (!isProductCategory(category)) return false
-  if (typeof productContext === 'string' && COSMETIC_CONTEXT_RE.test(productContext)) {
-    return true
-  }
-  if (Array.isArray(keywords) && keywords.some((keyword) => COSMETIC_CONTEXT_RE.test(keyword))) {
-    return true
-  }
-  return false
-}
-
 export function isCosmeticContainerOnlyKeyword(keyword) {
   if (typeof keyword !== 'string') return false
   if (!CONTAINER_CENTERED_KEYWORD_RE.test(keyword)) return false
   return !CONTAINER_REVIEW_EXCEPTION_RE.test(keyword)
 }
 
-export function filterCosmeticContainerKeywords(keywords, options = {}) {
+export function filterCosmeticContainerKeywords(keywords, { category, productContext } = {}) {
   const normalized = normalizeKeywordSet(keywords)
   if (!normalized.length) return { keywords: null, removed: [] }
-  if (!shouldFilterCosmeticContainerKeywords({ ...options, keywords: normalized })) {
-    return { keywords: normalized, removed: [] }
-  }
+  // 화장품 상품일 때만 용기·패키지 중심 키워드를 거릅니다.
+  const isCosmeticProduct =
+    String(category || '').trim() === 'product' &&
+    ((typeof productContext === 'string' && COSMETIC_CONTEXT_RE.test(productContext)) ||
+      normalized.some((keyword) => COSMETIC_CONTEXT_RE.test(keyword)))
+  if (!isCosmeticProduct) return { keywords: normalized, removed: [] }
 
   const filtered = []
   const removed = []
@@ -122,7 +106,7 @@ export function filterCosmeticContainerKeywords(keywords, options = {}) {
   }
 }
 
-export function appendContainerKeywordRetryGuidance(prompt, removedKeywords) {
+function appendContainerKeywordRetryGuidance(prompt, removedKeywords) {
   const removed = normalizeKeywordSet(removedKeywords)
   if (!removed.length) return prompt
   return (
@@ -157,7 +141,7 @@ export function parseKeywordsFromText(text) {
   }
 }
 
-export function parseKeywordsFromAny(data) {
+function parseKeywordsFromAny(data) {
   const text = gatherKeywordResponseText(data)
   const keywords = parseKeywordsFromText(text)
   if (!keywords) return { keywords: null, rawText: text }
@@ -167,7 +151,7 @@ export function parseKeywordsFromAny(data) {
   return { keywords: keywords.slice(0, KEYWORDS_MAX_COUNT), rawText: text }
 }
 
-export function summarizeKeywordDebug(data) {
+function summarizeKeywordDebug(data) {
   const candidates = Array.isArray(data?.candidates) ? data.candidates : []
   const first = candidates[0]
   return {
@@ -177,7 +161,7 @@ export function summarizeKeywordDebug(data) {
   }
 }
 
-export function describeKeywordGeminiIssue(data, extractedText) {
+function describeKeywordGeminiIssue(data, extractedText) {
   const blockReason = data?.promptFeedback?.blockReason
   if (blockReason) {
     return '입력이 안전 정책으로 인해 차단되었습니다. 다른 이미지로 시도해 주세요.'
@@ -212,24 +196,21 @@ export function describeKeywordGeminiIssue(data, extractedText) {
   return null
 }
 
+const KEYWORD_PARSE_ERROR = '키워드 형식을 읽을 수 없습니다. 키워드를 다시 생성해 주세요.'
+const DUPLICATE_KEYWORDS_ERROR = '이전과 같은 키워드만 반복 생성되었습니다. 다시 시도해 주세요.'
+const CONTAINER_ONLY_KEYWORDS_ERROR =
+  '용기나 패키지 중심 키워드만 생성되었습니다. 내용물의 제형, 색감, 향, 발림성, 흡수감 중심으로 다시 생성해 주세요.'
+
+function tooFewKeywordsError(count) {
+  return `키워드가 ${count}개뿐입니다. 최소 ${KEYWORDS_MIN_COUNT}개, 권장 4~8개가 필요합니다. 다시 생성해 주세요.`
+}
+
 export async function generateKeywordResult({ body, key }) {
   const rating = normalizeReviewRating(body.rating)
-  const productUrl =
-    typeof body.productUrl === 'string' ? body.productUrl.trim() : ''
-  let productContext =
+  // 상품 링크는 화면이 analyze-product로 먼저 분석해 productContext로 보냅니다.
+  const productContext =
     typeof body.productContext === 'string' ? body.productContext.trim() : ''
   let imageInput = null
-
-  if (!productContext && productUrl) {
-    const productResult = await fetchProductAnalysis(productUrl)
-    if (!productResult.ok) {
-      return {
-        status: productResult.status,
-        body: { ok: false, error: productResult.error },
-      }
-    }
-    productContext = productResult.productContext
-  }
 
   if (!productContext) {
     imageInput = validateImagesInput(body.images)
@@ -268,126 +249,66 @@ export async function generateKeywordResult({ body, key }) {
 
   const rejectedKeywordSets = previousKeywords.length ? [previousKeywords] : []
   const removedContainerKeywords = []
-  let result = null
-  let parsed = null
-  let sawDuplicate = false
-  let sawContainerOnlyKeyword = false
+  // 시도마다 실패 이유를 덮어써서, 끝까지 실패하면 마지막 이유를 알려 줍니다.
+  let failure = ''
+  // 재시도 전체가 하나의 제한 시간을 나눠 써서 함수 최대 실행 시간 전에 끝냅니다.
+  const signal = AbortSignal.timeout(KEYWORDS_DEADLINE_MS)
 
   for (let attempt = 0; attempt < KEYWORD_RETRY_LIMIT; attempt += 1) {
-    const duplicateAwarePrompt =
-      attempt === 0
-        ? prompt
-        : appendKeywordRetryGuidance(prompt, rejectedKeywordSets)
     const promptForAttempt = appendContainerKeywordRetryGuidance(
-      duplicateAwarePrompt,
+      attempt === 0 ? prompt : appendKeywordRetryGuidance(prompt, rejectedKeywordSets),
       removedContainerKeywords,
     )
-
-    result = await requestGemini({
+    const result = await requestGemini({
       key,
       payload: buildKeywordPayload(promptForAttempt),
+      signal,
     })
     if (!result.ok) {
       return { status: toClientErrorStatus(result.status), body: result }
     }
 
-    parsed = parseKeywordsFromAny(result.data)
-    // parseKeywordsFromAny가 최소 개수 미만이면 keywords를 null로 돌려줍니다.
-    if (!parsed.keywords) break
+    const parsed = parseKeywordsFromAny(result.data)
+    if (!parsed.keywords) {
+      // 형식이 깨지거나 차단된 응답은 다시 물어도 비슷하므로 바로 멈춥니다.
+      failure = parsed.tooFew
+        ? tooFewKeywordsError(parsed.partial.length)
+        : describeKeywordGeminiIssue(result.data, parsed.rawText) ?? KEYWORD_PARSE_ERROR
+      if (DEBUG_LOGS) {
+        console.warn('[gemini keywords] parse failed', {
+          failure,
+          ...summarizeKeywordDebug(result.data),
+        })
+      }
+      break
+    }
 
-    const filtered = filterCosmeticContainerKeywords(parsed.keywords, {
+    let keywords = parsed.keywords
+    const filtered = filterCosmeticContainerKeywords(keywords, {
       category: body.category,
       productContext,
     })
     if (filtered.removed.length) {
-      sawContainerOnlyKeyword = true
       removedContainerKeywords.push(...filtered.removed)
-      rejectedKeywordSets.push(parsed.keywords)
-      if (!filtered.keywords || filtered.keywords.length < KEYWORDS_MIN_COUNT) {
-        parsed = {
-          ...parsed,
-          keywords: null,
-          tooFew: true,
-          partial: filtered.keywords || [],
-        }
+      rejectedKeywordSets.push(keywords)
+      keywords = filtered.keywords || []
+      if (keywords.length < KEYWORDS_MIN_COUNT) {
+        failure = CONTAINER_ONLY_KEYWORDS_ERROR
         continue
       }
-      parsed = {
-        ...parsed,
-        keywords: filtered.keywords,
-      }
     }
 
-    const isDuplicate = rejectedKeywordSets.some((set) =>
-      isSameKeywordSet(parsed.keywords, set),
-    )
-    if (!isDuplicate) {
-      return {
-        status: 200,
-        body: {
-          ok: true,
-          keywords: parsed.keywords,
-          model: result.model,
-        },
-      }
+    if (rejectedKeywordSets.some((set) => isSameKeywordSet(keywords, set))) {
+      rejectedKeywordSets.push(keywords)
+      failure = DUPLICATE_KEYWORDS_ERROR
+      continue
     }
-    rejectedKeywordSets.push(parsed.keywords)
-    sawDuplicate = true
-    parsed = null
-  }
 
-  if (parsed?.tooFew) {
-    const n = parsed.partial?.length ?? 0
-    if (DEBUG_LOGS) {
-      console.warn('[gemini keywords] too few after filter', {
-        count: n,
-        ...summarizeKeywordDebug(result.data),
-      })
-    }
     return {
-      status: 502,
-      body: {
-        ok: false,
-        error: `키워드가 ${n}개뿐입니다. 최소 ${KEYWORDS_MIN_COUNT}개, 권장 4~8개가 필요합니다. 다시 생성해 주세요.`,
-      },
+      status: 200,
+      body: { ok: true, keywords, model: result.model },
     }
   }
 
-  if (sawDuplicate) {
-    return {
-      status: 502,
-      body: {
-        ok: false,
-        error: '이전과 같은 키워드만 반복 생성되었습니다. 다시 시도해 주세요.',
-      },
-    }
-  }
-
-  if (sawContainerOnlyKeyword) {
-    return {
-      status: 502,
-      body: {
-        ok: false,
-        error:
-          '용기나 패키지 중심 키워드만 생성되었습니다. 내용물의 제형, 색감, 향, 발림성, 흡수감 중심으로 다시 생성해 주세요.',
-      },
-    }
-  }
-
-  const apiIssue = describeKeywordGeminiIssue(result.data, parsed?.rawText)
-  if (DEBUG_LOGS) {
-    console.warn('[gemini keywords] parse failed', {
-      apiIssue,
-      ...summarizeKeywordDebug(result.data),
-    })
-  }
-  return {
-    status: 502,
-    body: {
-      ok: false,
-      error:
-        apiIssue ??
-        '키워드 형식을 읽을 수 없습니다. 키워드를 다시 생성해 주세요.',
-    },
-  }
+  return { status: 502, body: { ok: false, error: failure } }
 }

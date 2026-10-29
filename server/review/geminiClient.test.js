@@ -4,7 +4,9 @@ import {
   buildKeywordGenerationConfig,
   buildReviewGenerationConfig,
   humanizeGeminiApiError,
+  requestGemini,
 } from './geminiClient.js'
+import { withFetchCalls } from '../testUtils.js'
 
 test('buildKeywordGenerationConfig reserves output for short JSON responses', () => {
   const config = buildKeywordGenerationConfig()
@@ -44,4 +46,24 @@ test('humanizeGeminiApiError returns retry guidance for transient upstream failu
 
   assert.match(message, /Gemini API/)
   assert.doesNotMatch(message, /HTTP 500/)
+})
+
+test('requestGemini stops retrying once the deadline signal aborts', async () => {
+  await withFetchCalls(
+    async (_url, options) => {
+      options.signal.throwIfAborted()
+      throw new Error('unreachable')
+    },
+    async (calls) => {
+      const result = await requestGemini({
+        key: 'test-key',
+        payload: {},
+        signal: AbortSignal.abort(),
+      })
+
+      assert.equal(result.ok, false)
+      assert.match(result.error, /시간이 초과/)
+      assert.equal(calls.length, 1)
+    },
+  )
 })
