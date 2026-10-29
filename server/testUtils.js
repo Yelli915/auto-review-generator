@@ -30,9 +30,9 @@ export function createMockResponse() {
   }
 }
 
-// 로그인 설정 없이 Gemini 키만 있는 기본 테스트 환경입니다.
+// Gemini 키만 있는 기본 테스트 환경입니다.
 export function withTestEnv(fn) {
-  return withEnv({ GEMINI_API_KEY: 'test-key', GOOGLE_CLIENT_ID: null, API_AUTH_TOKEN: null }, fn)
+  return withEnv({ GEMINI_API_KEY: 'test-key' }, fn)
 }
 
 export function withEnv(updates, fn) {

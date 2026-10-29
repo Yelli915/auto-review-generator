@@ -75,7 +75,7 @@ export function clearDraft() {
   }
 }
 
-// 남은 리뷰 횟수는 새로고침·다른 탭에서도 보이도록 계정·초기화 시각과 함께 localStorage에 둡니다.
+// 남은 리뷰 횟수는 새로고침·다른 탭에서도 보이도록 초기화 시각과 함께 localStorage에 둡니다.
 const REVIEW_USAGE_KEY = 'auto-review-generator:review-usage'
 
 export function loadReviewUsage() {

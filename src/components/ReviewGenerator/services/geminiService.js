@@ -48,52 +48,16 @@ export function createReviewStreamAccumulator(onChunk) {
   }
 }
 
-let googleIdToken = ''
-let onUnauthorized = null
-
 function normalizeString(value) {
   return typeof value === 'string' ? value.trim() : ''
 }
 
-export function setGoogleIdToken(token) {
-  googleIdToken = normalizeString(token)
-}
-
-export function hasGoogleIdToken() {
-  return Boolean(googleIdToken)
-}
-
-// Google ID 토큰(JWT)의 클레임을 읽습니다. 표시·구분용이며 검증은 서버가 합니다.
-export function readGoogleIdTokenClaims(token) {
-  try {
-    const payload = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')
-    const bytes = Uint8Array.from(atob(payload), (c) => c.charCodeAt(0))
-    return JSON.parse(new TextDecoder().decode(bytes))
-  } catch {
-    return null
-  }
-}
-
-export function getGoogleAccountId() {
-  return readGoogleIdTokenClaims(googleIdToken)?.sub || ''
-}
-
-export function setUnauthorizedHandler(handler) {
-  onUnauthorized = typeof handler === 'function' ? handler : null
-}
-
-function buildAuthHeaders() {
-  return googleIdToken ? { Authorization: `Bearer ${googleIdToken}` } : {}
-}
-
 async function post(payload) {
-  const response = await fetch(API_PATH, {
+  return fetch(API_PATH, {
     method: 'POST',
-    headers: createJsonHeaders(buildAuthHeaders()),
+    headers: createJsonHeaders(),
     body: JSON.stringify(payload),
   })
-  if (response.status === 401) onUnauthorized?.()
-  return response
 }
 
 async function callApi(payload) {

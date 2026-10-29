@@ -10,7 +10,6 @@ import {
   htmlResponse,
   jsonResponse,
   png1x1Base64,
-  withEnv,
   withTestEnv,
   withFetch,
   withFetchCalls,
@@ -114,7 +113,7 @@ test('handler does not fetch product pages for keyword requests', async () => {
 })
 
 test('handler analyzes product options from productUrl', async () => {
-  await withEnv({ API_AUTH_TOKEN: null }, () =>
+  await withTestEnv(() =>
     withFetch(
       async (url) => {
         if (String(url).startsWith('https://shop.example/product')) {
@@ -148,7 +147,7 @@ test('handler analyzes product options from productUrl', async () => {
 })
 
 test('handler analyzes metadata when meta attributes are not in a fixed order', async () => {
-  await withEnv({ API_AUTH_TOKEN: null }, () =>
+  await withTestEnv(() =>
     withFetch(
       async (url) => {
         if (String(url).startsWith('https://shop.example/product')) {
@@ -177,7 +176,7 @@ test('handler analyzes metadata when meta attributes are not in a fixed order', 
 })
 
 test('handler analyzes product JSON-LD metadata when page meta tags are missing', async () => {
-  await withEnv({ API_AUTH_TOKEN: null }, () =>
+  await withTestEnv(() =>
     withFetch(
       async (url) => {
         if (String(url).startsWith('https://shop.example/product')) {
@@ -219,7 +218,7 @@ test('handler analyzes product JSON-LD metadata when page meta tags are missing'
 })
 
 test('handler analyzes product data embedded for client-side rendering', async () => {
-  await withEnv({ API_AUTH_TOKEN: null }, () =>
+  await withTestEnv(() =>
     withFetch(
       async (url) => {
         if (String(url).startsWith('https://shop.example/product')) {
