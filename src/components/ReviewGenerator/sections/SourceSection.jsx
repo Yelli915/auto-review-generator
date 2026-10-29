@@ -1,8 +1,7 @@
-﻿import { useId, useRef } from 'react'
+import { useId, useRef, useState } from 'react'
 import { MAX_REVIEW_IMAGE_COUNT } from '#shared/reviewCategories'
 import ChoiceGroup from './ChoiceGroup'
 import ImagePreviewGrid from './ImagePreviewGrid'
-import StarRating from './StarRating'
 import { MAX_FILE_SIZE_MB } from '../utils/uploadImages'
 
 const RATING_LABELS = ['', '매우 불만족', '불만족', '보통', '만족', '매우 만족']
@@ -10,6 +9,39 @@ const INPUT_MODE_OPTIONS = [
   { value: 'link', label: '상품 링크' },
   { value: 'image', label: '사진' },
 ]
+
+function StarRating({ value, onChange, disabled, ratingLabels, labelledBy }) {
+  const [hovered, setHovered] = useState(null)
+  const display = hovered ?? value
+
+  return (
+    <div
+      className="star-rating"
+      role="group"
+      aria-label={labelledBy ? undefined : '별점 선택'}
+      aria-labelledby={labelledBy}
+      onMouseLeave={() => setHovered(null)}
+    >
+      {[1, 2, 3, 4, 5].map((star) => (
+        <button
+          key={star}
+          type="button"
+          className={`star${display >= star ? ' star--on' : ''}`}
+          onMouseEnter={() => !disabled && setHovered(star)}
+          onClick={() => onChange(star)}
+          aria-label={`${star}점`}
+          aria-pressed={value === star}
+          disabled={disabled}
+        >
+          ★
+        </button>
+      ))}
+      <span className="star-rating__label">
+        {display}점 · {ratingLabels[display]}
+      </span>
+    </div>
+  )
+}
 
 export default function SourceSection({
   category,
@@ -46,7 +78,6 @@ export default function SourceSection({
   return (
     <section className="panel" aria-labelledby="section-source">
       <h2 className="panel__title" id="section-source">
-        <span className="panel__step" aria-hidden="true">2</span>
         리뷰 재료
       </h2>
 

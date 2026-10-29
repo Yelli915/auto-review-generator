@@ -8,7 +8,7 @@ import {
   validateSelectedFiles,
 } from '../utils/uploadImages'
 
-export function useUploadImages({ isLoading, isLinkMode, switchToImageMode }) {
+export function useUploadImages({ isLoading, isLinkMode, pasteEnabled, switchToImageMode }) {
   const [images, setImages] = useState([])
   const [status, setStatus] = useState({ text: '', isError: false })
   const [isDragging, setIsDragging] = useState(false)
@@ -104,13 +104,14 @@ export function useUploadImages({ isLoading, isLinkMode, switchToImageMode }) {
   }, [busy, images, setTrackedImages])
 
   const handlePaste = useCallback((e) => {
-    if (busy) return
+    // 사진 칸이 안 보이거나 글을 쓰는 중이면, 보이지 않는 곳에서 사진이 바뀌지 않도록 무시합니다.
+    if (busy || !pasteEnabled || e.target.closest?.('input, textarea')) return
     const pastedFiles = getClipboardImageFiles(e.clipboardData)
     if (!pastedFiles.length) return
     e.preventDefault()
     if (isLinkMode) switchToImageMode?.()
     processFiles(pastedFiles, '붙여넣음')
-  }, [busy, isLinkMode, processFiles, switchToImageMode])
+  }, [busy, isLinkMode, pasteEnabled, processFiles, switchToImageMode])
 
   useEffect(() => {
     document.addEventListener('paste', handlePaste)

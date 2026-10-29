@@ -2,20 +2,14 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { GoogleLogin, googleLogout } from '@react-oauth/google'
 import ReviewGenerator from './components/ReviewGenerator/ReviewGenerator'
 import {
+  readGoogleIdTokenClaims,
   setGoogleIdToken,
   setUnauthorizedHandler,
 } from './components/ReviewGenerator/services/geminiService'
-import { getGoogleClientId } from './utils/env'
 
 function readTokenName(token) {
-  try {
-    const payload = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')
-    const bytes = Uint8Array.from(atob(payload), (c) => c.charCodeAt(0))
-    const claims = JSON.parse(new TextDecoder().decode(bytes))
-    return claims.name || claims.email || 'Google 계정'
-  } catch {
-    return 'Google 계정'
-  }
+  const claims = readGoogleIdTokenClaims(token)
+  return claims?.name || claims?.email || 'Google 계정'
 }
 
 function LoginDialog({ open, error, onSuccess, onError, onCancel }) {
@@ -60,12 +54,11 @@ function LoginDialog({ open, error, onSuccess, onError, onCancel }) {
   )
 }
 
-function App() {
+function App({ googleClientId }) {
   const [token, setToken] = useState('')
   const [authError, setAuthError] = useState('')
   const [isLoginOpen, setIsLoginOpen] = useState(false)
   const loginRef = useRef(null)
-  const googleClientId = getGoogleClientId()
 
   const updateToken = (value) => {
     setGoogleIdToken(value)

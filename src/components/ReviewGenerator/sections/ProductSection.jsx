@@ -1,4 +1,4 @@
-import { needsManualProductInfo } from '../utils/productOptions'
+import { needsManualProductInfo } from '../utils/workspaceContext'
 
 const PRODUCT_FIELDS = [
   {
@@ -50,7 +50,6 @@ export default function ProductSection({
   return (
     <section className="panel" aria-labelledby="section-product">
       <h2 className="panel__title" id="section-product">
-        <span className="panel__step" aria-hidden="true">2-1</span>
         상품 정보 확인
         <span className={`status-pill status-pill--${statusMeta.tone}`}>{statusMeta.label}</span>
       </h2>

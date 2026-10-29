@@ -7,9 +7,43 @@ import {
   normalizeReviewLength,
   normalizeReviewTone,
 } from '#shared/reviewOptions'
-import { createReviewStreamAccumulator } from './reviewStream.js'
 
 const API_PATH = '/api/gemini'
+
+
+export function createReviewStreamAccumulator(onChunk) {
+  const safeOnChunk = typeof onChunk === 'function' ? onChunk : () => {}
+  let fullText = ''
+  let streamError = ''
+
+  return {
+    getError() {
+      return streamError
+    },
+    getText() {
+      return fullText
+    },
+    appendLine(line) {
+      const payload = line.trim()
+      if (!payload) return
+
+      try {
+        const json = JSON.parse(payload)
+        const text = json?.text
+        if (typeof json?.error === 'string' && json.error.trim()) {
+          streamError = json.error.trim()
+          return
+        }
+        if (text) {
+          fullText += text
+          safeOnChunk(fullText)
+        }
+      } catch {
+        void 0
+      }
+    },
+  }
+}
 
 let googleIdToken = ''
 let onUnauthorized = null
@@ -24,6 +58,21 @@ export function setGoogleIdToken(token) {
 
 export function hasGoogleIdToken() {
   return Boolean(googleIdToken)
+}
+
+// Google ID 토큰(JWT)의 클레임을 읽습니다. 표시·구분용이며 검증은 서버가 합니다.
+export function readGoogleIdTokenClaims(token) {
+  try {
+    const payload = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')
+    const bytes = Uint8Array.from(atob(payload), (c) => c.charCodeAt(0))
+    return JSON.parse(new TextDecoder().decode(bytes))
+  } catch {
+    return null
+  }
+}
+
+export function getGoogleAccountId() {
+  return readGoogleIdTokenClaims(googleIdToken)?.sub || ''
 }
 
 export function setUnauthorizedHandler(handler) {
@@ -124,6 +173,7 @@ export async function generateReview({
   previousReview,
   rewriteInstruction,
   onChunk,
+  onUsage,
 }) {
   const safeKeywords = Array.isArray(keywords) ? keywords : []
   const safeLength = normalizeReviewLength(length)
@@ -144,6 +194,15 @@ export async function generateReview({
     previousReview: safePreviousReview,
     rewriteInstruction: safeRewriteInstruction,
   })
+
+  // 서버는 스트리밍 전에 횟수를 차감하므로, 생성이 실패하거나 한도 초과(429)여도 남은 횟수를 먼저 알립니다.
+  const remaining = response.headers.get('X-Review-Remaining')
+  if (remaining !== null) {
+    onUsage?.({
+      remaining: Number(remaining),
+      resetAt: Date.now() + Number(response.headers.get('X-Review-Reset')) * 1000,
+    })
+  }
 
   if (!response.ok) {
     const error = await readJsonSafely(response)
@@ -181,8 +240,4 @@ export async function generateReview({
   if (streamError) {
     throw new Error(streamError)
   }
-
-  // 오늘 남은 리뷰 생성 횟수. 한도가 없는 환경이면 null입니다.
-  const remaining = response.headers.get('X-Daily-Remaining')
-  return { remaining: remaining === null ? null : Number(remaining) }
 }

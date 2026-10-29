@@ -18,7 +18,6 @@ export default function CategorySection({
   return (
     <section className="panel" aria-labelledby="section-category">
       <h2 className="panel__title" id="section-category">
-        <span className="panel__step" aria-hidden="true">1</span>
         분야
       </h2>
       <ChoiceGroup

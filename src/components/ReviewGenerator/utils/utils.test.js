@@ -5,9 +5,9 @@ import {
   hasConfirmedProductInfo,
   needsManualProductInfo,
   normalizeOptionGroups,
-} from './productOptions.js'
+} from './workspaceContext.js'
 
-// productOptions.js
+// workspaceContext.js (상품 옵션)
 const optionGroups = [
   {
     label: '색상',
@@ -140,6 +140,9 @@ test('workspace context builds the evidence text sent to keyword and review prom
 test('findMissingKeywords returns keywords whose stems never appear in the review', async () => {
   const { findMissingKeywords } = await import('./keywordHighlight.js')
   const text = '은은한 조명 덕분에 분위기가 좋았어요.'
-  assert.deepEqual(findMissingKeywords(text, ['조명 은은함', '주차 편함', '맛']), ['주차 편함'])
+  assert.deepEqual(findMissingKeywords(text, ['조명 은은함', '주차 편함', '맛']), ['주차 편함', '맛'])
+  assert.deepEqual(findMissingKeywords('맛있고 편했어요.', ['맛', '편함']), [])
+  // 두 글자 어간이 있으면 흔한 한 글자 어간("좋")만으로 들어간 것으로 보지 않습니다.
+  assert.deepEqual(findMissingKeywords('정말 좋았어요.', ['가성비 좋음']), ['가성비 좋음'])
   assert.deepEqual(findMissingKeywords('', ['조명']), [])
 })

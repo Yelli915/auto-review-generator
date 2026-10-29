@@ -41,6 +41,7 @@ export default function KeywordSection({
   onAddCustom,
   onRemoveCustom,
   onRefresh,
+  canRefresh,
   length,
   onLengthChange,
   tone,
@@ -100,7 +101,6 @@ export default function KeywordSection({
   return (
     <section className="panel" aria-labelledby="section-keywords" ref={sectionRef}>
       <h2 className="panel__title" id="section-keywords">
-        <span className="panel__step" aria-hidden="true">3</span>
         키워드와 문체
         {allKeywords.length > 0 && (
           <span className="selection-badge" aria-live="polite">
@@ -147,7 +147,7 @@ export default function KeywordSection({
                 {allSelected ? '전체 해제' : '전체 선택'}
               </button>
             )}
-            <button type="button" className="btn-link" onClick={onRefresh} disabled={disabled}>
+            <button type="button" className="btn-link" onClick={onRefresh} disabled={disabled || !canRefresh}>
               {isLoading ? '추천 중...' : '다른 키워드 추천'}
             </button>
           </div>

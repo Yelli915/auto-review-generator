@@ -4,12 +4,12 @@
 const NOMINAL_ENDING_RE = /(함|음|됨|움|임)$/
 const MIN_STEM_LENGTH = 2
 
-function buildStems(keywords) {
+function buildStems(keywords, minLength = MIN_STEM_LENGTH) {
   const stems = []
   for (const keyword of keywords) {
     for (const word of String(keyword).split(/\s+/)) {
       const stem = word.replace(NOMINAL_ENDING_RE, '')
-      if (stem.length >= MIN_STEM_LENGTH) stems.push({ stem, keyword })
+      if (stem.length >= minLength) stems.push({ stem, keyword })
     }
   }
   // 어간이 겹칠 때 더 긴(구체적인) 쪽 키워드로 묶이도록 긴 어간부터 비교합니다.
@@ -42,11 +42,13 @@ export function splitKeywordHighlights(text, keywords) {
   return segments
 }
 
-// 리뷰에 어간이 하나도 안 들어간 키워드를 돌려줍니다. 어간이 없는(너무 짧은) 키워드는 판단하지 않습니다.
+// 리뷰에 어간이 하나도 안 들어간 키워드를 돌려줍니다. "맛"·"편함"처럼 두 글자 어간이 없는 키워드만
+// 한 글자 어간으로 검사합니다("가성비 좋음"의 "좋"처럼 흔한 글자 때문에 들어간 것으로 보지 않도록).
 export function findMissingKeywords(text, keywords) {
   if (!text || !Array.isArray(keywords)) return []
   return keywords.filter((keyword) => {
-    const stems = buildStems([keyword])
+    const longStems = buildStems([keyword])
+    const stems = longStems.length ? longStems : buildStems([keyword], 1)
     return stems.length > 0 && !stems.some(({ stem }) => text.includes(stem))
   })
 }

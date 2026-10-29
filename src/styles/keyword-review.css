@@ -152,13 +152,17 @@ p {
   border-radius: 4px;
 }
 
-.star:hover,
+.star:hover:not(:disabled),
 .star--on {
   color: var(--star);
 }
 
 .star:hover {
   transform: none;
+}
+
+.star:disabled {
+  cursor: default;
 }
 
 .star:focus-visible {
