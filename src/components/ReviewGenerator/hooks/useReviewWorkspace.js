@@ -6,31 +6,30 @@ import {
 } from '#shared/reviewCategories'
 import {
   normalizeReviewLength,
+  normalizeReviewRating,
   normalizeReviewTone,
 } from '#shared/reviewOptions'
-import { normalizeReviewRating } from '#shared/reviewRating'
 import {
   analyzeProductUrl,
   generateKeywords,
   generateReview,
+  getGoogleAccountId,
   hasGoogleIdToken,
 } from '../services/geminiService'
-import { loadDraft, saveDraft } from '../utils/draftStorage'
-import {
-  canContinueWithProductInfo,
-  getDefaultOptionSelections,
-  normalizeOptionGroups,
-} from '../utils/productOptions'
+import { loadDraft, loadReviewUsage, saveDraft, saveReviewUsage } from '../utils/draftStorage'
 import {
   appendProductContext,
   buildEvidenceContext,
   buildOptionSummary,
+  canContinueWithProductInfo,
   createManualProductAnalysis,
+  getDefaultOptionSelections,
+  normalizeOptionGroups,
   normalizeProductAnalysis,
 } from '../utils/workspaceContext'
+import { useReviewVersions } from './useReviewVersions'
 import { useUploadImages } from './useUploadImages'
 
-const MAX_VERSIONS = 10
 const SAVE_DELAY_MS = 500
 
 async function loadKeywordsFromSource(sourcePayload, previousKeywords = []) {
@@ -61,7 +60,7 @@ function scrollIntoViewSoon(ref) {
 
 // 한 화면 작업 공간의 상태입니다. 입력(분야·재료·상품 정보) → 키워드 → 리뷰 버전 순으로
 // 데이터가 흐르고, 입력이 바뀌면 화면을 되돌리는 대신 키워드를 "이전 입력 기준"으로 표시합니다.
-export function useReviewWorkspace({ requestLogin }) {
+export function useReviewWorkspace({ requestLogin, pasteEnabled = true }) {
   const [draft] = useState(loadDraft)
   const [category, setCategoryState] = useState(() =>
     normalizeReviewCategory(draft?.category || DEFAULT_REVIEW_CATEGORY),
@@ -85,14 +84,18 @@ export function useReviewWorkspace({ requestLogin }) {
   const [keywordsStale, setKeywordsStale] = useState(Boolean(draft?.keywordsStale))
   const [length, setLength] = useState(() => normalizeReviewLength(draft?.length))
   const [tone, setTone] = useState(() => normalizeReviewTone(draft?.tone))
-  const [versions, setVersions] = useState(draft?.versions || [])
-  const [activeVersion, setActiveVersion] = useState(() =>
-    Math.min(draft?.activeVersion || 0, Math.max(0, (draft?.versions?.length || 1) - 1)),
-  )
+  const {
+    versions,
+    activeVersion,
+    setActiveVersion,
+    openVersion,
+    setLatestText,
+    editActiveVersion,
+  } = useReviewVersions(draft)
   const [missingImageCount, setMissingImageCount] = useState(() =>
     draft?.inputMode === 'link' ? 0 : draft?.imageCount || 0,
   )
-  const [reviewsRemaining, setReviewsRemaining] = useState(null)
+  const [reviewUsage, setReviewUsage] = useState(loadReviewUsage)
   const [busy, setBusy] = useState(null)
   const [error, setError] = useState(null)
   const keywordSectionRef = useRef(null)
@@ -101,6 +104,10 @@ export function useReviewWorkspace({ requestLogin }) {
   const canUseLink = category === 'product'
   const isLinkMode = canUseLink && inputMode === 'link'
   const optionGroups = normalizeOptionGroups(productAnalysis?.optionGroups)
+  // 분석 뒤 링크를 고쳐도 직접 보완한 상품 정보는 지우지 않고, 다시 분석할지 사용자가 고르게 합니다.
+  // inputUrl이 없는 예전 초안은 서버가 돌려준 url과 비교합니다.
+  const productUrlChanged = Boolean(productAnalysis) &&
+    productUrl.trim() !== (productAnalysis.inputUrl ?? productAnalysis.url)
 
   const markSourceChanged = () => {
     if (keywords.length) setKeywordsStale(true)
@@ -111,6 +118,7 @@ export function useReviewWorkspace({ requestLogin }) {
   const upload = useUploadImages({
     isLoading: Boolean(busy),
     isLinkMode,
+    pasteEnabled,
     switchToImageMode,
   })
 
@@ -181,7 +189,7 @@ export function useReviewWorkspace({ requestLogin }) {
     setError(null)
     setBusy(scope)
     try {
-      await task()
+      return await task()
     } catch (e) {
       setError({ scope, message: e instanceof Error ? e.message : fallbackMessage })
     } finally {
@@ -210,11 +218,6 @@ export function useReviewWorkspace({ requestLogin }) {
 
   const setProductUrl = (value) => {
     setProductUrlState(value)
-    if (productAnalysis) {
-      setProductAnalysis(null)
-      setProduct(null)
-      setOptionSelections([])
-    }
     markSourceChanged()
   }
 
@@ -250,7 +253,7 @@ export function useReviewWorkspace({ requestLogin }) {
       const analysis = result?.ok
         ? normalizeProductAnalysis(result, url)
         : createManualProductAnalysis(url, result?.error)
-      setProductAnalysis(analysis)
+      setProductAnalysis({ ...analysis, inputUrl: url })
       setProduct(analysis.product)
       setOptionSelections(getDefaultOptionSelections(analysis.optionGroups))
     }, '상품 정보를 분석하지 못했습니다.')
@@ -298,9 +301,11 @@ export function useReviewWorkspace({ requestLogin }) {
       // 리뷰 생성에는 이미지가 필요 없어서, 저장 용량을 위해 이미지 없이 보관합니다.
       setSourceData({ ...source, images: [] })
       setKeywords(nextKeywords)
-      setSelectedKeywords((prev) =>
-        prev.filter((k) => nextKeywords.includes(k) || customKeywords.includes(k)),
-      )
+      // 이어서 고를 선택이 남아 있지 않으면(처음 만들 때 등) 전부 골라 둬서 바로 리뷰를 만들 수 있게 합니다.
+      setSelectedKeywords((prev) => {
+        const kept = prev.filter((k) => nextKeywords.includes(k) || customKeywords.includes(k))
+        return kept.length ? kept : Array.from(new Set([...nextKeywords, ...customKeywords]))
+      })
       setKeywordsStale(false)
       // 키워드를 새로 만들었으면 복원 초안의 "사진 N장" 안내는 더 이상 맞지 않습니다.
       setMissingImageCount(0)
@@ -330,61 +335,58 @@ export function useReviewWorkspace({ requestLogin }) {
 
   const canGenerateReview = Boolean(sourceData) && selectedKeywords.length > 0
 
-  // onStart: 로그인 확인 뒤 실제로 생성을 시작할 때 호출됩니다(모바일에서 초안 화면으로 넘기는 용도).
+  // 한도가 초기화되는 시각에 지워서, 페이지를 열어 둔 채 날이 바뀌어도 어제 횟수가 남지 않게 합니다.
+  useEffect(() => {
+    if (!reviewUsage) return
+    const timer = setTimeout(() => setReviewUsage(null), Math.max(0, reviewUsage.resetAt - Date.now()))
+    return () => clearTimeout(timer)
+  }, [reviewUsage])
+  // 다른 계정의 기록이면 보여 주지 않습니다.
+  const reviewsRemaining =
+    reviewUsage?.account === getGoogleAccountId() ? reviewUsage.remaining : null
+
+  // 실제로 생성해 성공했을 때만 true를 돌려줍니다. onStart: 로그인 확인 뒤 실제로 생성을 시작할 때 호출됩니다(모바일에서 초안 화면으로 넘기는 용도).
   const writeReview = (rewriteAction = null, onStart) =>
     runTask('review', async () => {
-      if (!sourceData) return
+      if (!sourceData) return false
       const base = versions[activeVersion]
       const previousReview = rewriteAction ? base?.text.trim() || '' : ''
-      const nextVersion = {
-        n: (versions.at(-1)?.n || 0) + 1,
-        text: '',
+      // 다듬기는 보고 있는 버전의 키워드·길이·말투를 그대로 써서, 빠진 키워드 표시·최소 글자수가 원본과 같은 기준을 갖게 합니다.
+      const basis = rewriteAction && base?.keywords?.length
+        ? { keywords: base.keywords, length: base.length || length, tone: base.tone || tone }
+        : { keywords: selectedKeywords, length, tone }
+      const rollback = openVersion({
         note: rewriteAction?.label || '',
         // 다듬은 버전은 비교할 원본 버전 번호를 남깁니다.
         from: rewriteAction ? base?.n : undefined,
-        keywords: selectedKeywords,
-        length,
-        tone,
-      }
-      const kept = versions.slice(-(MAX_VERSIONS - 1))
-      // 실패하면 잘려 나간 가장 오래된 버전까지 그대로 되돌립니다.
-      const previousVersions = versions
-      const previousActive = activeVersion
-      setVersions([...kept, nextVersion])
-      setActiveVersion(kept.length)
+        ...basis,
+      })
       scrollIntoViewSoon(resultRef)
 
       let isSuccess = false
       try {
-        const { remaining } = await generateReview({
-          rating: sourceData.rating,
-          keywords: selectedKeywords,
-          length,
-          tone,
+        await generateReview({
+          // 별점·경험은 키워드를 다시 만들지 않아도 지금 입력값을 씁니다. 키워드 근거(상품·사진 정보)만 sourceData 기준입니다.
+          rating,
+          ...basis,
           category: sourceData.category,
           subcategory: sourceData.subcategory,
-          productContext: buildEvidenceContext(sourceData),
+          productContext: buildEvidenceContext({ ...sourceData, userExperience: userExperience.trim() }),
           previousReview,
           rewriteInstruction: rewriteAction?.instruction || '',
-          onChunk: (chunk) => {
-            setVersions((prev) =>
-              prev.map((v, i) => (i === prev.length - 1 ? { ...v, text: chunk } : v)),
-            )
+          onChunk: setLatestText,
+          onUsage: (usage) => {
+            const next = { ...usage, account: getGoogleAccountId() }
+            setReviewUsage(next)
+            saveReviewUsage(next)
           },
         })
-        setReviewsRemaining(remaining)
         isSuccess = true
       } finally {
-        if (!isSuccess) {
-          setVersions(previousVersions)
-          setActiveVersion(previousActive)
-        }
+        if (!isSuccess) rollback()
       }
+      return true
     }, '리뷰 생성에 실패했습니다.', onStart)
-
-  const editActiveVersion = (text) => {
-    setVersions((prev) => prev.map((v, i) => (i === activeVersion ? { ...v, text } : v)))
-  }
 
   return {
     busy,
@@ -415,6 +417,7 @@ export function useReviewWorkspace({ requestLogin }) {
     optionSelections,
     setOptionSelection,
     analyzeProduct,
+    productUrlChanged,
     // 키워드
     canBuildKeywords,
     buildKeywords,

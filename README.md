@@ -106,7 +106,7 @@ npm run dev:vercel   # 서버리스 API 포함 (vercel env pull .env.local 후)
 테스트 (API 키·Redis 불필요):
 
 ```bash
-npm test && npm run lint && npm run build   # 92 tests
+npm test && npm run lint && npm run build   # 94 tests
 ```
 
 Vercel Production 빌드는 `scripts/verify-vercel-env.js`가 필수 환경 변수를 먼저 확인하고, 없으면 배포 전에 실패.

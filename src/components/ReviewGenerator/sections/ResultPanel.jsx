@@ -29,6 +29,7 @@ export default function ResultPanel({
   const [isEditing, setIsEditing] = useState(false)
   const [picked, setPicked] = useState(null)
   const [customInstruction, setCustomInstruction] = useState('')
+  const [confirmReset, setConfirmReset] = useState(false)
   const customInstructionId = useId()
   const copyTimerRef = useRef(null)
   useEffect(() => () => clearTimeout(copyTimerRef.current), [])
@@ -47,16 +48,20 @@ export default function ResultPanel({
   const canAct = !disabled && !isStreaming && Boolean(trimmed)
   const segments = splitKeywordHighlights(text, version?.keywords)
   const hasHighlights = segments.some((segment) => segment.keyword)
-  const missingKeywords = isStreaming ? [] : findMissingKeywords(text, version?.keywords)
+  // 편집 중에는 결과를 보여 주지 않으므로 키를 누를 때마다 다시 계산하지 않습니다.
+  const missingKeywords = isStreaming || isEditing ? [] : findMissingKeywords(text, version?.keywords)
   // 다듬은 버전은 원본과, 새로 생성한 버전은 바로 앞 버전과 비교합니다.
-  const compareVersion = version
-    ? versions.find((item) => item.n === version.from) || versions[activeVersion - 1]
-    : null
+  // 원본이 버전 개수 제한으로 잘려 나갔으면 다른 버전과 엉뚱하게 비교하지 않고 숨깁니다.
+  const compareVersion = !version
+    ? null
+    : version.from === undefined
+      ? versions[activeVersion - 1]
+      : versions.find((item) => item.n === version.from)
 
   const rewrite = (action) => {
     setPicked(null)
     setIsEditing(false)
-    onRewrite(action)
+    return onRewrite(action)
   }
 
   const rewritePicked = (mode) => {
@@ -78,11 +83,13 @@ export default function ResultPanel({
       instruction: `리뷰에 "${missingKeywords.join('", "')}" 내용이 자연스럽게 들어가도록 보완하고, 나머지 문장은 최대한 그대로 두세요.`,
     })
 
-  const rewriteCustom = () => {
+  const rewriteCustom = async () => {
     const instruction = customInstruction.trim()
     if (!instruction || !canAct) return
-    rewrite({ label: `요청: ${instruction.slice(0, 20)}`, instruction })
-    setCustomInstruction('')
+    // 이모지 같은 서로게이트 쌍이 반으로 잘리지 않도록 글자 단위로 자릅니다.
+    const label = `요청: ${Array.from(instruction).slice(0, 20).join('')}`
+    // 로그인 취소·요청 실패로 다듬지 못했으면 다시 쓰지 않아도 되게 입력을 남겨 둡니다.
+    if (await rewrite({ label, instruction })) setCustomInstruction('')
   }
 
   const handleCopy = async () => {
@@ -301,11 +308,13 @@ export default function ResultPanel({
 
       <button
         type="button"
-        className="btn btn--ghost result-reset"
-        onClick={onReset}
+        className={`btn btn--ghost result-reset${confirmReset ? ' is-confirm' : ''}`}
+        // 모든 버전과 입력이 지워지므로 한 번 더 눌러야 실행합니다. 다른 곳을 누르면 취소됩니다.
+        onClick={() => (confirmReset ? onReset() : setConfirmReset(true))}
+        onBlur={() => setConfirmReset(false)}
         disabled={disabled}
       >
-        처음부터 다시 작성
+        {confirmReset ? '한 번 더 누르면 모든 버전과 입력이 지워집니다' : '처음부터 다시 작성'}
       </button>
     </section>
   )

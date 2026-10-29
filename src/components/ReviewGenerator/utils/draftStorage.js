@@ -1,4 +1,4 @@
-import { normalizeReviewRating } from '#shared/reviewRating'
+import { normalizeReviewRating } from '#shared/reviewOptions'
 
 const DRAFT_KEY = 'auto-review-generator:draft'
 const DRAFT_VERSION = 1
@@ -71,5 +71,25 @@ export function clearDraft() {
     sessionStorage.removeItem(DRAFT_KEY)
   } catch {
     // ignore
+  }
+}
+
+// 남은 리뷰 횟수는 새로고침·다른 탭에서도 보이도록 계정·초기화 시각과 함께 localStorage에 둡니다.
+const REVIEW_USAGE_KEY = 'auto-review-generator:review-usage'
+
+export function loadReviewUsage() {
+  try {
+    const usage = JSON.parse(localStorage.getItem(REVIEW_USAGE_KEY))
+    return Date.now() < usage?.resetAt ? usage : null
+  } catch {
+    return null
+  }
+}
+
+export function saveReviewUsage(usage) {
+  try {
+    localStorage.setItem(REVIEW_USAGE_KEY, JSON.stringify(usage))
+  } catch {
+    // 저장하지 못해도 이번 화면에서는 그대로 표시됩니다.
   }
 }
