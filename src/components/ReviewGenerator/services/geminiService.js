@@ -15,10 +15,15 @@ export function createReviewStreamAccumulator(onChunk) {
   const safeOnChunk = typeof onChunk === 'function' ? onChunk : () => {}
   let fullText = ''
   let streamError = ''
+  let refundedRemaining = null
 
   return {
     getError() {
       return streamError
+    },
+    // 서버가 실패한 생성을 환불했으면 error 줄에 새 남은 횟수를 실어 보냅니다.
+    getRefundedRemaining() {
+      return refundedRemaining
     },
     appendLine(line) {
       const payload = line.trim()
@@ -29,6 +34,7 @@ export function createReviewStreamAccumulator(onChunk) {
         const text = json?.text
         if (typeof json?.error === 'string' && json.error.trim()) {
           streamError = json.error.trim()
+          if (Number.isFinite(json.remaining)) refundedRemaining = json.remaining
           return
         }
         if (text) {
@@ -191,11 +197,9 @@ export async function generateReview({
 
   // 서버는 스트리밍 전에 횟수를 차감하므로, 생성이 실패하거나 한도 초과(429)여도 남은 횟수를 먼저 알립니다.
   const remaining = response.headers.get('X-Review-Remaining')
+  const resetAt = Date.now() + Number(response.headers.get('X-Review-Reset')) * 1000
   if (remaining !== null) {
-    onUsage?.({
-      remaining: Number(remaining),
-      resetAt: Date.now() + Number(response.headers.get('X-Review-Reset')) * 1000,
-    })
+    onUsage?.({ remaining: Number(remaining), resetAt })
   }
 
   if (!response.ok) {
@@ -215,6 +219,8 @@ export async function generateReview({
   // 잘림·최소 글자수 검사는 서버(reviewStreaming)가 하고, 실패하면 스트림에 error로 보냅니다.
   const streamError = stream.getError()
   if (streamError) {
+    const refunded = stream.getRefundedRemaining()
+    if (refunded !== null && remaining !== null) onUsage?.({ remaining: refunded, resetAt })
     throw new Error(streamError)
   }
 }

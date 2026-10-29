@@ -40,3 +40,14 @@ test('summarize computes rates and medians', () => {
   assert.equal(summary.medianTtftMs, 400)
   assert.equal(summary.failed, 1)
 })
+
+test('scoreReview treats the rating as evidence', () => {
+  const score = scoreReview({
+    review: '별점 5점 줄게요. 키감이 조용해요.',
+    finishReason: 'STOP',
+    minReviewChars: 0,
+    testCase: { category: 'product', rating: 5, keywords: ['저소음 키감'] },
+  })
+
+  assert.deepEqual(score.unsupported, [])
+})

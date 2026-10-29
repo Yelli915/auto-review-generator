@@ -234,7 +234,7 @@ export function useReviewWorkspace({ requestLogin, pasteEnabled = true }) {
       const analysis = result?.ok
         ? normalizeProductAnalysis(result, url)
         : createManualProductAnalysis(url, result?.error)
-      update({
+      updateSource({
         productAnalysis: { ...analysis, inputUrl: url },
         product: analysis.product,
         optionSelections: getDefaultOptionSelections(analysis.optionGroups),
@@ -320,8 +320,8 @@ export function useReviewWorkspace({ requestLogin, pasteEnabled = true }) {
       // 별점·경험은 키워드를 다시 만들지 않아도 지금 입력값을 씁니다. 키워드 근거(상품·사진 정보)만 sourceData 기준입니다.
       const productContext = buildEvidenceContext({ ...sourceData, userExperience: userExperience.trim() })
       const rollback = openVersion({
-        // 초안 화면이 리뷰에 근거 없는 숫자·영문이 들어갔는지 검사할 때 씁니다.
-        evidence: productContext,
+        // 초안 화면이 리뷰에 근거 없는 숫자·영문이 들어갔는지 검사할 때 씁니다. 별점도 프롬프트에 들어가는 근거입니다.
+        evidence: `${productContext}\n별점: ${rating}점`,
         note: rewriteAction?.label || '',
         // 다듬은 버전은 비교할 원본 버전 번호를 남깁니다.
         from: rewriteAction ? base?.n : undefined,

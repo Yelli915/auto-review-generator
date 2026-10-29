@@ -107,7 +107,7 @@ npm run dev:vercel   # 서버리스 API 포함 (vercel env pull .env.local 후)
 테스트 (API 키·Redis 불필요):
 
 ```bash
-npm test && npm run lint && npm run build   # 113 tests
+npm test && npm run lint && npm run build   # 118 tests
 ```
 
 리뷰 품질 평가 (실제 Gemini 호출, `GEMINI_API_KEY` 필요):

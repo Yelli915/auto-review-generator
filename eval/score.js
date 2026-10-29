@@ -8,7 +8,7 @@ import { getGenericBanPhrases } from '../server/review/config.js'
 
 export function scoreReview({ review, finishReason, minReviewChars, testCase }) {
   const text = normalizeKeywordText(review)
-  const sourceText = [testCase.productContext ?? '', ...testCase.keywords].join('\n')
+  const sourceText = [testCase.productContext ?? '', `별점: ${testCase.rating}점`, ...testCase.keywords].join('\n')
   const unsupported = findUnsupportedTokens(text, sourceText)
   const forbiddenHits = (testCase.forbidden ?? []).filter((word) => text.includes(word))
   const genericHits = getGenericBanPhrases(testCase.category).filter((word) => text.includes(word))

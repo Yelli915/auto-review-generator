@@ -6,7 +6,7 @@ import { parseArgs } from 'node:util'
 import { createJsonHeaders } from '../shared/httpJson.js'
 import { readLines } from '../shared/streamLines.js'
 import { buildReviewPrompt } from '../server/review/prompts.js'
-import { buildReviewGenerationConfig, STREAM_GENERATE_URL } from '../server/review/geminiClient.js'
+import { buildReviewGenerationConfig, parseGeminiSseLine, STREAM_GENERATE_URL } from '../server/review/geminiClient.js'
 import { scoreReview, summarize } from './score.js'
 
 const { values: args } = parseArgs({
@@ -50,13 +50,12 @@ async function generate(prompt, length) {
     let finishReason = null
     let ttftMs = null
     for await (const line of readLines(response.body)) {
-      if (!line.startsWith('data: ')) continue
-      const candidate = JSON.parse(line.slice(6)).candidates?.[0]
-      finishReason = candidate?.finishReason ?? finishReason
-      const text = candidate?.content?.parts?.[0]?.text
-      if (!text) continue
+      const chunk = parseGeminiSseLine(line)
+      if (!chunk) continue
+      finishReason = chunk.finishReason ?? finishReason
+      if (!chunk.text) continue
       ttftMs ??= Math.round(performance.now() - startedAt)
-      review += text
+      review += chunk.text
     }
     return { review, finishReason, ttftMs, totalMs: Math.round(performance.now() - startedAt) }
   }

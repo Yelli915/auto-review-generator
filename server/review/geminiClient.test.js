@@ -4,6 +4,7 @@ import {
   buildKeywordGenerationConfig,
   buildReviewGenerationConfig,
   humanizeGeminiApiError,
+  parseGeminiSseLine,
   requestGemini,
 } from './geminiClient.js'
 import { withFetchCalls } from '../testUtils.js'
@@ -66,4 +67,13 @@ test('requestGemini stops retrying once the deadline signal aborts', async () =>
       assert.equal(calls.length, 1)
     },
   )
+})
+
+test('parseGeminiSseLine reads text and finishReason, skips invalid lines', () => {
+  const line = `data: ${JSON.stringify({ candidates: [{ content: { parts: [{ text: '안녕' }] }, finishReason: 'STOP' }] })}`
+
+  assert.deepEqual(parseGeminiSseLine(line), { text: '안녕', finishReason: 'STOP' })
+  assert.equal(parseGeminiSseLine('data: {broken'), null)
+  assert.equal(parseGeminiSseLine('data: [DONE]'), null)
+  assert.equal(parseGeminiSseLine(': keep-alive'), null)
 })

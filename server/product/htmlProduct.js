@@ -112,7 +112,8 @@ function collectScriptPayloads(scripts) {
   const payloads = []
   for (const { attrs, body: rawBody } of scripts) {
     if ('src' in attrs) continue
-    const body = decodeHtmlEntities(rawBody).trim()
+    // <script> 안은 원문이라 풀지 않습니다. 엔티티로 감싼 사이트는 parseEmbeddedJsonPayload가 풀어서 다시 시도합니다.
+    const body = rawBody.trim()
     if (!body) continue
     const type = String(attrs.type || '').toLowerCase()
     const id = String(attrs.id || '')
@@ -137,13 +138,17 @@ function collectScriptPayloads(scripts) {
   return payloads
 }
 
-function parseEmbeddedJsonPayload(payload) {
-  if (typeof payload !== 'string' || !payload.trim()) return null
-  const trimmed = payload.trim()
+function parseJsonSegment(text) {
+  const trimmed = text.trim()
   const start = trimmed.search(/[[{]/)
   if (start < 0) return null
   const jsonLike = sliceBalancedSegment(trimmed, start)
   return jsonLike ? tryParseJson(jsonLike) ?? null : null
+}
+
+function parseEmbeddedJsonPayload(payload) {
+  if (typeof payload !== 'string' || !payload.trim()) return null
+  return parseJsonSegment(payload) ?? parseJsonSegment(decodeHtmlEntities(payload))
 }
 
 function scoreProductCandidate(product, keyPath = '') {
@@ -172,12 +177,14 @@ function productInfoFromObject(value, pageUrl) {
     firstValueByKeys(value, PRODUCT_FIELD_KEYS.brand) ||
     firstValueByKeys(value.brand, ['name', 'brandName', 'brandNm'])
 
+  // JSON-LD처럼 문자열 값에 들어 있는 HTML 엔티티만 풉니다. 숫자 가격 등은 그대로 둡니다.
+  const text = (raw) => (typeof raw === 'string' ? decodeHtmlEntities(raw) : raw)
   return buildProductInfo({
-    name: firstValueByKeys(value, PRODUCT_FIELD_KEYS.name),
-    brand: brandRaw,
+    name: text(firstValueByKeys(value, PRODUCT_FIELD_KEYS.name)),
+    brand: text(brandRaw),
     imageUrl: normalizeImageUrl(imageRaw, pageUrl),
-    price: firstValueByKeys(value, PRODUCT_FIELD_KEYS.price),
-    description: firstValueByKeys(value, PRODUCT_FIELD_KEYS.description),
+    price: text(firstValueByKeys(value, PRODUCT_FIELD_KEYS.price)),
+    description: text(firstValueByKeys(value, PRODUCT_FIELD_KEYS.description)),
     url: pageUrl,
   })
 }
