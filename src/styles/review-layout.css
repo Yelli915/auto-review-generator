@@ -35,28 +35,6 @@
   text-overflow: ellipsis;
 }
 
-.app-header__account {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-shrink: 0;
-}
-
-.app-header__user {
-  max-width: 14ch;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 0.8125rem;
-  color: var(--text);
-}
-
-.app-banner {
-  width: min(1200px, calc(100% - 32px));
-  margin: 12px auto 0;
-  box-sizing: border-box;
-}
-
 /* 데스크톱: 폰 크기 화면 두 장(입력 · 초안)을 나란히 둡니다. */
 .workspace {
   --screen-width: 440px;
@@ -632,51 +610,6 @@
   overflow: hidden;
   clip: rect(0 0 0 0);
   white-space: nowrap;
-}
-
-/* 로그인 */
-.login-dialog {
-  width: min(400px, calc(100% - 32px));
-  box-sizing: border-box;
-  padding: 24px 20px 16px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  background: var(--surface);
-  color: var(--text);
-  box-shadow: var(--shadow-lg);
-  text-align: center;
-}
-
-.login-dialog[open] {
-  display: grid;
-  gap: 14px;
-}
-
-.login-dialog::backdrop {
-  background: rgba(15, 23, 42, 0.45);
-}
-
-.login-dialog__title {
-  margin: 0;
-  font-size: 1.1rem;
-  font-weight: 800;
-  color: var(--text-h);
-}
-
-.login-dialog__text {
-  font-size: 0.875rem;
-  line-height: 1.55;
-  color: var(--text-muted);
-}
-
-.login-dialog__button {
-  display: flex;
-  justify-content: center;
-  min-height: 44px;
-}
-
-.login-dialog .banner {
-  margin: 0;
 }
 
 /* 휴대폰: 앱처럼 한 번에 한 화면만 보이고, 주 버튼은 화면 하단에 붙습니다. */

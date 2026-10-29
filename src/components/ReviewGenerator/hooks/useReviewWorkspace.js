@@ -13,8 +13,6 @@ import {
   analyzeProductUrl,
   generateKeywords,
   generateReview,
-  getGoogleAccountId,
-  hasGoogleIdToken,
 } from '../services/geminiService'
 import { loadDraft, loadReviewUsage, saveDraft, saveReviewUsage } from '../utils/draftStorage'
 import {
@@ -86,7 +84,7 @@ function createInitialState(draft) {
 
 // 한 화면 작업 공간의 상태입니다. 입력(분야·재료·상품 정보) → 키워드 → 리뷰 버전 순으로
 // 데이터가 흐르고, 입력이 바뀌면 화면을 되돌리는 대신 키워드를 "이전 입력 기준"으로 표시합니다.
-export function useReviewWorkspace({ requestLogin, pasteEnabled = true }) {
+export function useReviewWorkspace({ pasteEnabled = true }) {
   const [draft] = useState(loadDraft)
   // 초안으로 저장되는 입력·키워드 상태를 한 객체로 둡니다. 필드를 추가하면 createInitialState와 sanitizeDraft만 고칩니다.
   const [state, setState] = useState(() => createInitialState(draft))
@@ -180,13 +178,6 @@ export function useReviewWorkspace({ requestLogin, pasteEnabled = true }) {
 
   const runTask = async (scope, task, fallbackMessage, onStart) => {
     if (busy) return
-    if (!hasGoogleIdToken()) {
-      if (!requestLogin) {
-        setError({ scope, message: '로그인 설정(VITE_GOOGLE_CLIENT_ID)이 없어 이 기능을 쓸 수 없습니다.' })
-        return
-      }
-      if (!(await requestLogin())) return
-    }
     onStart?.()
     setError(null)
     setBusy(scope)
@@ -230,7 +221,8 @@ export function useReviewWorkspace({ requestLogin, pasteEnabled = true }) {
     runTask('analyze', async () => {
       const url = productUrl.trim()
       const result = await analyzeProductUrl(url)
-      if (!result?.ok && result?.status === 401) throw new Error(result.error)
+      // 출처 거부·요청 과다·저장소 오류는 페이지 문제가 아니므로 직접 입력으로 넘기지 않습니다.
+      if ([403, 429, 503].includes(result?.status)) throw new Error(result.error)
       const analysis = result?.ok
         ? normalizeProductAnalysis(result, url)
         : createManualProductAnalysis(url, result?.error)
@@ -303,11 +295,9 @@ export function useReviewWorkspace({ requestLogin, pasteEnabled = true }) {
     const timer = setTimeout(() => setReviewUsage(null), Math.max(0, reviewUsage.resetAt - Date.now()))
     return () => clearTimeout(timer)
   }, [reviewUsage])
-  // 다른 계정의 기록이면 보여 주지 않습니다.
-  const reviewsRemaining =
-    reviewUsage?.account === getGoogleAccountId() ? reviewUsage.remaining : null
+  const reviewsRemaining = reviewUsage?.remaining ?? null
 
-  // 실제로 생성해 성공했을 때만 true를 돌려줍니다. onStart: 로그인 확인 뒤 실제로 생성을 시작할 때 호출됩니다(모바일에서 초안 화면으로 넘기는 용도).
+  // 실제로 생성해 성공했을 때만 true를 돌려줍니다. onStart: 실제로 생성을 시작할 때 호출됩니다(모바일에서 초안 화면으로 넘기는 용도).
   const writeReview = (rewriteAction = null, onStart) =>
     runTask('review', async () => {
       if (!sourceData) return false
@@ -341,9 +331,8 @@ export function useReviewWorkspace({ requestLogin, pasteEnabled = true }) {
           rewriteInstruction: rewriteAction?.instruction || '',
           onChunk: setLatestText,
           onUsage: (usage) => {
-            const next = { ...usage, account: getGoogleAccountId() }
-            setReviewUsage(next)
-            saveReviewUsage(next)
+            setReviewUsage(usage)
+            saveReviewUsage(usage)
           },
         })
         isSuccess = true

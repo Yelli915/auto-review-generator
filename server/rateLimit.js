@@ -8,11 +8,9 @@ import {
 } from './config.js'
 
 const RATE_LIMIT_STORE = new Map()
+// ponytail: 인메모리 저장소는 Upstash가 없는 로컬 개발·테스트용이라 오래된 항목을 정리하지 않습니다.
+// Upstash 없이 운영 서버에 띄우게 되면 정리 로직이 필요합니다.
 const DAILY_USAGE_STORE = new Map()
-// 저장소가 커져도 요청마다 전체를 훑지 않도록 정리는 창(또는 하루)마다 한 번만 합니다.
-const MEMORY_STORE_SWEEP_SIZE = 2000
-let lastRateSweepAt = 0
-let lastDailySweepDay = ''
 
 function normalizeIdentifier(identifier) {
   return typeof identifier === 'string' && identifier ? identifier : 'unknown'
@@ -76,14 +74,7 @@ function applyMemoryRateLimit(key) {
     return { ok: false, retryAfterSec: Math.ceil(retryAfterMs / 1000) }
   }
   hits.push(now)
-  RATE_LIMIT_STORE.set(key, { hits, updatedAt: now })
-
-  if (RATE_LIMIT_STORE.size > MEMORY_STORE_SWEEP_SIZE && now - lastRateSweepAt > RATE_LIMIT_WINDOW_MS) {
-    lastRateSweepAt = now
-    for (const [ip, value] of RATE_LIMIT_STORE.entries()) {
-      if (!value || value.updatedAt < windowStart) RATE_LIMIT_STORE.delete(ip)
-    }
-  }
+  RATE_LIMIT_STORE.set(key, { hits })
   return { ok: true }
 }
 
@@ -143,18 +134,7 @@ function applyMemoryDailyUsageLimit(identifier, action, limit, now, resetAfterSe
     }
   }
 
-  DAILY_USAGE_STORE.set(key, {
-    dayKey: today,
-    count: count + 1,
-    updatedAt: now.getTime(),
-  })
-
-  if (DAILY_USAGE_STORE.size > MEMORY_STORE_SWEEP_SIZE && lastDailySweepDay !== today) {
-    lastDailySweepDay = today
-    for (const [storeKey, value] of DAILY_USAGE_STORE.entries()) {
-      if (!value || value.dayKey !== today) DAILY_USAGE_STORE.delete(storeKey)
-    }
-  }
+  DAILY_USAGE_STORE.set(key, { dayKey: today, count: count + 1 })
 
   // 같은 날 항목만 되돌리므로 자정을 넘긴 뒤 환불해도 새 날 횟수에는 영향이 없습니다.
   const refund = async () => {

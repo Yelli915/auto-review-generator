@@ -26,76 +26,22 @@ delete process.env.UPSTASH_REDIS_REST_URL
 delete process.env.UPSTASH_REDIS_REST_TOKEN
 
 // auth.js
-test('authorizeRequest normalizes configured production origins', async () => {
-  await withEnv(
-    {
-      NODE_ENV: 'production',
-      GOOGLE_CLIENT_ID: null,
-      API_AUTH_TOKEN: 'test-token',
-      ALLOWED_ORIGINS: 'https://example.vercel.app/',
-    },
-    async () => {
-      const req = createMockRequest(
-        { action: 'keywords' },
-        {
-          origin: 'https://example.vercel.app',
-          'x-api-auth-token': 'test-token',
-        },
-      )
-
-      const result = await authorizeRequest(req)
-
-      assert.equal(result.ok, true)
-    },
-  )
-})
-
-test('authorizeRequest rejects unlisted production origins', async () => {
-  await withEnv(
-    {
-      NODE_ENV: 'production',
-      GOOGLE_CLIENT_ID: null,
-      API_AUTH_TOKEN: 'test-token',
-      ALLOWED_ORIGINS: 'https://example.vercel.app',
-    },
-    async () => {
-      const req = createMockRequest(
-        { action: 'keywords' },
-        {
-          origin: 'https://preview.example.vercel.app',
-          'x-api-auth-token': 'test-token',
-        },
-      )
-
-      const result = await authorizeRequest(req)
-
-      assert.equal(result.ok, false)
-      assert.equal(result.status, 403)
-      assert.equal(result.error, '허용되지 않은 출처의 요청입니다.')
-    },
-  )
-})
-
-// rateLimit.js
-test('authorizeRequest resolves each auth configuration to the expected status', async () => {
+test('authorizeRequest resolves each origin configuration to the expected status', async () => {
   const origin = 'https://example.vercel.app'
   const cases = [
     // [설명, 환경, 요청 헤더, 기대 상태(null이면 통과)]
-    ['dev without auth config passes anonymously', {}, {}, null],
-    ['app token matches', { API_AUTH_TOKEN: 't' }, { 'x-api-auth-token': 't' }, null],
-    ['app token missing', { API_AUTH_TOKEN: 't' }, {}, 401],
-    ['app token wrong', { API_AUTH_TOKEN: 't' }, { 'x-api-auth-token': 'x' }, 401],
-    ['google configured without bearer or app token', { GOOGLE_CLIENT_ID: 'g' }, {}, 401],
-    ['google configured falls back to app token', { GOOGLE_CLIENT_ID: 'g', API_AUTH_TOKEN: 't' }, { 'x-api-auth-token': 't' }, null],
-    ['production without any auth config', { NODE_ENV: 'production', ALLOWED_ORIGINS: origin }, { origin }, 500],
-    ['production without allowed origins', { NODE_ENV: 'production', API_AUTH_TOKEN: 't' }, { origin, 'x-api-auth-token': 't' }, 500],
-    ['production identity error comes before origin check', { NODE_ENV: 'production', API_AUTH_TOKEN: 't', ALLOWED_ORIGINS: origin }, { origin: 'https://evil.example' }, 401],
+    ['dev passes without origin config', {}, {}, null],
+    ['production listed origin passes', { NODE_ENV: 'production', ALLOWED_ORIGINS: origin }, { origin }, null],
+    ['production normalizes configured origins', { NODE_ENV: 'production', ALLOWED_ORIGINS: `${origin}/` }, { origin }, null],
+    ['production unlisted origin', { NODE_ENV: 'production', ALLOWED_ORIGINS: origin }, { origin: 'https://preview.example.vercel.app' }, 403],
+    ['production missing origin header', { NODE_ENV: 'production', ALLOWED_ORIGINS: origin }, {}, 403],
+    ['production without allowed origins', { NODE_ENV: 'production' }, { origin }, 500],
   ]
   for (const [name, env, headers, status] of cases) {
     await withEnv(
-      { NODE_ENV: 'test', GOOGLE_CLIENT_ID: null, API_AUTH_TOKEN: null, ALLOWED_ORIGINS: null, ...env },
+      { NODE_ENV: 'test', ALLOWED_ORIGINS: null, ...env },
       async () => {
-        const result = await authorizeRequest(createMockRequest({}, headers))
+        const result = authorizeRequest(createMockRequest({}, headers))
         assert.equal(result.ok, status === null, name)
         if (status !== null) assert.equal(result.status, status, name)
       },

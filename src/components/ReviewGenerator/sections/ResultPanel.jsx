@@ -99,7 +99,7 @@ export default function ResultPanel({
     if (!instruction || !canAct) return
     // 이모지 같은 서로게이트 쌍이 반으로 잘리지 않도록 글자 단위로 자릅니다.
     const label = `요청: ${Array.from(instruction).slice(0, 20).join('')}`
-    // 로그인 취소·요청 실패로 다듬지 못했으면 다시 쓰지 않아도 되게 입력을 남겨 둡니다.
+    // 요청 실패로 다듬지 못했으면 다시 쓰지 않아도 되게 입력을 남겨 둡니다.
     if (await rewrite({ label, instruction })) setCustomInstruction('')
   }
 

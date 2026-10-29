@@ -23,16 +23,15 @@ React SPA + Vercel 서버리스 API 하나(`/api/gemini`)로 구성하고, Gemin
 - 리뷰에 입력 근거(상품 정보·직접 경험·키워드)에 없는 숫자·영문이 들어가면 표시하고 빼서 다듬기 (`shared/evidenceCheck.js`, eval 환각 채점과 같은 규칙)
 - 리뷰에 빠진 키워드 표시·보완, 다듬기 요청 직접 입력, 원본 버전과 비교, 오늘 남은 생성 횟수 표시
 - 입력과 결과를 탭 단위(`sessionStorage`)로 저장해 새로고침 후에도 이어 쓰기
-- Google ID Token 인증, Origin 제한, 사용자/IP별 rate limit·일일 사용량 제한, SSRF 방어
+- Origin 제한, IP별 rate limit·일일 사용량 제한, SSRF 방어
 
 ## Tech Stack
 
 - **Frontend** : React 19, Vite, CSS Variables
 - **Backend** : Node.js 24, Vercel Serverless Functions (ESM)
 - **AI** : Google Gemini 2.5 Flash (키워드는 `responseSchema` JSON, 리뷰는 SSE 스트리밍)
-- **Auth** : Google OAuth ID Token (`google-auth-library`)
 - **Product Analysis** : HTML meta·JSON-LD·embedded JSON 파싱, reader(`r.jina.ai`)
-- **Infra** : Vercel, Upstash Redis (선택)
+- **Infra** : Vercel, Upstash Redis
 - **Test** : `node:test`
 
 ---
@@ -43,12 +42,11 @@ React SPA + Vercel 서버리스 API 하나(`/api/gemini`)로 구성하고, Gemin
 flowchart TB
   subgraph L1["1. Client"]
     FE["React SPA<br/>작업 공간 · sessionStorage 초안"]
-    GID["Google 로그인"]
   end
 
   subgraph L2["2. API · /api/gemini"]
     direction LR
-    GUARD["handler<br/>Origin · ID Token · rate limit"]
+    GUARD["handler<br/>Origin · rate limit"]
   end
 
   subgraph L3["3. Actions"]
@@ -70,8 +68,7 @@ flowchart TB
     RD[("Upstash Redis")]
   end
 
-  GID -.->|ID Token| FE
-  FE -->|Bearer| GUARD
+  FE --> GUARD
   GUARD --> AP
   GUARD --> KW
   GUARD --> RV
@@ -90,7 +87,7 @@ flowchart TB
 ## Getting Started
 
 ```bash
-cp .env.example .env.local   # GEMINI_API_KEY, GOOGLE_CLIENT_ID, VITE_GOOGLE_CLIENT_ID, ALLOWED_ORIGINS
+cp .env.example .env.local   # GEMINI_API_KEY, ALLOWED_ORIGINS
 npm install
 
 npm run dev          # 프론트엔드만 (http://localhost:5173)
@@ -100,14 +97,13 @@ npm run dev:vercel   # 서버리스 API 포함 (vercel env pull .env.local 후)
 | 변수 | 용도 |
 |---|---|
 | `GEMINI_API_KEY` | 서버에서 Gemini 호출 |
-| `GOOGLE_CLIENT_ID` / `VITE_GOOGLE_CLIENT_ID` | ID Token audience 검증 / 브라우저 로그인 |
 | `ALLOWED_ORIGINS` | API 호출을 허용할 Origin (쉼표 구분) |
-| `UPSTASH_REDIS_REST_URL` / `_TOKEN` | (선택) 인스턴스 간 공유 rate limit |
+| `UPSTASH_REDIS_REST_URL` / `_TOKEN` | 인스턴스 간 공유 rate limit·일일 한도 (배포 필수, 로컬은 인메모리) |
 
 테스트 (API 키·Redis 불필요):
 
 ```bash
-npm test && npm run lint && npm run build   # 118 tests
+npm test && npm run lint && npm run build   # 116 tests
 ```
 
 리뷰 품질 평가 (실제 Gemini 호출, `GEMINI_API_KEY` 필요):

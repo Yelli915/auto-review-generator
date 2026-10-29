@@ -29,10 +29,8 @@ function sendError(res, status, error) {
   return json(res, status, { ok: false, error })
 }
 
-function getRateKey(req, auth) {
-  return auth.userId
-    ? `user:${auth.userId}`
-    : `ip:${getClientIp(req) || 'unknown'}`
+function getRateKey(req) {
+  return `ip:${getClientIp(req) || 'unknown'}`
 }
 
 async function rejectRateLimit(res, rateKey) {
@@ -157,10 +155,10 @@ export default async function handler(req, res) {
   if (body?.tooLarge) return sendError(res, 413, ERRORS.bodyTooLarge)
   if (!body) return sendError(res, 400, ERRORS.invalidJson)
 
-  const auth = await authorizeRequest(req)
+  const auth = authorizeRequest(req)
   if (!auth.ok) return sendError(res, auth.status, auth.error)
 
-  const rateKey = getRateKey(req, auth)
+  const rateKey = getRateKey(req)
   if (await rejectRateLimit(res, rateKey)) return
 
   if (body.action === 'analyze-product') {

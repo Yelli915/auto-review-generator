@@ -7,12 +7,12 @@ import SourceSection from './sections/SourceSection'
 import { useReviewWorkspace } from './hooks/useReviewWorkspace'
 import { clearDraft } from './utils/draftStorage'
 
-function Workspace({ requestLogin, onReset }) {
+function Workspace({ onReset }) {
   // 휴대폰 폭에서는 입력/초안 중 한 화면만 보입니다. 데스크톱에서는 두 화면이 나란히 보여 이 값은 무시됩니다.
   const [view, setView] = useState('compose')
   // 휴대폰 초안 화면에서는 사진 칸이 안 보이므로 붙여넣기를 받지 않습니다. (렌더 때 폭을 읽어 창 크기만 바꾼 경우엔 다음 렌더에 반영됩니다.)
   const pasteEnabled = view === 'compose' || !window.matchMedia?.('(max-width: 960px)').matches
-  const ws = useReviewWorkspace({ requestLogin, pasteEnabled })
+  const ws = useReviewWorkspace({ pasteEnabled })
   const isBusy = Boolean(ws.busy)
   const errorFor = (scope) => (ws.error?.scope === scope ? ws.error.message : '')
   const showProduct = ws.isLinkMode && ws.productAnalysis
@@ -154,12 +154,11 @@ function Workspace({ requestLogin, onReset }) {
   )
 }
 
-export default function ReviewGenerator({ requestLogin }) {
+export default function ReviewGenerator() {
   const [resetKey, setResetKey] = useState(0)
   return (
     <Workspace
       key={resetKey}
-      requestLogin={requestLogin}
       onReset={() => {
         clearDraft()
         setResetKey((key) => key + 1)

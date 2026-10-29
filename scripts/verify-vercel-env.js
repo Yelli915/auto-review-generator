@@ -1,12 +1,8 @@
 /* global process */
 const REQUIRED_VERCEL_ENV = [
   'GEMINI_API_KEY',
-  'GOOGLE_CLIENT_ID',
-  'VITE_GOOGLE_CLIENT_ID',
   'ALLOWED_ORIGINS',
-]
-
-const OPTIONAL_VERCEL_ENV = [
+  // 로그인 없이 공개된 API라, 인스턴스마다 따로 세는 인메모리 한도로는 남용을 막지 못합니다.
   'UPSTASH_REDIS_REST_URL',
   'UPSTASH_REDIS_REST_TOKEN',
 ]
@@ -25,20 +21,5 @@ if (process.env.VERCEL === '1') {
 
   if (missing.length > 0) {
     fail(`Missing required Vercel environment variables: ${missing.join(', ')}`)
-  }
-
-  if (
-    hasValue('GOOGLE_CLIENT_ID') &&
-    hasValue('VITE_GOOGLE_CLIENT_ID') &&
-    process.env.GOOGLE_CLIENT_ID.trim() !== process.env.VITE_GOOGLE_CLIENT_ID.trim()
-  ) {
-    fail('GOOGLE_CLIENT_ID and VITE_GOOGLE_CLIENT_ID must match.')
-  }
-
-  const missingUsageStore = OPTIONAL_VERCEL_ENV.filter((name) => !hasValue(name))
-  if (missingUsageStore.length > 0) {
-    console.warn(
-      `[vercel-env] Shared usage-limit variables are not set: ${missingUsageStore.join(', ')}`,
-    )
   }
 }
