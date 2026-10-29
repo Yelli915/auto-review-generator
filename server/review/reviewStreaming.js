@@ -1,4 +1,6 @@
 import { createJsonHeaders, readJsonSafely } from '../../shared/httpJson.js'
+import { normalizeKeywordText } from '../../shared/keywordPhrase.js'
+import { readLines } from '../../shared/streamLines.js'
 import { buildReviewPrompt } from './prompts.js'
 import {
   buildReviewGenerationConfig,
@@ -7,34 +9,9 @@ import {
 } from './geminiClient.js'
 import { setCommonSecurityHeaders } from '../httpResponse.js'
 
-function normalizeReviewText(text) {
-  return typeof text === 'string' ? text.replace(/\s+/g, ' ').trim() : ''
-}
-
-export async function streamGeminiReview({
-  key,
-  rating,
-  keywords,
-  length,
-  tone,
-  category,
-  subcategory,
-  productContext,
-  previousReview,
-  rewriteInstruction,
-  res,
-}) {
-  const { prompt, safeLength, minReviewChars } = buildReviewPrompt({
-    rating,
-    keywords,
-    length,
-    tone,
-    category,
-    subcategory,
-    productContext,
-    previousReview,
-    rewriteInstruction,
-  })
+// input: 요청 본문. buildReviewPrompt가 필요한 필드만 꺼내 정리합니다.
+export async function streamGeminiReview({ key, input, res }) {
+  const { prompt, safeLength, minReviewChars } = buildReviewPrompt(input)
 
   // 사용자가 연결을 끊으면 Gemini 생성도 멈춰 토큰을 아낍니다.
   const upstream = new AbortController()
@@ -75,9 +52,6 @@ export async function streamGeminiReview({
   res.setHeader('Cache-Control', 'no-cache, no-transform')
   res.setHeader('X-Accel-Buffering', 'no')
 
-  const reader = response.body.getReader()
-  const decoder = new TextDecoder()
-  let buffer = ''
   let fullText = ''
   let finishReason = null
   const writeJsonLine = (payload) => {
@@ -100,17 +74,8 @@ export async function streamGeminiReview({
   }
 
   try {
-    while (true) {
-      const { done, value } = await reader.read()
-      // 끝나면 줄바꿈을 붙여 마지막 줄도 같은 경로로 처리합니다.
-      buffer += done ? '\n' : decoder.decode(value, { stream: true })
-      const lines = buffer.split('\n')
-      buffer = lines.pop() || ''
-      for (const line of lines) {
-        if (!line.startsWith('data: ')) continue
-        handleSsePayload(line.slice(6).trim())
-      }
-      if (done) break
+    for await (const line of readLines(response.body)) {
+      if (line.startsWith('data: ')) handleSsePayload(line.slice(6).trim())
     }
   } catch (err) {
     if (upstream.signal.aborted) return
@@ -120,7 +85,7 @@ export async function streamGeminiReview({
     return res.end()
   }
 
-  const normalizedReview = normalizeReviewText(fullText)
+  const normalizedReview = normalizeKeywordText(fullText)
   if (finishReason === 'MAX_TOKENS') {
     writeJsonLine({
       error: '리뷰가 중간에 잘렸습니다. 글자수보다 완성된 리뷰를 우선해 다시 생성해 주세요.',

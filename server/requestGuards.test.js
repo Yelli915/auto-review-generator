@@ -71,12 +71,38 @@ test('authorizeRequest rejects unlisted production origins', async () => {
 
       assert.equal(result.ok, false)
       assert.equal(result.status, 403)
-      assert.equal(result.error, 'Origin is not allowed.')
+      assert.equal(result.error, '허용되지 않은 출처의 요청입니다.')
     },
   )
 })
 
 // rateLimit.js
+test('authorizeRequest resolves each auth configuration to the expected status', async () => {
+  const origin = 'https://example.vercel.app'
+  const cases = [
+    // [설명, 환경, 요청 헤더, 기대 상태(null이면 통과)]
+    ['dev without auth config passes anonymously', {}, {}, null],
+    ['app token matches', { API_AUTH_TOKEN: 't' }, { 'x-api-auth-token': 't' }, null],
+    ['app token missing', { API_AUTH_TOKEN: 't' }, {}, 401],
+    ['app token wrong', { API_AUTH_TOKEN: 't' }, { 'x-api-auth-token': 'x' }, 401],
+    ['google configured without bearer or app token', { GOOGLE_CLIENT_ID: 'g' }, {}, 401],
+    ['google configured falls back to app token', { GOOGLE_CLIENT_ID: 'g', API_AUTH_TOKEN: 't' }, { 'x-api-auth-token': 't' }, null],
+    ['production without any auth config', { NODE_ENV: 'production', ALLOWED_ORIGINS: origin }, { origin }, 500],
+    ['production without allowed origins', { NODE_ENV: 'production', API_AUTH_TOKEN: 't' }, { origin, 'x-api-auth-token': 't' }, 500],
+    ['production identity error comes before origin check', { NODE_ENV: 'production', API_AUTH_TOKEN: 't', ALLOWED_ORIGINS: origin }, { origin: 'https://evil.example' }, 401],
+  ]
+  for (const [name, env, headers, status] of cases) {
+    await withEnv(
+      { NODE_ENV: 'test', GOOGLE_CLIENT_ID: null, API_AUTH_TOKEN: null, ALLOWED_ORIGINS: null, ...env },
+      async () => {
+        const result = await authorizeRequest(createMockRequest({}, headers))
+        assert.equal(result.ok, status === null, name)
+        if (status !== null) assert.equal(result.status, status, name)
+      },
+    )
+  }
+})
+
 test('applyRateLimit blocks bursts after the request window limit', async () => {
   const id = `test-rate-${Date.now()}-${Math.random()}`
 
@@ -111,6 +137,15 @@ test('applyDailyUsageLimit allows only counted actions up to the daily limit', a
     assert.equal((await applyDailyUsageLimit(id, 'analyze-product')).ok, true)
   }
   assert.equal((await applyDailyUsageLimit(id, 'analyze-product')).limit, 60)
+})
+
+test('applyDailyUsageLimit refund gives back one charged use', async () => {
+  const id = `test-refund-${Date.now()}-${Math.random()}`
+
+  const first = await applyDailyUsageLimit(id, 'review')
+  await applyDailyUsageLimit(id, 'review')
+  assert.equal(await first.refund(), 1)
+  assert.equal((await applyDailyUsageLimit(id, 'review')).count, 2)
 })
 
 // imageInput.js

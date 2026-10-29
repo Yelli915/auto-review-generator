@@ -16,97 +16,46 @@ function normalizeHostname(hostname) {
     .toLowerCase()
 }
 
-function ipv4ToInt(ip) {
-  const parts = ip.split('.').map((part) => Number(part))
-  if (parts.length !== 4 || parts.some((part) => !Number.isInteger(part))) {
-    return null
-  }
-  return parts.reduce((acc, part) => ((acc << 8) + part) >>> 0, 0)
+// 사설·예약 대역. BlockList는 IPv4-mapped(::ffff:a.b.c.d)를 감싼 IPv4 규칙으로 검사합니다.
+const BLOCKED_ADDRESSES = new net.BlockList()
+for (const [base, bits] of [
+  ['0.0.0.0', 8],
+  ['10.0.0.0', 8],
+  ['100.64.0.0', 10],
+  ['127.0.0.0', 8],
+  ['169.254.0.0', 16],
+  ['172.16.0.0', 12],
+  ['192.0.0.0', 24],
+  ['192.0.2.0', 24],
+  ['192.168.0.0', 16],
+  ['198.18.0.0', 15],
+  ['198.51.100.0', 24],
+  ['203.0.113.0', 24],
+  ['224.0.0.0', 4],
+  ['240.0.0.0', 4],
+]) {
+  BLOCKED_ADDRESSES.addSubnet(base, bits, 'ipv4')
 }
-
-function isInIpv4Cidr(ip, base, bits) {
-  const value = ipv4ToInt(ip)
-  const baseValue = ipv4ToInt(base)
-  if (value == null || baseValue == null) return false
-  const mask = bits === 0 ? 0 : (0xffffffff << (32 - bits)) >>> 0
-  return (value & mask) === (baseValue & mask)
-}
-
-// 압축(::)·IPv4 꼬리 표기를 모두 8개의 16비트 그룹으로 펼칩니다. 해석 못 하면 null.
-function expandIpv6(ip) {
-  let canonical
-  try {
-    // URL 파서가 IPv4 꼬리(::ffff:1.2.3.4)를 hex 그룹으로 바꿔 줍니다.
-    canonical = new URL(`http://[${ip}]`).hostname.slice(1, -1)
-  } catch {
-    return null
-  }
-  const [head, tail] = canonical.split('::')
-  const headGroups = head ? head.split(':') : []
-  const tailGroups = tail ? tail.split(':') : []
-  const zeros = tail === undefined ? [] : Array(8 - headGroups.length - tailGroups.length).fill('0')
-  return [...headGroups, ...zeros, ...tailGroups].map((group) => parseInt(group, 16))
+for (const [base, bits] of [
+  ['::', 96], // ::, IPv4-compatible(::7f00:1)
+  ['::1', 128],
+  // 아래 셋은 내부 IPv4를 감쌀 수 있어 통째로 막습니다.
+  ['64:ff9b::', 96], // NAT64
+  ['2001::', 32], // Teredo
+  ['2002::', 16], // 6to4 (RFC 7526로 폐기됨)
+  ['fc00::', 7], // unique local
+  ['fe80::', 10], // link-local
+  ['fec0::', 10], // site-local
+  ['ff00::', 8], // multicast
+]) {
+  BLOCKED_ADDRESSES.addSubnet(base, bits, 'ipv6')
 }
 
 export function isBlockedIpAddress(ip) {
   const normalized = normalizeHostname(ip)
   const ipVersion = net.isIP(normalized)
-  if (ipVersion === 4) {
-    return [
-      ['0.0.0.0', 8],
-      ['10.0.0.0', 8],
-      ['100.64.0.0', 10],
-      ['127.0.0.0', 8],
-      ['169.254.0.0', 16],
-      ['172.16.0.0', 12],
-      ['192.0.0.0', 24],
-      ['192.0.2.0', 24],
-      ['192.168.0.0', 16],
-      ['198.18.0.0', 15],
-      ['198.51.100.0', 24],
-      ['203.0.113.0', 24],
-      ['224.0.0.0', 4],
-      ['240.0.0.0', 4],
-    ].some(([base, bits]) => isInIpv4Cidr(normalized, base, bits))
-  }
-
-  if (ipVersion === 6) {
-    const groups = expandIpv6(normalized)
-    if (!groups) return true
-    const toIpv4 = (high, low) =>
-      [high >> 8, high & 0xff, low >> 8, low & 0xff].join('.')
-
-    // IPv4-mapped(::ffff:a.b.c.d)는 감싼 IPv4로 판단합니다.
-    if (groups.slice(0, 5).every((group) => group === 0) && groups[5] === 0xffff) {
-      return isBlockedIpAddress(toIpv4(groups[6], groups[7]))
-    }
-    // 6to4(2002:aabb:ccdd::/48)는 2~3번째 그룹에 IPv4를 담습니다.
-    if (groups[0] === 0x2002) {
-      return isBlockedIpAddress(toIpv4(groups[1], groups[2]))
-    }
-    // Teredo(2001:0::/32)는 난독화된 IPv4를 담고 있어 통째로 막습니다.
-    if (groups[0] === 0x2001 && groups[1] === 0) return true
-
-    return (
-      // ::, ::1, IPv4-compatible(::7f00:1) 등 '::'로 시작하는 예약 대역
-      normalized.startsWith('::') ||
-      // NAT64(64:ff9b::/96)는 내부 IPv4를 감쌀 수 있습니다.
-      normalized.startsWith('64:ff9b:') ||
-      normalized.startsWith('fec') ||
-      normalized.startsWith('fed') ||
-      normalized.startsWith('fee') ||
-      normalized.startsWith('fef') ||
-      normalized.startsWith('fc') ||
-      normalized.startsWith('fd') ||
-      normalized.startsWith('fe8') ||
-      normalized.startsWith('fe9') ||
-      normalized.startsWith('fea') ||
-      normalized.startsWith('feb') ||
-      normalized.startsWith('ff')
-    )
-  }
-
-  return false
+  if (!ipVersion) return false
+  return BLOCKED_ADDRESSES.check(normalized, ipVersion === 6 ? 'ipv6' : 'ipv4')
 }
 
 function isBlockedHostname(hostname) {

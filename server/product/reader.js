@@ -4,7 +4,13 @@ import {
   READER_FETCH_HEADERS,
   READER_PAGE_TIMEOUT_MS,
 } from './config.js'
-import { buildProductInfo, isAccessChallengeText, productNameFromUrl } from './productInfo.js'
+import {
+  buildAnalysisResult,
+  buildProductInfo,
+  isAccessChallengeText,
+  productNameFromUrl,
+} from './productInfo.js'
+import { formatProductContext } from '../../shared/productContext.js'
 import { fetchPublicUrl, readResponseTextLimited } from './publicFetch.js'
 
 function buildReaderUrl(urlString) {
@@ -32,36 +38,28 @@ function extractReaderTitle(text) {
   return titleLine ? titleLine.replace(/^Title:\s*/i, '').trim() : ''
 }
 
-function buildReaderProductContext(text, urlString, reason = '') {
+// 제목과 본문은 한 번만 뽑아 상품 정보와 프롬프트 근거에 같이 씁니다.
+function buildReaderAnalysisParts(text, urlString, reason = '') {
   const url = new URL(urlString)
   const title = extractReaderTitle(text)
-  const cleaned = cleanReaderText(text)
+  const body = cleanReaderText(text)
     .replace(/^Title:\s*.*$/im, '')
     .trim()
-  const summary = cleaned.slice(0, 1800).trim()
   const productName = productNameFromUrl(url)
-  const parts = [
-    `사이트: ${url.hostname}`,
+  const summary = body.slice(0, 1800).trim()
+  const productContext = formatProductContext({ site: url.hostname }, urlString, [
     title && `페이지 제목: ${title}`,
     !title && productName && `상품명 추정: ${productName}`,
     reason && `직접 읽기 상태: ${reason}`,
     summary && `페이지 내용: ${summary}`,
-    `링크: ${urlString}`,
-  ].filter(Boolean)
-  return parts.join('\n')
-}
-
-function buildReaderProductInfo(text, urlString) {
-  const url = new URL(urlString)
-  return buildProductInfo({
-    name: extractReaderTitle(text) || productNameFromUrl(url),
+  ])
+  const product = buildProductInfo({
+    name: title || productName,
     site: url.hostname,
-    description: cleanReaderText(text)
-      .replace(/^Title:\s*.*$/im, '')
-      .trim()
-      .slice(0, 600),
+    description: body.slice(0, 600),
     url: urlString,
   })
+  return { product, productContext }
 }
 
 export async function fetchReaderProductAnalysis(urlString, reason = '', signal) {
@@ -79,24 +77,25 @@ export async function fetchReaderProductAnalysis(urlString, reason = '', signal)
     return null
   }
 
-  if (!response.ok) return null
+  if (!response.ok) {
+    await response.body?.cancel()
+    return null
+  }
 
   try {
     const text = await readResponseTextLimited(response)
     if (!text.trim()) return null
     if (isAccessChallengeText(text)) return null
-    return {
-      ok: true,
+    // 보조 읽기는 요약된 본문이라 상품 정보가 정확하지 않을 수 있어 항상 확인을 받습니다.
+    return buildAnalysisResult({
       url: urlString,
-      product: buildReaderProductInfo(text, urlString),
+      ...buildReaderAnalysisParts(text, urlString, reason),
       analysisStatus: 'reader',
       warning: reason
         ? '상품 페이지 본문을 직접 읽지 못해 보조 읽기 방식으로 정보를 가져왔습니다.'
         : '',
-      productContext: buildReaderProductContext(text, urlString, reason),
-      optionGroups: [],
-      needsManualInput: isAccessChallengeText(reason),
-    }
+      needsManualInput: true,
+    })
   } catch {
     return null
   }

@@ -91,7 +91,7 @@ export function buildReviewGenerationConfig(length) {
   }
 }
 
-export async function requestGemini({ key, payload }) {
+export async function requestGemini({ key, payload, signal }) {
   let lastError = null
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt += 1) {
     try {
@@ -99,6 +99,7 @@ export async function requestGemini({ key, payload }) {
         method: 'POST',
         headers: createJsonHeaders({ 'x-goog-api-key': key }),
         body: JSON.stringify(payload),
+        signal,
       })
       const data = await readJsonSafely(response)
       if (response.ok) return { ok: true, data, model: MODEL }
@@ -121,9 +122,12 @@ export async function requestGemini({ key, payload }) {
       await wait(700 * 2 ** attempt)
     } catch (err) {
       lastError = err
-      if (attempt === MAX_RETRIES) break
+      if (signal?.aborted || attempt === MAX_RETRIES) break
       await wait(700 * 2 ** attempt)
     }
+  }
+  if (signal?.aborted) {
+    return { ok: false, error: 'Gemini 응답 시간이 초과되었습니다. 다시 시도해 주세요.' }
   }
   const message =
     lastError instanceof Error ? lastError.message : '네트워크 또는 알 수 없는 오류'

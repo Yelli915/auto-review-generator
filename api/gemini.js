@@ -1,5 +1,7 @@
-import { normalizeReviewRating } from '../shared/reviewOptions.js'
-import { fetchProductAnalysis } from '../server/product/fetchProductAnalysis.js'
+import {
+  prepareProductAnalysis,
+  readProductAnalysis,
+} from '../server/product/fetchProductAnalysis.js'
 import { authorizeRequest, getClientIp } from '../server/auth.js'
 import { getTrimmedEnv } from '../server/config.js'
 import { json, readJsonBody } from '../server/httpResponse.js'
@@ -46,21 +48,26 @@ async function rejectRateLimit(res, rateKey) {
   return true
 }
 
-async function rejectDailyUsageLimit(res, identifier, action) {
+function setReviewUsageHeaders(res, dailyUsage, count) {
+  const remaining = dailyUsage.ok ? Math.max(0, dailyUsage.limit - count) : 0
+  res.setHeader('X-Review-Remaining', String(remaining))
+  res.setHeader('X-Review-Reset', String(dailyUsage.resetAfterSec))
+}
+
+// 한도를 차감하고 차감 결과를 돌려줍니다. 한도 초과나 저장소 오류면 응답을 보내고 null을 돌려줍니다.
+async function chargeDailyUsage(res, identifier, action) {
   let dailyUsage
   try {
     dailyUsage = await applyDailyUsageLimit(identifier, action)
   } catch {
     sendError(res, 503, ERRORS.usageStoreUnavailable)
-    return true
+    return null
   }
   // 리뷰 생성·다듬기만 화면에 남은 횟수를 보여 주므로 review 응답에만 붙입니다. 한도 초과(429)면 0입니다.
   if (action === 'review' && dailyUsage.limit) {
-    const remaining = dailyUsage.ok ? Math.max(0, dailyUsage.limit - dailyUsage.count) : 0
-    res.setHeader('X-Review-Remaining', String(remaining))
-    res.setHeader('X-Review-Reset', String(dailyUsage.resetAfterSec))
+    setReviewUsageHeaders(res, dailyUsage, dailyUsage.count)
   }
-  if (dailyUsage.ok) return false
+  if (dailyUsage.ok) return dailyUsage
 
   res.setHeader('Retry-After', String(dailyUsage.retryAfterSec))
   sendError(
@@ -68,47 +75,49 @@ async function rejectDailyUsageLimit(res, identifier, action) {
     429,
     `일일 요청 한도(${dailyUsage.limit}회)를 초과했습니다. 내일 다시 시도해 주세요.`,
   )
-  return true
+  return null
+}
+
+// 결과를 하나도 받지 못한 실패만 되돌립니다. 환불 실패는 무시하고 차감된 채로 둡니다.
+async function refundDailyUsage(dailyUsage) {
+  try {
+    const count = await dailyUsage.refund?.()
+    return Number.isFinite(count) ? count : null
+  } catch {
+    return null
+  }
 }
 
 async function handleAnalyzeProduct(body, res, rateKey) {
+  const prepared = await prepareProductAnalysis(body.productUrl)
+  if (!prepared.ok) return sendError(res, prepared.status, prepared.error)
+  if (prepared.cached) return json(res, 200, prepared.cached)
+
   // 빈 링크·잘못된 URL·캐시 적중은 한도를 쓰지 않도록 실제로 페이지를 읽기 직전에만 차감합니다.
-  let limited = false
-  const analysis = await fetchProductAnalysis(body.productUrl, {
-    beforeFetch: async () => {
-      limited = await rejectDailyUsageLimit(res, rateKey, body.action)
-      return !limited
-    },
-  })
-  if (limited) return
+  if (!(await chargeDailyUsage(res, rateKey, body.action))) return
+  const analysis = await readProductAnalysis(prepared.url)
   if (!analysis.ok) return sendError(res, analysis.status, analysis.error)
 
   return json(res, 200, analysis)
 }
 
 async function handleKeywords(body, res, key, rateKey) {
-  if (await rejectDailyUsageLimit(res, rateKey, body.action)) return
+  const dailyUsage = await chargeDailyUsage(res, rateKey, body.action)
+  if (!dailyUsage) return
   const result = await generateKeywordResult({ body, key })
+  if (result.status !== 200) await refundDailyUsage(dailyUsage)
   return json(res, result.status, result.body)
 }
 
 async function handleReview(body, res, key, rateKey) {
-  if (await rejectDailyUsageLimit(res, rateKey, body.action)) return
+  const dailyUsage = await chargeDailyUsage(res, rateKey, body.action)
+  if (!dailyUsage) return
   try {
-    await streamGeminiReview({
-      key,
-      rating: normalizeReviewRating(body.rating),
-      keywords: body.keywords,
-      length: body.length,
-      tone: body.tone,
-      category: body.category,
-      subcategory: body.subcategory,
-      productContext: body.productContext,
-      previousReview: body.previousReview,
-      rewriteInstruction: body.rewriteInstruction,
-      res,
-    })
+    await streamGeminiReview({ key, input: body, res })
   } catch (err) {
+    // 스트리밍 전에 실패해 글을 받지 못했으므로 되돌립니다. 스트리밍 중 실패는 글이 이미 전달돼 차감합니다.
+    const count = await refundDailyUsage(dailyUsage)
+    if (count !== null && dailyUsage.limit) setReviewUsageHeaders(res, dailyUsage, count)
     return sendError(
       res,
       502,

@@ -26,6 +26,11 @@ import {
   getDefaultOptionSelections,
   normalizeOptionGroups,
   normalizeProductAnalysis,
+  withAllKeywordsToggled,
+  withCustomKeyword,
+  withNewKeywords,
+  withoutCustomKeyword,
+  withToggledKeyword,
 } from '../utils/workspaceContext'
 import { useReviewVersions } from './useReviewVersions'
 import { useUploadImages } from './useUploadImages'
@@ -35,7 +40,6 @@ const SAVE_DELAY_MS = 500
 async function loadKeywordsFromSource(sourcePayload, previousKeywords = []) {
   const result = await generateKeywords({
     images: sourcePayload.images,
-    productUrl: sourcePayload.productUrl,
     productContext: buildEvidenceContext(sourcePayload),
     rating: sourcePayload.rating,
     category: sourcePayload.category,
@@ -58,32 +62,44 @@ function scrollIntoViewSoon(ref) {
   })
 }
 
+function createInitialState(draft) {
+  const category = normalizeReviewCategory(draft?.category || DEFAULT_REVIEW_CATEGORY)
+  return {
+    category,
+    subcategory: normalizeReviewSubcategory(category, draft?.subcategory),
+    inputMode: draft?.inputMode || (category === 'product' ? 'link' : 'image'),
+    productUrl: draft?.productUrl || '',
+    userExperience: draft?.userExperience || '',
+    rating: draft?.rating ?? 5,
+    productAnalysis: draft?.productAnalysis || null,
+    product: draft?.product || null,
+    optionSelections: draft?.optionSelections || [],
+    sourceData: draft?.sourceData || null,
+    keywords: draft?.keywords || [],
+    customKeywords: draft?.customKeywords || [],
+    selectedKeywords: draft?.selectedKeywords || [],
+    keywordsStale: Boolean(draft?.keywordsStale),
+    length: normalizeReviewLength(draft?.length),
+    tone: normalizeReviewTone(draft?.tone),
+  }
+}
+
 // 한 화면 작업 공간의 상태입니다. 입력(분야·재료·상품 정보) → 키워드 → 리뷰 버전 순으로
 // 데이터가 흐르고, 입력이 바뀌면 화면을 되돌리는 대신 키워드를 "이전 입력 기준"으로 표시합니다.
 export function useReviewWorkspace({ requestLogin, pasteEnabled = true }) {
   const [draft] = useState(loadDraft)
-  const [category, setCategoryState] = useState(() =>
-    normalizeReviewCategory(draft?.category || DEFAULT_REVIEW_CATEGORY),
+  // 초안으로 저장되는 입력·키워드 상태를 한 객체로 둡니다. 필드를 추가하면 createInitialState와 sanitizeDraft만 고칩니다.
+  const [state, setState] = useState(() => createInitialState(draft))
+  // patch: 바꿀 필드 객체, 또는 이전 상태를 받아 그 객체를 돌려주는 함수
+  const update = useCallback(
+    (patch) => setState((prev) => ({ ...prev, ...(typeof patch === 'function' ? patch(prev) : patch) })),
+    [],
   )
-  const [subcategory, setSubcategoryState] = useState(() =>
-    normalizeReviewSubcategory(category, draft?.subcategory),
-  )
-  const [inputMode, setInputModeState] = useState(
-    () => draft?.inputMode || (category === 'product' ? 'link' : 'image'),
-  )
-  const [productUrl, setProductUrlState] = useState(draft?.productUrl || '')
-  const [userExperience, setUserExperienceState] = useState(draft?.userExperience || '')
-  const [rating, setRatingState] = useState(draft?.rating ?? 5)
-  const [productAnalysis, setProductAnalysis] = useState(draft?.productAnalysis || null)
-  const [product, setProduct] = useState(draft?.product || null)
-  const [optionSelections, setOptionSelections] = useState(draft?.optionSelections || [])
-  const [sourceData, setSourceData] = useState(draft?.sourceData || null)
-  const [keywords, setKeywords] = useState(draft?.keywords || [])
-  const [customKeywords, setCustomKeywords] = useState(draft?.customKeywords || [])
-  const [selectedKeywords, setSelectedKeywords] = useState(draft?.selectedKeywords || [])
-  const [keywordsStale, setKeywordsStale] = useState(Boolean(draft?.keywordsStale))
-  const [length, setLength] = useState(() => normalizeReviewLength(draft?.length))
-  const [tone, setTone] = useState(() => normalizeReviewTone(draft?.tone))
+  const {
+    category, subcategory, inputMode, productUrl, userExperience, rating,
+    productAnalysis, product, optionSelections, sourceData,
+    keywords, customKeywords, selectedKeywords, keywordsStale, length, tone,
+  } = state
   const {
     versions,
     activeVersion,
@@ -109,12 +125,18 @@ export function useReviewWorkspace({ requestLogin, pasteEnabled = true }) {
   const productUrlChanged = Boolean(productAnalysis) &&
     productUrl.trim() !== (productAnalysis.inputUrl ?? productAnalysis.url)
 
-  const markSourceChanged = () => {
-    if (keywords.length) setKeywordsStale(true)
-  }
+  // 입력 근거가 바뀌면 이미 만든 키워드를 "이전 입력 기준"으로 표시합니다.
+  const updateSource = useCallback(
+    (patch) =>
+      update((prev) => ({
+        ...(typeof patch === 'function' ? patch(prev) : patch),
+        keywordsStale: prev.keywordsStale || prev.keywords.length > 0,
+      })),
+    [update],
+  )
 
   // 붙여넣기 리스너가 렌더마다 다시 붙지 않도록 함수 참조를 고정합니다.
-  const switchToImageMode = useCallback(() => setInputModeState('image'), [])
+  const switchToImageMode = useCallback(() => update({ inputMode: 'image' }), [update])
   const upload = useUploadImages({
     isLoading: Boolean(busy),
     isLinkMode,
@@ -127,31 +149,16 @@ export function useReviewWorkspace({ requestLogin, pasteEnabled = true }) {
     if (prevImagesRef.current === upload.images) return
     prevImagesRef.current = upload.images
     if (upload.images.length) setMissingImageCount(0)
-    if (keywords.length) setKeywordsStale(true)
-  }, [upload.images, keywords.length])
+    updateSource({})
+  }, [upload.images, updateSource])
 
   // 입력할 때마다 전체를 직렬화하지 않도록 잠깐 모았다가 저장하고, 페이지를 떠날 때 남은 변경을 바로 씁니다.
   const pendingDraftRef = useRef(null)
   useEffect(() => {
     if (busy === 'review') return
     pendingDraftRef.current = {
-      category,
-      subcategory,
-      inputMode,
-      productUrl,
-      userExperience,
-      rating,
+      ...state,
       imageCount: upload.images.length || missingImageCount,
-      productAnalysis,
-      product,
-      optionSelections,
-      sourceData,
-      keywords,
-      customKeywords,
-      selectedKeywords,
-      keywordsStale,
-      length,
-      tone,
       versions,
       activeVersion,
     }
@@ -160,12 +167,7 @@ export function useReviewWorkspace({ requestLogin, pasteEnabled = true }) {
       pendingDraftRef.current = null
     }, SAVE_DELAY_MS)
     return () => clearTimeout(timer)
-  }, [
-    busy, category, subcategory, inputMode, productUrl, userExperience, rating,
-    upload.images.length, missingImageCount, productAnalysis, product,
-    optionSelections, sourceData, keywords, customKeywords, selectedKeywords,
-    keywordsStale, length, tone, versions, activeVersion,
-  ])
+  }, [busy, state, upload.images.length, missingImageCount, versions, activeVersion])
 
   useEffect(() => {
     const flush = () => {
@@ -200,49 +202,28 @@ export function useReviewWorkspace({ requestLogin, pasteEnabled = true }) {
   const setCategory = (value) => {
     const next = normalizeReviewCategory(value)
     if (next === category) return
-    setCategoryState(next)
-    setSubcategoryState(normalizeReviewSubcategory(next, ''))
-    setInputModeState(next === 'product' ? 'link' : 'image')
-    markSourceChanged()
+    updateSource({
+      category: next,
+      subcategory: normalizeReviewSubcategory(next, ''),
+      inputMode: next === 'product' ? 'link' : 'image',
+    })
   }
 
-  const setSubcategory = (value) => {
-    setSubcategoryState(normalizeReviewSubcategory(category, value))
-    markSourceChanged()
-  }
-
-  const setInputMode = (value) => {
-    setInputModeState(value === 'link' ? 'link' : 'image')
-    markSourceChanged()
-  }
-
-  const setProductUrl = (value) => {
-    setProductUrlState(value)
-    markSourceChanged()
-  }
-
-  const setUserExperience = (value) => {
-    setUserExperienceState(value)
-    markSourceChanged()
-  }
-
-  const setRating = (value) => {
-    setRatingState(normalizeReviewRating(value))
-    markSourceChanged()
-  }
-
-  const updateProduct = (field, value) => {
-    setProduct((prev) => ({ ...prev, [field]: value }))
-    markSourceChanged()
-  }
+  const setSubcategory = (value) =>
+    updateSource({ subcategory: normalizeReviewSubcategory(category, value) })
+  const setInputMode = (value) => updateSource({ inputMode: value === 'link' ? 'link' : 'image' })
+  const setProductUrl = (value) => updateSource({ productUrl: value })
+  const setUserExperience = (value) => updateSource({ userExperience: value })
+  const setRating = (value) => updateSource({ rating: normalizeReviewRating(value) })
+  const updateProduct = (field, value) =>
+    updateSource((prev) => ({ product: { ...prev.product, [field]: value } }))
 
   const setOptionSelection = (index, value) => {
-    setOptionSelections((prev) => {
-      const next = [...prev]
+    updateSource((prev) => {
+      const next = [...prev.optionSelections]
       next[index] = value
-      return next
+      return { optionSelections: next }
     })
-    markSourceChanged()
   }
 
   const analyzeProduct = () =>
@@ -253,15 +234,16 @@ export function useReviewWorkspace({ requestLogin, pasteEnabled = true }) {
       const analysis = result?.ok
         ? normalizeProductAnalysis(result, url)
         : createManualProductAnalysis(url, result?.error)
-      setProductAnalysis({ ...analysis, inputUrl: url })
-      setProduct(analysis.product)
-      setOptionSelections(getDefaultOptionSelections(analysis.optionGroups))
+      update({
+        productAnalysis: { ...analysis, inputUrl: url },
+        product: analysis.product,
+        optionSelections: getDefaultOptionSelections(analysis.optionGroups),
+      })
     }, '상품 정보를 분석하지 못했습니다.')
 
   const buildKeywordSource = () => {
     const base = {
       images: isLinkMode ? [] : upload.images,
-      productUrl: '',
       productContext: '',
       userExperience: userExperience.trim(),
       rating,
@@ -272,7 +254,6 @@ export function useReviewWorkspace({ requestLogin, pasteEnabled = true }) {
     return appendProductContext(
       {
         ...base,
-        productUrl: productAnalysis.url,
         productContext: productAnalysis.productContext,
       },
       product,
@@ -299,39 +280,20 @@ export function useReviewWorkspace({ requestLogin, pasteEnabled = true }) {
         avoidPrevious ? keywords : [],
       )
       // 리뷰 생성에는 이미지가 필요 없어서, 저장 용량을 위해 이미지 없이 보관합니다.
-      setSourceData({ ...source, images: [] })
-      setKeywords(nextKeywords)
-      // 이어서 고를 선택이 남아 있지 않으면(처음 만들 때 등) 전부 골라 둬서 바로 리뷰를 만들 수 있게 합니다.
-      setSelectedKeywords((prev) => {
-        const kept = prev.filter((k) => nextKeywords.includes(k) || customKeywords.includes(k))
-        return kept.length ? kept : Array.from(new Set([...nextKeywords, ...customKeywords]))
-      })
-      setKeywordsStale(false)
+      update((prev) => ({
+        ...withNewKeywords(prev, nextKeywords),
+        sourceData: { ...source, images: [] },
+        keywordsStale: false,
+      }))
       // 키워드를 새로 만들었으면 복원 초안의 "사진 N장" 안내는 더 이상 맞지 않습니다.
       setMissingImageCount(0)
       scrollIntoViewSoon(keywordSectionRef)
     }, '키워드 생성에 실패했습니다.')
 
-  const toggleKeyword = (keyword) => {
-    setSelectedKeywords((prev) =>
-      prev.includes(keyword) ? prev.filter((k) => k !== keyword) : [...prev, keyword],
-    )
-  }
-
-  const toggleAllKeywords = () => {
-    const all = Array.from(new Set([...keywords, ...customKeywords]))
-    setSelectedKeywords((prev) => (prev.length === all.length ? [] : all))
-  }
-
-  const addCustomKeyword = (keyword) => {
-    setCustomKeywords((prev) => [...prev, keyword])
-    setSelectedKeywords((prev) => Array.from(new Set([...prev, keyword])))
-  }
-
-  const removeCustomKeyword = (keyword) => {
-    setCustomKeywords((prev) => prev.filter((k) => k !== keyword))
-    setSelectedKeywords((prev) => prev.filter((k) => k !== keyword))
-  }
+  const toggleKeyword = (keyword) => update((prev) => withToggledKeyword(prev, keyword))
+  const toggleAllKeywords = () => update(withAllKeywordsToggled)
+  const addCustomKeyword = (keyword) => update((prev) => withCustomKeyword(prev, keyword))
+  const removeCustomKeyword = (keyword) => update((prev) => withoutCustomKeyword(prev, keyword))
 
   const canGenerateReview = Boolean(sourceData) && selectedKeywords.length > 0
 
@@ -431,9 +393,9 @@ export function useReviewWorkspace({ requestLogin, pasteEnabled = true }) {
     addCustomKeyword,
     removeCustomKeyword,
     length,
-    setLength,
+    setLength: (value) => update({ length: value }),
     tone,
-    setTone,
+    setTone: (value) => update({ tone: value }),
     // 리뷰
     canGenerateReview,
     writeReview,

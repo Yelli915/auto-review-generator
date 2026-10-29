@@ -137,6 +137,31 @@ test('workspace context builds the evidence text sent to keyword and review prom
   assert.equal(appendProductContext({ productContext: '원문' }, {}, '').productContext, '원문')
 })
 
+test('keyword selection helpers keep custom picks and toggle the full set', async () => {
+  const { withAllKeywordsToggled, withCustomKeyword, withNewKeywords, withoutCustomKeyword, withToggledKeyword } =
+    await import('./workspaceContext.js')
+  const prev = { keywords: ['맛', '가격'], customKeywords: ['친절'], selectedKeywords: ['가격', '친절'] }
+
+  // 새 키워드에 남은 선택과 직접 추가한 키워드만 유지합니다.
+  assert.deepEqual(withNewKeywords(prev, ['가격', '양']).selectedKeywords, ['가격', '친절'])
+  // 남은 선택이 없으면 새 키워드와 직접 추가한 키워드를 전부 고릅니다.
+  assert.deepEqual(
+    withNewKeywords({ ...prev, selectedKeywords: ['맛'] }, ['양', '친절']).selectedKeywords,
+    ['양', '친절'],
+  )
+
+  assert.deepEqual(withToggledKeyword(prev, '가격').selectedKeywords, ['친절'])
+  assert.deepEqual(withToggledKeyword(prev, '맛').selectedKeywords, ['가격', '친절', '맛'])
+  assert.deepEqual(withAllKeywordsToggled(prev).selectedKeywords, ['맛', '가격', '친절'])
+  assert.deepEqual(withAllKeywordsToggled({ ...prev, selectedKeywords: ['맛', '가격', '친절'] }).selectedKeywords, [])
+
+  assert.deepEqual(withCustomKeyword(prev, '청결'), {
+    customKeywords: ['친절', '청결'],
+    selectedKeywords: ['가격', '친절', '청결'],
+  })
+  assert.deepEqual(withoutCustomKeyword(prev, '친절'), { customKeywords: [], selectedKeywords: ['가격'] })
+})
+
 test('findMissingKeywords returns keywords whose stems never appear in the review', async () => {
   const { findMissingKeywords } = await import('./keywordHighlight.js')
   const text = '은은한 조명 덕분에 분위기가 좋았어요.'

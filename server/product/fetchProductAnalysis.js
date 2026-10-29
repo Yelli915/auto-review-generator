@@ -57,13 +57,10 @@ function cacheProductAnalysis(urlString, value) {
 function buildFallbackProductContext(urlString, reason = '') {
   const url = new URL(urlString)
   const productName = productNameFromUrl(url)
-  const parts = [
-    `사이트: ${url.hostname}`,
+  return formatProductContext({ site: url.hostname }, urlString, [
     productName && `상품명 추정: ${productName}`,
     reason && `페이지 수집 상태: ${reason}`,
-    `링크: ${urlString}`,
-  ].filter(Boolean)
-  return parts.join('\n')
+  ])
 }
 
 function buildFallbackProductInfo(urlString) {
@@ -90,7 +87,6 @@ const PRODUCT_URL_REQUIRED_ERROR = '상품 링크를 입력해 주세요.'
 const PRODUCT_URL_TOO_LONG_ERROR = '상품 링크가 너무 깁니다.'
 const PUBLIC_PRODUCT_URL_ERROR =
   '공개된 http/https 상품 페이지 링크만 사용할 수 있습니다.'
-const PRODUCT_FETCH_REJECTED_ERROR = '상품 분석 요청이 거절되었습니다.'
 
 async function normalizeProductUrl(rawUrl) {
   if (typeof rawUrl !== 'string' || !rawUrl.trim()) {
@@ -110,28 +106,28 @@ async function fallBackProductAnalysis(url, signal, { reason = '', useReader = t
   return alternate || buildFallbackAnalysis(url, message, warning)
 }
 
-// beforeFetch: 캐시에 없어 실제로 페이지를 읽기 직전에 호출됩니다. false를 돌려주면 중단합니다.
-export async function fetchProductAnalysis(rawUrl, { beforeFetch } = {}) {
+// 링크를 검증하고 캐시를 확인합니다. 캐시에 없으면 cached가 null이고, readProductAnalysis(url)로 읽습니다.
+// 둘을 나눠 두어 호출하는 쪽이 실제로 페이지를 읽을 때만 사용량을 차감할 수 있습니다.
+export async function prepareProductAnalysis(rawUrl) {
   const normalized = await normalizeProductUrl(rawUrl)
   if (!normalized.ok) return normalized
-  const cached = getCachedProductAnalysis(normalized.url)
-  if (cached) return cached
-  if (beforeFetch && !(await beforeFetch())) {
-    return { ok: false, status: 429, error: PRODUCT_FETCH_REJECTED_ERROR }
-  }
+  return { ok: true, url: normalized.url, cached: getCachedProductAnalysis(normalized.url) }
+}
 
+// url은 prepareProductAnalysis가 검증한 값이어야 합니다.
+export async function readProductAnalysis(url) {
   // direct → reader가 하나의 제한 시간을 나눠 써서 함수 최대 실행 시간 전에 끝냅니다.
   const signal = AbortSignal.timeout(PRODUCT_ANALYSIS_DEADLINE_MS)
-  const result = await analyzeProductUrl(normalized.url, signal)
+  const result = await analyzeFetchedProduct(url, signal)
   // 시간 초과로 만든 대체 결과는 다음 시도에서 다시 읽도록 캐시하지 않습니다.
   if (result.ok && !signal.aborted) {
-    cacheProductAnalysis(normalized.url, result)
-    if (result.url !== normalized.url) cacheProductAnalysis(result.url, result)
+    cacheProductAnalysis(url, result)
+    if (result.url !== url) cacheProductAnalysis(result.url, result)
   }
   return result
 }
 
-async function analyzeProductUrl(url, signal) {
+async function analyzeFetchedProduct(url, signal) {
   let response
   let responseUrl = url
   try {
@@ -151,6 +147,7 @@ async function analyzeProductUrl(url, signal) {
   }
 
   if (!response.ok) {
+    await response.body?.cancel()
     return fallBackProductAnalysis(responseUrl, signal, {
       reason: `HTTP ${response.status}`,
       message: `HTTP ${response.status} 응답으로 페이지 본문을 읽지 못했습니다.`,
@@ -160,6 +157,7 @@ async function analyzeProductUrl(url, signal) {
 
   const contentType = response.headers.get('content-type') || ''
   if (contentType && !/text\/html|application\/xhtml\+xml/i.test(contentType)) {
+    await response.body?.cancel()
     return fallBackProductAnalysis(responseUrl, signal, {
       useReader: false,
       message: 'HTML 페이지가 아닌 응답입니다.',

@@ -6,9 +6,9 @@ import {
 } from './config.js'
 import {
   decodeHtmlEntities,
-  extractMetaContent,
   extractTitle,
   parseAttributes,
+  readMetaTags,
   sliceBalancedSegment,
 } from './htmlUtils.js'
 import {
@@ -40,19 +40,30 @@ function collectJsonLdNodes(value, nodes = []) {
   return nodes
 }
 
-function parseJsonLdBlocks(html) {
+function tryParseJson(text) {
+  try {
+    return JSON.parse(text)
+  } catch {
+    return undefined
+  }
+}
+
+// 페이지의 <script>를 한 번만 훑어 JSON-LD와 내장 JSON 추출이 같이 씁니다.
+function readScripts(html) {
+  return Array.from(html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi), (match) => ({
+    attrs: parseAttributes(match[1] || ''),
+    body: match[2] || '',
+  }))
+}
+
+// <script> 안은 엔티티를 풀지 않는 원문이라 그대로 먼저 읽습니다. 본문 전체를 엔티티로 감싼 페이지만 풀어서 다시 읽습니다.
+function parseJsonLdBlocks(scripts) {
   const blocks = []
-  const scriptRe =
-    /<script\b(?=[^>]*type=["']application\/ld\+json["'])[^>]*>([\s\S]*?)<\/script>/gi
-  let match
-  while ((match = scriptRe.exec(html)) !== null) {
-    const rawJson = decodeHtmlEntities(match[1] || '')
+  for (const { attrs, body: rawJson } of scripts) {
+    if (String(attrs.type || '').trim().toLowerCase() !== 'application/ld+json') continue
     if (!rawJson.trim()) continue
-    try {
-      blocks.push(JSON.parse(rawJson))
-    } catch {
-      void 0
-    }
+    const block = tryParseJson(rawJson) ?? tryParseJson(decodeHtmlEntities(rawJson))
+    if (block !== undefined) blocks.push(block)
   }
   return blocks
 }
@@ -69,22 +80,24 @@ function extractOfferPrice(offers) {
   return ''
 }
 
-function extractStructuredProductData(html) {
-  const nodes = parseJsonLdBlocks(html).flatMap((block) => collectJsonLdNodes(block))
+function extractStructuredProductData(scripts) {
+  const nodes = parseJsonLdBlocks(scripts).flatMap((block) => collectJsonLdNodes(block))
   const product = nodes.find((node) =>
     normalizeJsonLdType(node?.['@type']).includes('product'),
   )
   if (!product) return {}
 
+  // JSON 문자열 값에 HTML 엔티티(&amp; 등)를 넣어 보내는 사이트가 많아 꺼낸 값만 풉니다.
+  const text = (...values) => decodeHtmlEntities(firstString(...values))
   const brand =
     typeof product.brand === 'string'
-      ? product.brand
-      : firstString(product.brand?.name)
+      ? text(product.brand)
+      : text(product.brand?.name)
   return {
-    name: firstString(product.name),
-    description: firstString(product.description),
+    name: text(product.name),
+    description: text(product.description),
     brand,
-    imageUrl: firstString(
+    imageUrl: text(
       typeof product.image === 'string' ? product.image : '',
       product.image?.url,
       Array.isArray(product.image) ? product.image[0] : '',
@@ -95,14 +108,11 @@ function extractStructuredProductData(html) {
 
 // -- Embedded JSON (inline script payload) extraction --
 
-function collectScriptPayloads(html) {
+function collectScriptPayloads(scripts) {
   const payloads = []
-  const scriptRe = /<script\b([^>]*)>([\s\S]*?)<\/script>/gi
-  let match
-  while ((match = scriptRe.exec(html)) !== null) {
-    const attrs = parseAttributes(match[1] || '')
+  for (const { attrs, body: rawBody } of scripts) {
     if ('src' in attrs) continue
-    const body = decodeHtmlEntities(match[2] || '').trim()
+    const body = decodeHtmlEntities(rawBody).trim()
     if (!body) continue
     const type = String(attrs.type || '').toLowerCase()
     const id = String(attrs.id || '')
@@ -120,7 +130,7 @@ function collectScriptPayloads(html) {
       const start = body.slice(assignment.index + assignment[0].length).search(/[[{]/)
       if (start < 0) continue
       const jsonStart = assignment.index + assignment[0].length + start
-      const jsonLike = sliceBalancedSegment(body, { startIndex: jsonStart })
+      const jsonLike = sliceBalancedSegment(body, jsonStart)
       if (jsonLike) payloads.push(jsonLike)
     }
   }
@@ -132,14 +142,8 @@ function parseEmbeddedJsonPayload(payload) {
   const trimmed = payload.trim()
   const start = trimmed.search(/[[{]/)
   if (start < 0) return null
-  const jsonLike = sliceBalancedSegment(trimmed, { startIndex: start })
-  if (!jsonLike) return null
-
-  try {
-    return JSON.parse(jsonLike)
-  } catch {
-    return null
-  }
+  const jsonLike = sliceBalancedSegment(trimmed, start)
+  return jsonLike ? tryParseJson(jsonLike) ?? null : null
 }
 
 function scoreProductCandidate(product, keyPath = '') {
@@ -156,12 +160,14 @@ function scoreProductCandidate(product, keyPath = '') {
 function productInfoFromObject(value, pageUrl) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null
 
-  const imageRaw =
-    firstImageValue(firstValueByKeys(value, PRODUCT_FIELD_KEYS.imageUrl)) ||
-    firstImageValue(value.image) ||
-    firstImageValue(value.images) ||
-    firstImageValue(value.imageList) ||
-    firstImageValue(value.goodsImages)
+  // 배열을 받으면 앞에서부터 처음 찾은 이미지를 씁니다.
+  const imageRaw = firstImageValue([
+    firstValueByKeys(value, PRODUCT_FIELD_KEYS.imageUrl),
+    value.image,
+    value.images,
+    value.imageList,
+    value.goodsImages,
+  ])
   const brandRaw =
     firstValueByKeys(value, PRODUCT_FIELD_KEYS.brand) ||
     firstValueByKeys(value.brand, ['name', 'brandName', 'brandNm'])
@@ -200,9 +206,9 @@ function findBestEmbeddedProduct(value, pageUrl, keyPath = '', state = { best: n
   return state.best
 }
 
-function extractEmbeddedProductData(html, pageUrl) {
+function extractEmbeddedProductData(scripts, pageUrl) {
   let best = null
-  for (const payload of collectScriptPayloads(html)) {
+  for (const payload of collectScriptPayloads(scripts)) {
     const parsed = parseEmbeddedJsonPayload(payload)
     if (!parsed) continue
     const candidate = findBestEmbeddedProduct(parsed, pageUrl)
@@ -220,32 +226,29 @@ export function isAccessChallengeHtml(html) {
   return isAccessChallengeText(`${extractTitle(html)} ${html.slice(0, 6000)}`)
 }
 
+// 접근 차단 페이지인지는 호출하는 쪽(isAccessChallengeHtml)이 먼저 확인합니다.
 export function extractProductInfoFromHtml(html, url) {
-  if (isAccessChallengeHtml(html)) {
-    return buildProductInfo({
-      site: new URL(url).hostname,
-      url,
-    })
-  }
-
-  const structured = extractStructuredProductData(html)
-  const embedded = extractEmbeddedProductData(html, url)
-  const title = firstString(structured.name, embedded.name, extractTitle(html))
+  const meta = readMetaTags(html)
+  const metaContent = (key) => meta.get(key) || ''
+  const scripts = readScripts(html)
+  const structured = extractStructuredProductData(scripts)
+  const embedded = extractEmbeddedProductData(scripts, url)
+  const title = firstString(structured.name, embedded.name, extractTitle(html, meta))
   const description =
-    extractMetaContent(html, 'og:description') ||
-    extractMetaContent(html, 'description') ||
+    metaContent('og:description') ||
+    metaContent('description') ||
     structured.description ||
     embedded.description
-  const site = extractMetaContent(html, 'og:site_name')
+  const site = metaContent('og:site_name')
   const imageUrl =
-    extractMetaContent(html, 'og:image') ||
-    extractMetaContent(html, 'twitter:image') ||
+    metaContent('og:image') ||
+    metaContent('twitter:image') ||
     structured.imageUrl ||
     embedded.imageUrl
   const price =
-    extractMetaContent(html, 'product:price:amount') ||
-    extractMetaContent(html, 'og:price:amount') ||
-    extractMetaContent(html, 'twitter:data1') ||
+    metaContent('product:price:amount') ||
+    metaContent('og:price:amount') ||
+    metaContent('twitter:data1') ||
     structured.price ||
     embedded.price
   return buildProductInfo({
@@ -268,13 +271,22 @@ function normalizeOptionText(text) {
     .trim()
 }
 
-function extractAssociatedLabel(html, inputId) {
-  if (!inputId) return ''
-  const escaped = inputId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-  const labelMatch = html.match(
-    new RegExp(`<label\\b[^>]*for=["']${escaped}["'][^>]*>([\\s\\S]*?)<\\/label>`, 'i'),
-  )
-  return normalizeOptionText(labelMatch?.[1] || '')
+// <label for>를 처음 필요할 때 한 번만 훑어 id → 라벨 맵을 만듭니다. 입력마다 HTML 전체를 다시 훑지 않습니다.
+function createLabelLookup(html) {
+  let labels = null
+  return (inputId) => {
+    if (!inputId) return ''
+    if (!labels) {
+      labels = new Map()
+      const labelRe = /<label\b([^>]*)>([\s\S]*?)<\/label>/gi
+      let match
+      while ((match = labelRe.exec(html)) !== null) {
+        const target = parseAttributes(match[1] || '').for
+        if (target && !labels.has(target)) labels.set(target, normalizeOptionText(match[2] || ''))
+      }
+    }
+    return labels.get(inputId) || ''
+  }
 }
 
 function simplifyGroupLabel(rawLabel, fallback) {
@@ -283,7 +295,20 @@ function simplifyGroupLabel(rawLabel, fallback) {
   return text.replace(/\s*[:|·.-]\s*$/, '').trim()
 }
 
-function extractSelectOptionGroups(html) {
+// value·label이 같은 옵션은 하나만 남기고 최대 12개까지 씁니다.
+function uniqueOptions(options) {
+  const seen = new Set()
+  return options
+    .filter((option) => {
+      const key = `${option.value}::${option.label}`
+      if (seen.has(key)) return false
+      seen.add(key)
+      return true
+    })
+    .slice(0, 12)
+}
+
+function extractSelectOptionGroups(html, labelFor) {
   const groups = []
   const selectRe = /<select\b([^>]*)>([\s\S]*?)<\/select>/gi
   let selectMatch
@@ -293,7 +318,7 @@ function extractSelectOptionGroups(html) {
     const groupLabel = simplifyGroupLabel(
       attrs['aria-label'] ||
         attrs['data-label'] ||
-        extractAssociatedLabel(html, attrs.id) ||
+        labelFor(attrs.id) ||
         attrs.name ||
         attrs.id,
       '옵션',
@@ -308,7 +333,6 @@ function extractSelectOptionGroups(html) {
       const value = normalizeOptionText(optionAttrs.value || label)
       const disabled = 'disabled' in optionAttrs
       if (!label || disabled) continue
-      if (!value && !label) continue
       const isPlaceholder =
         !value ||
         /선택|choose|select|option|사이즈 선택|색상 선택|옵션 선택/i.test(label)
@@ -319,28 +343,20 @@ function extractSelectOptionGroups(html) {
       })
     }
 
-    const uniqueOptions = []
-    const seen = new Set()
-    for (const option of options) {
-      const key = `${option.value}::${option.label}`
-      if (seen.has(key)) continue
-      seen.add(key)
-      uniqueOptions.push(option)
-    }
-
-    if (uniqueOptions.length >= 2) {
+    const unique = uniqueOptions(options)
+    if (unique.length >= 2) {
       groups.push({
         id: attrs.id || attrs.name || `select-${groups.length + 1}`,
         label: groupLabel,
         type: 'select',
-        options: uniqueOptions.slice(0, 12),
+        options: unique,
       })
     }
   }
   return groups
 }
 
-function extractRadioOptionGroups(html) {
+function extractRadioOptionGroups(html, labelFor) {
   const inputRe = /<input\b([^>]*\btype=["']?(?:radio|checkbox)["']?[^>]*)>/gi
   const grouped = new Map()
   let inputMatch
@@ -348,19 +364,19 @@ function extractRadioOptionGroups(html) {
     const attrs = parseAttributes(inputMatch[1] || '')
     const name = attrs.name || attrs.id
     if (!name) continue
+    const associatedLabel = labelFor(attrs.id)
     const label =
       normalizeOptionText(attrs['aria-label']) ||
       normalizeOptionText(attrs.title) ||
-      extractAssociatedLabel(html, attrs.id) ||
+      associatedLabel ||
       normalizeOptionText(attrs.value)
     if (!label) continue
-    const groupLabel = simplifyGroupLabel(
-      attrs['aria-label'] || extractAssociatedLabel(html, attrs.id) || attrs.name || attrs.id,
-      '옵션',
-    )
     const list = grouped.get(name) || {
       id: name,
-      label: groupLabel,
+      label: simplifyGroupLabel(
+        attrs['aria-label'] || associatedLabel || attrs.name || attrs.id,
+        '옵션',
+      ),
       type: attrs.type || 'radio',
       options: [],
     }
@@ -372,23 +388,14 @@ function extractRadioOptionGroups(html) {
   }
 
   return Array.from(grouped.values())
-    .map((group) => {
-      const seen = new Set()
-      const options = []
-      for (const option of group.options) {
-        const key = `${option.value}::${option.label}`
-        if (seen.has(key)) continue
-        seen.add(key)
-        options.push(option)
-      }
-      return { ...group, options: options.slice(0, 12) }
-    })
+    .map((group) => ({ ...group, options: uniqueOptions(group.options) }))
     .filter((group) => group.options.length >= 2)
 }
 
 export function extractProductOptionGroupsFromHtml(html) {
-  return [...extractSelectOptionGroups(html), ...extractRadioOptionGroups(html)].slice(
-    0,
-    8,
-  )
+  const labelFor = createLabelLookup(html)
+  return [
+    ...extractSelectOptionGroups(html, labelFor),
+    ...extractRadioOptionGroups(html, labelFor),
+  ].slice(0, 8)
 }

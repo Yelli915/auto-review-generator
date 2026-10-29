@@ -11,6 +11,7 @@ import {
   jsonResponse,
   png1x1Base64,
   withEnv,
+  withTestEnv,
   withFetch,
   withFetchCalls,
 } from './testUtils.js'
@@ -22,104 +23,93 @@ delete process.env.UPSTASH_REDIS_REST_TOKEN
 beforeEach(clearProductAnalysisCache)
 
 test('handler treats missing previousKeywords as an empty list', async () => {
-  await withEnv(
-    {
-      GEMINI_API_KEY: 'test-key',
-      GOOGLE_CLIENT_ID: null,
-      API_AUTH_TOKEN: null,
-    },
-    () =>
-      withFetch(
-        async () => geminiKeywordResponse(['포장 깔끔', '배송 빠름', '색감 좋음']),
-        async () => {
-          const req = createMockRequest({
-            action: 'keywords',
-            images: [{ imageBase64: png1x1Base64, mimeType: 'image/png' }],
-            rating: 5,
-            category: 'product',
-          })
-          const res = createMockResponse()
+  await withTestEnv(() =>
+    withFetch(
+      async () => geminiKeywordResponse(['포장 깔끔', '배송 빠름', '색감 좋음']),
+      async () => {
+        const req = createMockRequest({
+          action: 'keywords',
+          images: [{ imageBase64: png1x1Base64, mimeType: 'image/png' }],
+          rating: 5,
+          category: 'product',
+        })
+        const res = createMockResponse()
 
-          await handler(req, res)
+        await handler(req, res)
 
-          assert.equal(res.statusCode, 200)
-          assert.deepEqual(JSON.parse(res.body).keywords, ['포장 깔끔', '배송 빠름', '색감 좋음'])
-        },
-      ),
+        assert.equal(res.statusCode, 200)
+        assert.deepEqual(JSON.parse(res.body).keywords, ['포장 깔끔', '배송 빠름', '색감 좋음'])
+      },
+    ),
   )
 })
 
 test('handler maps upstream Gemini 500 during keyword generation to a client-safe error', async () => {
-  await withEnv(
-    {
-      GEMINI_API_KEY: 'test-key',
-      GOOGLE_CLIENT_ID: null,
-      API_AUTH_TOKEN: null,
-    },
-    () =>
-      withFetch(
-        async () =>
-          jsonResponse(
-            { error: { message: 'internal server error' } },
-            500,
-          ),
-        async () => {
-          const req = createMockRequest({
-            action: 'keywords',
-            images: [{ imageBase64: png1x1Base64, mimeType: 'image/png' }],
-            rating: 5,
-            category: 'product',
-          })
-          const res = createMockResponse()
+  await withTestEnv(() =>
+    withFetch(
+      async () =>
+        jsonResponse(
+          { error: { message: 'internal server error' } },
+          500,
+        ),
+      async () => {
+        const req = createMockRequest({
+          action: 'keywords',
+          images: [{ imageBase64: png1x1Base64, mimeType: 'image/png' }],
+          rating: 5,
+          category: 'product',
+        })
+        const res = createMockResponse()
 
-          await handler(req, res)
+        await handler(req, res)
 
-          const body = JSON.parse(res.body)
-          assert.equal(res.statusCode, 502)
-          assert.equal(body.ok, false)
-          assert.match(body.error, /Gemini API/)
-        },
-      ),
+        const body = JSON.parse(res.body)
+        assert.equal(res.statusCode, 502)
+        assert.equal(body.ok, false)
+        assert.match(body.error, /Gemini API/)
+      },
+    ),
   )
 })
 
-test('handler generates keywords from productUrl metadata', async () => {
-  await withEnv(
-    {
-      GEMINI_API_KEY: 'test-key',
-      GOOGLE_CLIENT_ID: null,
-      API_AUTH_TOKEN: null,
-    },
-    () =>
-      withFetchCalls(
-        async (url) => {
-          if (String(url).startsWith('https://shop.example/product')) {
-            return htmlResponse(
-              '<html><head><title>가벼운 무선 키보드</title><meta name="description" content="조용한 타건감과 낮은 높이의 디자인"></head></html>',
-            )
-          }
-          return geminiKeywordResponse(['조용한 타건감', '낮은 디자인', '가벼운 무게'])
-        },
-        async (calls) => {
-          const req = createMockRequest({
-            action: 'keywords',
-            productUrl: 'https://shop.example/product/keyboard',
-            rating: 5,
-            category: 'product',
-          })
+test('handler refunds the daily review count when Gemini fails before streaming', async () => {
+  await withTestEnv(() =>
+    withFetch(
+      async () => jsonResponse({ error: { message: 'bad request' } }, 400),
+      async () => {
+        const remaining = []
+        for (let i = 0; i < 2; i += 1) {
           const res = createMockResponse()
+          await handler(createMockRequest({ action: 'review', rating: 5, keywords: ['조용한 타건감'] }), res)
+          assert.equal(res.statusCode, 502)
+          remaining.push(res.headers['x-review-remaining'])
+        }
+        assert.ok(remaining[0])
+        assert.equal(remaining[0], remaining[1])
+      },
+    ),
+  )
+})
 
-          await handler(req, res)
+test('handler does not fetch product pages for keyword requests', async () => {
+  await withTestEnv(() =>
+    withFetchCalls(
+      async () => geminiKeywordResponse(['조용한 타건감', '낮은 디자인', '가벼운 무게']),
+      async (calls) => {
+        const req = createMockRequest({
+          action: 'keywords',
+          productUrl: 'https://shop.example/product/keyboard',
+          rating: 5,
+          category: 'product',
+        })
+        const res = createMockResponse()
 
-          assert.equal(res.statusCode, 200)
-          assert.deepEqual(JSON.parse(res.body).keywords, [
-            '조용한 타건감',
-            '낮은 디자인',
-            '가벼운 무게',
-          ])
-          assert.equal(calls.length, 2)
-        },
-      ),
+        await handler(req, res)
+
+        assert.equal(res.statusCode, 400)
+        assert.equal(calls.length, 0)
+      },
+    ),
   )
 })
 
@@ -280,31 +270,61 @@ test('handler analyzes product data embedded for client-side rendering', async (
 })
 
 test('handler generates keywords from productContext without images', async () => {
-  await withEnv(
+  await withTestEnv(() =>
+    withFetch(
+      async () => geminiKeywordResponse(['블랙 컬러', '무선 연결', '가벼운 무게']),
+      async () => {
+        const req = createMockRequest({
+          action: 'keywords',
+          productUrl: 'https://shop.example/product/keyboard',
+          productContext: '사이트: shop.example\n상품명: 테스트 키보드\n선택 옵션:\n색상: 블랙',
+          rating: 5,
+          category: 'product',
+          previousKeywords: [],
+        })
+        const res = createMockResponse()
+
+        await handler(req, res)
+
+        assert.equal(res.statusCode, 200)
+        assert.deepEqual(JSON.parse(res.body).keywords, ['블랙 컬러', '무선 연결', '가벼운 무게'])
+      },
+    ),
+  )
+})
+
+test('handler retries keyword generation and reports the last failure reason', async () => {
+  const cases = [
     {
-      GEMINI_API_KEY: 'test-key',
-      GOOGLE_CLIENT_ID: null,
-      API_AUTH_TOKEN: null,
+      // 화장품 맥락에서 용기 중심 키워드만 나오면 걸러 내고 다시 묻습니다.
+      keywords: ['용기 디자인 예쁨', '펌프 구조 독특함', '케이스 색상 고급'],
+      body: { productContext: '상품명: 수분 크림' },
+      error: /용기나 패키지/,
     },
-    () =>
-      withFetch(
-        async () => geminiKeywordResponse(['블랙 컬러', '무선 연결', '가벼운 무게']),
-        async () => {
-          const req = createMockRequest({
-            action: 'keywords',
-            productUrl: 'https://shop.example/product/keyboard',
-            productContext: '사이트: shop.example\n상품명: 테스트 키보드\n선택 옵션:\n색상: 블랙',
-            rating: 5,
-            category: 'product',
-            previousKeywords: [],
-          })
+    {
+      keywords: ['조용한 타건감', '낮은 디자인', '가벼운 무게'],
+      body: {
+        productContext: '상품명: 무선 키보드',
+        previousKeywords: ['조용한 타건감', '낮은 디자인', '가벼운 무게'],
+      },
+      error: /같은 키워드만/,
+    },
+  ]
+  for (const { keywords, body, error } of cases) {
+    await withTestEnv(() =>
+      withFetchCalls(
+        async () => geminiKeywordResponse(keywords),
+        async (calls) => {
           const res = createMockResponse()
-
-          await handler(req, res)
-
-          assert.equal(res.statusCode, 200)
-          assert.deepEqual(JSON.parse(res.body).keywords, ['블랙 컬러', '무선 연결', '가벼운 무게'])
+          await handler(
+            createMockRequest({ action: 'keywords', rating: 5, category: 'product', ...body }),
+            res,
+          )
+          assert.equal(res.statusCode, 502)
+          assert.match(JSON.parse(res.body).error, error)
+          assert.equal(calls.length, 3)
         },
       ),
-  )
+    )
+  }
 })
