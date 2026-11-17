@@ -1,11 +1,7 @@
-import { MAX_REVIEW_IMAGE_COUNT } from '../../../../shared/reviewCategories'
-import {
-  DEFAULT_IMAGE_EDIT,
-  transformImageFile,
-} from './imageUtils'
+import { MAX_REVIEW_IMAGE_COUNT } from '#shared/reviewCategories'
 
 export const MAX_FILE_SIZE_MB = 15
-export const IMAGE_RESIZE_OPTIONS = { maxEdge: 448, quality: 0.68 }
+const IMAGE_RESIZE_OPTIONS = { maxEdge: 448, quality: 0.68 }
 
 function getExtensionFromMimeType(type) {
   if (type === 'image/png') return 'png'
@@ -13,7 +9,7 @@ function getExtensionFromMimeType(type) {
   return 'jpg'
 }
 
-export function isImageFile(file) {
+function isImageFile(file) {
   if (!file) return false
   if (file.type?.startsWith('image/')) return true
   return /\.(avif|gif|jpe?g|png|webp)$/i.test(file.name || '')
@@ -42,16 +38,6 @@ export function getClipboardImageFiles(clipboardData) {
   return files.map(nameClipboardImage)
 }
 
-export function isTextEditingTarget(target) {
-  if (!(target instanceof HTMLElement)) return false
-  return (
-    target.isContentEditable ||
-    target.tagName === 'INPUT' ||
-    target.tagName === 'TEXTAREA' ||
-    target.tagName === 'SELECT'
-  )
-}
-
 export function validateSelectedFiles(files) {
   if (!files.length) return '이미지를 1장 이상 선택해 주세요.'
   if (files.length > MAX_REVIEW_IMAGE_COUNT) {
@@ -69,26 +55,43 @@ export function revokeObjectUrls(urls) {
 }
 
 export function getImageObjectUrls(images) {
-  return images.flatMap((image) =>
-    [image.previewUrl, image.editedPreviewUrl].filter(Boolean),
-  )
+  return images.map((image) => image.previewUrl)
 }
 
 export function getImageFileNames(images) {
   return images.map((image) => image.file.name).join(', ')
 }
 
-export function buildImageStatus(images, fallback = '') {
-  return images.length ? getImageFileNames(images) : fallback
+export async function createReviewImage(file, previewUrl) {
+  const base64Image = await resizeImageFile(file, IMAGE_RESIZE_OPTIONS)
+  return { file, previewUrl, base64Image, mimeType: 'image/jpeg' }
 }
 
-export async function createReviewImage(file, previewUrl) {
-  const { base64 } = await transformImageFile(file, IMAGE_RESIZE_OPTIONS)
-  return {
-    file,
-    previewUrl,
-    base64Image: base64,
-    mimeType: 'image/jpeg',
-    ...DEFAULT_IMAGE_EDIT,
-  }
+// 긴 변을 maxEdge 이하로 줄여 JPEG base64로 바꿉니다. 사진은 키워드 추출용이라 편집 기능은 두지 않습니다.
+function resizeImageFile(file, { maxEdge = 1280, quality = 0.85 } = {}) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file)
+    const img = new Image()
+    img.onload = () => {
+      URL.revokeObjectURL(url)
+      const scale = Math.min(1, maxEdge / Math.max(img.width, img.height))
+      const canvas = document.createElement('canvas')
+      canvas.width = Math.max(1, Math.round(img.width * scale))
+      canvas.height = Math.max(1, Math.round(img.height * scale))
+      const ctx = canvas.getContext('2d')
+      if (!ctx) {
+        reject(new Error('canvas 2d를 사용할 수 없습니다'))
+        return
+      }
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
+      const base64 = canvas.toDataURL('image/jpeg', quality).split(',')[1] || ''
+      if (base64) resolve(base64)
+      else reject(new Error('base64 인코딩 실패'))
+    }
+    img.onerror = () => {
+      URL.revokeObjectURL(url)
+      reject(new Error('이미지를 불러올 수 없습니다'))
+    }
+    img.src = url
+  })
 }

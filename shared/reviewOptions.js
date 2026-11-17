@@ -1,6 +1,6 @@
-export const DEFAULT_REVIEW_LENGTH = 'medium'
-export const DEFAULT_REVIEW_TONE = 'neutral'
-export const SPARSE_LONG_REVIEW_KEYWORD_MIN = 3
+const DEFAULT_REVIEW_LENGTH = 'medium'
+const DEFAULT_REVIEW_TONE = 'neutral'
+const SPARSE_LONG_REVIEW_KEYWORD_MIN = 3
 
 export const REVIEW_LENGTH_OPTIONS = [
   {
@@ -23,6 +23,13 @@ export const REVIEW_LENGTH_OPTIONS = [
     controlLabel: '길게 (최소 90자)',
     promptLabel: '90자 이상으로 자세하게',
     minChars: 90,
+  },
+  {
+    value: 'xlong',
+    label: '아주 길게',
+    controlLabel: '아주 길게 (최소 200자)',
+    promptLabel: '200자 이상으로 상세하게',
+    minChars: 200,
   },
 ]
 
@@ -78,9 +85,19 @@ export function getReviewMinChars(value) {
 export function isSparseLongReview(length, keywordCount) {
   const count = Number(keywordCount)
   return (
-    normalizeReviewLength(length) === 'long' &&
+    ['long', 'xlong'].includes(normalizeReviewLength(length)) &&
     Number.isFinite(count) &&
     count > 0 &&
     count < SPARSE_LONG_REVIEW_KEYWORD_MIN
   )
+}
+
+const DEFAULT_REVIEW_RATING = 5
+const MIN_REVIEW_RATING = 1
+const MAX_REVIEW_RATING = 5
+
+export function normalizeReviewRating(value) {
+  const rating = Number(value)
+  if (!Number.isFinite(rating)) return DEFAULT_REVIEW_RATING
+  return Math.max(MIN_REVIEW_RATING, Math.min(MAX_REVIEW_RATING, rating))
 }
