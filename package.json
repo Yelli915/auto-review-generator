@@ -7,7 +7,7 @@
     "#shared/*": "./shared/*.js"
   },
   "engines": {
-    "node": "24.x"
+    "node": "26.x"
   },
   "description": "사진 한 장과 별점만으로 자동으로 리뷰를 작성해주는 AI 웹 애플리케이션",
   "scripts": {
