@@ -11,6 +11,9 @@ test('createReviewStreamAccumulator appends text chunks and emits full text', ()
 
   assert.deepEqual(chunks, ['hello', 'hello world'])
   assert.equal(stream.getError(), '')
+  assert.equal(stream.isComplete(), false)
+  stream.appendLine('{"done":true}')
+  assert.equal(stream.isComplete(), true)
 })
 
 test('createReviewStreamAccumulator captures stream errors and ignores invalid lines', () => {

@@ -40,8 +40,7 @@ export default function ProductSection({
   selections,
   onSelectionChange,
   disabled,
-  action,
-  error,
+  isProductInfoReady,
 }) {
   const statusMeta = ANALYSIS_STATUS_META[analysis.analysisStatus] || ANALYSIS_STATUS_META.ok
   const requiresManual = needsManualProductInfo(analysis)
@@ -66,11 +65,11 @@ export default function ProductSection({
             {product?.name || '상품명을 직접 입력해 주세요'}
           </p>
           {meta && <p className="product-info-card__meta">{meta}</p>}
-          <p className="product-info-card__meta product-info-card__url">{analysis.url}</p>
+          <p className="product-info-card__meta">{analysis.url}</p>
         </div>
       </div>
 
-      <div className="options-row options-row--2">
+      <div className="options-row">
         {PRODUCT_FIELDS.map((field) => (
           <div className="field" key={field.key}>
             <label className="field__label" htmlFor={`product-${field.key}`}>
@@ -92,7 +91,7 @@ export default function ProductSection({
       </div>
 
       {optionGroups.length > 0 && (
-        <div className="options-row options-row--2">
+        <div className="options-row">
           {optionGroups.map((group, index) => (
             <div key={`${group.id || group.label || index}`} className="field">
               <label className="field__label" htmlFor={`product-option-${index}`}>
@@ -117,17 +116,7 @@ export default function ProductSection({
         </div>
       )}
 
-      {error && <p className="banner banner--error" role="alert">{error}</p>}
-      <button
-        type="button"
-        className="btn btn--primary btn--lg"
-        onClick={action.onClick}
-        disabled={action.disabled || disabled}
-        aria-busy={action.pending}
-      >
-        {action.label}
-      </button>
-      {action.disabled && requiresManual && (
+      {!isProductInfoReady && requiresManual && (
         <p className="field__hint">상품명 또는 상품 특징을 입력하면 키워드를 만들 수 있습니다.</p>
       )}
     </section>

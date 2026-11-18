@@ -14,12 +14,13 @@ export function useUploadImages({ isLoading, isLinkMode, pasteEnabled, switchToI
   const [isDragging, setIsDragging] = useState(false)
   const [isProcessing, setIsProcessing] = useState(false)
   const objectUrlsRef = useRef([])
-  const processTokenRef = useRef(0)
+  const pendingUrlsRef = useRef(null)
   const busy = isLoading || isProcessing
 
   useEffect(() => {
     return () => {
-      processTokenRef.current += 1
+      revokeObjectUrls(pendingUrlsRef.current || [])
+      pendingUrlsRef.current = null
       revokeObjectUrls(objectUrlsRef.current)
       objectUrlsRef.current = []
     }
@@ -31,56 +32,52 @@ export function useUploadImages({ isLoading, isLinkMode, pasteEnabled, switchToI
     setImages(nextImages)
   }, [])
 
-  const processFiles = useCallback((fileList, sourceLabel = '선택됨') => {
-    const token = processTokenRef.current + 1
-    processTokenRef.current = token
+  const processFiles = useCallback(async (fileList, { append = false, sourceLabel = '선택됨' } = {}) => {
+    if (busy || pendingUrlsRef.current) return
     const files = Array.from(fileList || [])
-    const validationError = validateSelectedFiles(files)
+    const validationError = validateSelectedFiles(files, append ? images.length : 0)
     if (validationError) {
-      setIsProcessing(false)
       setStatus({ text: validationError, isError: true })
       return
     }
 
-    const nextPreviewUrls = files.map((file) => URL.createObjectURL(file))
-    setTrackedImages([], { revokePrevious: true })
-    objectUrlsRef.current = nextPreviewUrls
+    const previewUrls = []
+    pendingUrlsRef.current = previewUrls
     setIsProcessing(true)
     setStatus({ text: '', isError: false })
 
-    Promise.all(
-      files.map((file, index) =>
-        createReviewImage(file, nextPreviewUrls[index]),
-      ),
-    )
-      .then((nextImages) => {
-        if (processTokenRef.current !== token) return
-        setTrackedImages(nextImages)
-        setStatus({
-          text: `${nextImages.length}장 ${sourceLabel} · ${getImageFileNames(nextImages)}`,
-          isError: false,
-        })
+    try {
+      for (const file of files) previewUrls.push(URL.createObjectURL(file))
+      const converted = await Promise.all(files.map((file, index) => createReviewImage(file, previewUrls[index])))
+      if (pendingUrlsRef.current !== previewUrls) return
+      const nextImages = append ? [...images, ...converted] : converted
+      setTrackedImages(nextImages, { revokePrevious: !append })
+      setStatus({
+        text: `${nextImages.length}장 ${sourceLabel} · ${getImageFileNames(nextImages)}`,
+        isError: false,
       })
-      .catch(() => {
-        if (processTokenRef.current !== token) return
-        setTrackedImages([], { revokePrevious: true })
+    } catch {
+      if (pendingUrlsRef.current === previewUrls) {
+        revokeObjectUrls(previewUrls)
         setStatus({ text: '이미지 변환에 실패했습니다.', isError: true })
-      })
-      .finally(() => {
-        if (processTokenRef.current !== token) return
+      }
+    } finally {
+      if (pendingUrlsRef.current === previewUrls) {
+        pendingUrlsRef.current = null
         setIsProcessing(false)
-      })
-  }, [setTrackedImages])
+      }
+    }
+  }, [busy, images, setTrackedImages])
 
-  const handleFileChange = useCallback((e) => {
-    processFiles(e.target.files)
+  const handleFileChange = useCallback((e, options) => {
+    if (e.target.files?.length) processFiles(e.target.files, options)
     e.target.value = ''
   }, [processFiles])
 
   const handleDragOver = useCallback((e) => {
     e.preventDefault()
-    setIsDragging(true)
-  }, [])
+    if (!busy) setIsDragging(true)
+  }, [busy])
 
   const handleDragLeave = useCallback((e) => {
     if (!e.currentTarget.contains(e.relatedTarget)) setIsDragging(false)
@@ -93,7 +90,7 @@ export function useUploadImages({ isLoading, isLinkMode, pasteEnabled, switchToI
   }, [processFiles])
 
   const handleRemoveImage = useCallback((index) => {
-    if (busy) return
+    if (busy || pendingUrlsRef.current) return
     const nextImages = images.filter((_, i) => i !== index)
     revokeObjectUrls(getImageObjectUrls([images[index]]))
     setTrackedImages(nextImages)
@@ -110,7 +107,7 @@ export function useUploadImages({ isLoading, isLinkMode, pasteEnabled, switchToI
     if (!pastedFiles.length) return
     e.preventDefault()
     if (isLinkMode) switchToImageMode?.()
-    processFiles(pastedFiles, '붙여넣음')
+    processFiles(pastedFiles, { sourceLabel: '붙여넣음' })
   }, [busy, isLinkMode, pasteEnabled, processFiles, switchToImageMode])
 
   useEffect(() => {
@@ -126,7 +123,7 @@ export function useUploadImages({ isLoading, isLinkMode, pasteEnabled, switchToI
     handleFileChange,
     handleRemoveImage,
     images,
-    isDragging,
+    isDragging: isDragging && !busy,
     isProcessing,
     status,
   }

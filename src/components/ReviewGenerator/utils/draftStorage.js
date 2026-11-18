@@ -3,6 +3,17 @@ import { normalizeReviewRating } from '#shared/reviewOptions'
 const DRAFT_KEY = 'auto-review-generator:draft'
 const DRAFT_VERSION = 1
 
+function sanitizeGenerationContext(context) {
+  if (typeof context?.productContext !== 'string' || typeof context.category !== 'string' ||
+      typeof context.subcategory !== 'string' || !Number.isFinite(context.rating)) return undefined
+  return {
+    productContext: context.productContext,
+    category: context.category,
+    subcategory: context.subcategory,
+    rating: normalizeReviewRating(context.rating),
+  }
+}
+
 // 새로고침 후에도 입력을 이어 쓰기 위한 탭 단위 임시 저장입니다.
 // 이미지는 용량 때문에 저장하지 않고 개수만 남깁니다.
 export function sanitizeDraft(raw) {
@@ -45,6 +56,7 @@ export function sanitizeDraft(raw) {
             note: pickString(item.note),
             keywords: pickStrings(item.keywords),
             evidence: pickString(item.evidence),
+            generationContext: sanitizeGenerationContext(item.generationContext),
           }))
       : [],
     activeVersion: Number(raw.activeVersion) || 0,

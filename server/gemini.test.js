@@ -347,3 +347,38 @@ test('handler refunds the daily review count when the stream ends truncated', as
     ),
   )
 })
+
+const reviewText = '손에 쥐기 편하고 무게감도 적당해서 사용하는 동안 손목에 부담이 덜했어요.'
+const reviewTextChunk = `data: ${JSON.stringify({ candidates: [{ content: { parts: [{ text: reviewText }] } }] })}\n\n`
+const reviewFinishChunk = (finishReason) => `data: ${JSON.stringify({ candidates: [{ finishReason }] })}\n\n`
+const reviewRequest = () => createMockRequest({ action: 'review', length: 'short', rating: 4, keywords: ['편한 사용감'] })
+const reviewLines = (res) => res.body.trim().split('\n').map((line) => JSON.parse(line))
+
+test('handler completes a review after receiving a separate STOP chunk', async () => {
+  await withTestEnv(() => withFetch(
+    async () => new Response(reviewTextChunk + reviewFinishChunk('STOP')),
+    async () => {
+      const res = createMockResponse()
+      await handler(reviewRequest(), res)
+      assert.deepEqual(reviewLines(res), [{ text: reviewText }, { done: true, finishReason: 'STOP' }])
+    },
+  ))
+})
+
+for (const finishReason of [null, 'SAFETY']) {
+  test(`handler refunds a long enough review when the upstream finish reason is ${finishReason ?? 'missing'}`, async () => {
+    const ending = finishReason ? reviewFinishChunk(finishReason) : ''
+    await withTestEnv(() => withFetch(
+      async () => new Response(reviewTextChunk + ending),
+      async () => {
+        const res = createMockResponse()
+        await handler(reviewRequest(), res)
+        const [text, error] = reviewLines(res)
+        assert.deepEqual(text, { text: reviewText })
+        assert.match(error.error, /정상적으로 끝나지 않았습니다/)
+        assert.equal(error.remaining, Number(res.headers['x-review-remaining']) + 1)
+        assert.equal(error.done, undefined)
+      },
+    ))
+  })
+}

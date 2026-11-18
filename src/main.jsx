@@ -1,9 +1,13 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './styles/base.css'
-import './styles/review-layout.css'
+import './styles/app-shell.css'
+import './styles/home.css'
+import './styles/forms.css'
+import './styles/review-result.css'
 import './styles/upload.css'
-import './styles/keyword-review.css'
+import './styles/controls.css'
+import './styles/keywords.css'
 import App from './App.jsx'
 
 createRoot(document.getElementById('root')).render(

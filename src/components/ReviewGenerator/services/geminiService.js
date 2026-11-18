@@ -14,6 +14,7 @@ const API_PATH = '/api/gemini'
 export function createReviewStreamAccumulator(onChunk) {
   const safeOnChunk = typeof onChunk === 'function' ? onChunk : () => {}
   let fullText = ''
+  let done = false
   let streamError = ''
   let refundedRemaining = null
 
@@ -21,28 +22,31 @@ export function createReviewStreamAccumulator(onChunk) {
     getError() {
       return streamError
     },
+    isComplete() {
+      return done && !streamError && Boolean(fullText.trim())
+    },
     // 서버가 실패한 생성을 환불했으면 error 줄에 새 남은 횟수를 실어 보냅니다.
     getRefundedRemaining() {
       return refundedRemaining
     },
     appendLine(line) {
-      const payload = line.trim()
-      if (!payload) return
-
+      if (!line.trim()) return
+      let event
       try {
-        const json = JSON.parse(payload)
-        const text = json?.text
-        if (typeof json?.error === 'string' && json.error.trim()) {
-          streamError = json.error.trim()
-          if (Number.isFinite(json.remaining)) refundedRemaining = json.remaining
-          return
-        }
-        if (text) {
-          fullText += text
-          safeOnChunk(fullText)
-        }
+        event = JSON.parse(line)
       } catch {
-        void 0
+        return
+      }
+
+      const error = normalizeString(event?.error)
+      if (error) {
+        streamError = error
+        if (Number.isFinite(event.remaining)) refundedRemaining = event.remaining
+      } else if (event?.done === true) {
+        done = true
+      } else if (!done && !streamError && typeof event?.text === 'string' && event.text) {
+        fullText += event.text
+        safeOnChunk(fullText)
       }
     },
   }
@@ -186,5 +190,8 @@ export async function generateReview({
     const refunded = stream.getRefundedRemaining()
     if (refunded !== null && remaining !== null) onUsage?.({ remaining: refunded, resetAt })
     throw new Error(streamError)
+  }
+  if (!stream.isComplete()) {
+    throw new Error('리뷰 작성이 완료되기 전에 연결이 끝났습니다. 다시 생성해 주세요.')
   }
 }

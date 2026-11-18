@@ -21,7 +21,7 @@ export default function ImagePreviewGrid({
 
       <div className="preview-grid">
         {images.map((image, index) => (
-          <div className="preview-frame preview-frame--thumb" key={image.previewUrl}>
+          <div className="preview-frame" key={image.previewUrl}>
             <img src={image.previewUrl} alt={`선택한 이미지 ${index + 1}`} />
             <button
               type="button"

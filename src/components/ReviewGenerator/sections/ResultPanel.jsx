@@ -1,15 +1,7 @@
-import { useEffect, useId, useRef, useState } from 'react'
-import { findUnsupportedTokens } from '#shared/evidenceCheck'
-import { getReviewMinChars } from '#shared/reviewOptions'
-import { findMissingKeywords, splitKeywordHighlights } from '../utils/keywordHighlight'
-
-const REVIEW_REWRITE_ACTIONS = [
-  { id: 'natural', label: '더 자연스럽게', instruction: '문장을 더 자연스럽고 실제 후기처럼 다듬어 주세요.' },
-  { id: 'less-ad', label: '광고 느낌 줄이기', instruction: '광고 문구처럼 보이는 표현을 줄이고 담백한 사용 후기로 바꿔 주세요.' },
-  { id: 'shorter', label: '짧게 줄이기', instruction: '핵심 경험은 유지하되 더 짧고 간결하게 줄여 주세요.' },
-]
-// 서버(prompts.js)가 요청 문장을 300자로 자릅니다.
-const CUSTOM_INSTRUCTION_MAX = 300
+import { useState } from 'react'
+import AppIcon from '../AppIcon'
+import ReviewContent from './ReviewContent'
+import ReviewRewritePanel from './ReviewRewritePanel'
 
 export default function ResultPanel({
   panelRef,
@@ -24,37 +16,10 @@ export default function ResultPanel({
   onReset,
   disabled,
   error,
-  remaining,
 }) {
-  const [copyState, setCopyState] = useState('idle')
-  const [isEditing, setIsEditing] = useState(false)
-  const [picked, setPicked] = useState(null)
-  const [customInstruction, setCustomInstruction] = useState('')
   const [confirmReset, setConfirmReset] = useState(false)
-  const customInstructionId = useId()
-  const copyTimerRef = useRef(null)
-  useEffect(() => () => clearTimeout(copyTimerRef.current), [])
-
   const version = versions[activeVersion]
-  // 보이는 버전이 바뀌면(새로 생성·다듬기·탭 전환) 이전 버전 기준의 선택·편집 상태를 버립니다.
-  const [shownVersion, setShownVersion] = useState(version?.n)
-  if (shownVersion !== version?.n) {
-    setShownVersion(version?.n)
-    setPicked(null)
-    setIsEditing(false)
-  }
-  const text = version?.text || ''
-  const trimmed = text.trim()
-  const minChars = version ? getReviewMinChars(version.length) : 0
-  const canAct = !disabled && !isStreaming && Boolean(trimmed)
-  const segments = splitKeywordHighlights(text, version?.keywords)
-  const hasHighlights = segments.some((segment) => segment.keyword)
-  // 편집 중에는 결과를 보여 주지 않으므로 키를 누를 때마다 다시 계산하지 않습니다.
-  const missingKeywords = isStreaming || isEditing ? [] : findMissingKeywords(text, version?.keywords)
-  // 입력(상품 정보·직접 경험·키워드)에 없는 숫자·영문은 모델이 지어냈을 수 있어 확인을 요청합니다.
-  const unsupportedTokens = isStreaming || isEditing
-    ? []
-    : findUnsupportedTokens(text, [version?.evidence, ...(version?.keywords || [])].join('\n'))
+  const canAct = !disabled && !isStreaming && Boolean(version?.text.trim())
   // 다듬은 버전은 원본과, 새로 생성한 버전은 바로 앞 버전과 비교합니다.
   // 원본이 버전 개수 제한으로 잘려 나갔으면 다른 버전과 엉뚱하게 비교하지 않고 숨깁니다.
   const compareVersion = !version
@@ -63,186 +28,37 @@ export default function ResultPanel({
       ? versions[activeVersion - 1]
       : versions.find((item) => item.n === version.from)
 
-  const rewrite = (action) => {
-    setPicked(null)
-    setIsEditing(false)
-    return onRewrite(action)
-  }
-
-  const rewritePicked = (mode) => {
-    const action = mode === 'swap'
-      ? {
-          label: `"${picked.word}" 바꿈`,
-          instruction: `리뷰에서 "${picked.word}" 부분만 같은 뜻의 다른 자연스러운 표현으로 바꾸고, 나머지 문장은 최대한 그대로 두세요.`,
-        }
-      : {
-          label: `"${picked.keyword}" 뺌`,
-          instruction: `리뷰에서 "${picked.keyword}"에 관한 내용만 빼고, 나머지 문장은 최대한 그대로 두세요.`,
-        }
-    rewrite(action)
-  }
-
-  const rewriteMissing = () =>
-    rewrite({
-      label: '빠진 키워드 넣기',
-      instruction: `리뷰에 "${missingKeywords.join('", "')}" 내용이 자연스럽게 들어가도록 보완하고, 나머지 문장은 최대한 그대로 두세요.`,
-    })
-
-  const rewriteUnsupported = () =>
-    rewrite({
-      label: '근거 없는 내용 빼기',
-      instruction: `리뷰에서 "${unsupportedTokens.join('", "')}"처럼 입력 근거에 없는 숫자·이름이 들어간 내용만 빼고, 나머지 문장은 최대한 그대로 두세요.`,
-    })
-
-  const rewriteCustom = async () => {
-    const instruction = customInstruction.trim()
-    if (!instruction || !canAct) return
-    // 이모지 같은 서로게이트 쌍이 반으로 잘리지 않도록 글자 단위로 자릅니다.
-    const label = `요청: ${Array.from(instruction).slice(0, 20).join('')}`
-    // 요청 실패로 다듬지 못했으면 다시 쓰지 않아도 되게 입력을 남겨 둡니다.
-    if (await rewrite({ label, instruction })) setCustomInstruction('')
-  }
-
-  const handleCopy = async () => {
-    try {
-      await navigator.clipboard.writeText(text)
-      setCopyState('copied')
-    } catch {
-      setCopyState('failed')
-    }
-    clearTimeout(copyTimerRef.current)
-    copyTimerRef.current = setTimeout(() => setCopyState('idle'), 2000)
-  }
-
   return (
     <section className="panel result-panel" aria-labelledby="section-result" ref={panelRef}>
       <h2 className="panel__title" id="section-result">
-        초안
+        {versions.length ? '나만의 리뷰 초안' : '리뷰를 완성하지 못했어요'}
         {isStreaming && <span className="status-pill status-pill--ok">작성 중</span>}
       </h2>
 
-      {versions.length > 1 && (
-        <div className="version-tabs" role="group" aria-label="리뷰 버전">
-          {versions.map((item, index) => (
-            <button
-              key={item.n}
-              type="button"
-              className="version-tab"
-              aria-pressed={index === activeVersion}
-              onClick={() => onSelectVersion(index)}
-              disabled={isStreaming}
-              title={item.note || '새로 생성'}
-            >
-              v{item.n}
-            </button>
-          ))}
+      {versions.length > 0 && (
+        <div className="review-versions">
+          <p className="field__label">이 리뷰의 버전 <span className="field__label-note">생성·수정 기록</span></p>
+          <div className="version-tabs" role="group" aria-label="이 리뷰의 생성·수정 버전">
+            {versions.map((item, index) => (
+              <button
+                key={item.n}
+                type="button"
+                className="version-tab"
+                aria-pressed={index === activeVersion}
+                onClick={() => onSelectVersion(index)}
+                disabled={isStreaming}
+                title={item.note || '새로 생성'}
+              >
+                v{item.n}
+              </button>
+            ))}
+          </div>
         </div>
       )}
 
       {version ? (
         <>
-          {isEditing && !isStreaming ? (
-            <>
-              <label className="visually-hidden" htmlFor="review-output">생성된 리뷰 고치기</label>
-              <textarea
-                id="review-output"
-                className="review-output"
-                value={text}
-                onChange={(e) => onEdit(e.target.value)}
-                rows={10}
-                autoFocus
-              />
-            </>
-          ) : (
-            <div className="review-output review-draft" aria-live="polite" aria-busy={isStreaming}>
-              {!trimmed && isStreaming && (
-                <span className="review-draft__placeholder">리뷰를 작성하는 중입니다...</span>
-              )}
-              {segments.map((segment, index) =>
-                segment.keyword ? (
-                  <button
-                    key={index}
-                    type="button"
-                    className="review-mark"
-                    aria-pressed={picked?.index === index}
-                    aria-label={`${segment.text}, 키워드 ${segment.keyword}`}
-                    onClick={() =>
-                      setPicked(picked?.index === index
-                        ? null
-                        : { index, word: segment.text, keyword: segment.keyword })
-                    }
-                    disabled={!canAct}
-                  >
-                    {segment.text}
-                  </button>
-                ) : (
-                  <span key={index}>{segment.text}</span>
-                ),
-              )}
-              {isStreaming && <span className="review-cursor" aria-hidden="true" />}
-            </div>
-          )}
-
-          {picked && !isEditing && (
-            <div className="mark-actions" role="group" aria-label={`"${picked.word}" 수정`}>
-              <span className="mark-actions__label">
-                <strong>{picked.word}</strong> · {picked.keyword}
-              </span>
-              <button type="button" className="chip chip--action" onClick={() => rewritePicked('swap')} disabled={!canAct}>
-                다른 표현으로
-              </button>
-              <button type="button" className="chip chip--action" onClick={() => rewritePicked('remove')} disabled={!canAct}>
-                이 내용 빼기
-              </button>
-              <button type="button" className="btn-link" onClick={() => setPicked(null)}>
-                닫기
-              </button>
-            </div>
-          )}
-
-          <div className="review-meta">
-            <p>
-              <span className={trimmed.length < minChars ? 'review-meta__count is-short' : 'review-meta__count'}>
-                {trimmed.length}자
-              </span>
-              {minChars > 0 && <span> · 최소 {minChars}자</span>}
-              {version.note && <span> · {version.note}</span>}
-            </p>
-            <button
-              type="button"
-              className="btn-link review-meta__edit"
-              onClick={() => {
-                setPicked(null)
-                setIsEditing((prev) => !prev)
-              }}
-              disabled={isStreaming}
-            >
-              {isEditing ? '완료' : '✎ 고치기'}
-            </button>
-          </div>
-          {hasHighlights && !isEditing && !isStreaming && (
-            <p className="field__hint review-hint">강조된 단어를 누르면 그 부분만 바꾸거나 뺄 수 있습니다.</p>
-          )}
-          {missingKeywords.length > 0 && !isEditing && (
-            <div className="mark-actions" role="group" aria-label="빠진 키워드">
-              <span className="mark-actions__label">
-                빠진 키워드 · <strong>{missingKeywords.join(', ')}</strong>
-              </span>
-              <button type="button" className="chip chip--action" onClick={rewriteMissing} disabled={!canAct}>
-                넣어서 다듬기
-              </button>
-            </div>
-          )}
-          {unsupportedTokens.length > 0 && !isEditing && (
-            <div className="mark-actions" role="group" aria-label="입력에 없는 내용">
-              <span className="mark-actions__label">
-                입력에 없는 내용 · <strong>{unsupportedTokens.join(', ')}</strong> · 실제와 맞는지 확인하세요
-              </span>
-              <button type="button" className="chip chip--action" onClick={rewriteUnsupported} disabled={!canAct}>
-                빼서 다듬기
-              </button>
-            </div>
-          )}
+          <ReviewContent key={version.n} version={version} isStreaming={isStreaming} canAct={canAct} onEdit={onEdit} onRewrite={onRewrite} />
           {compareVersion && !isStreaming && (
             <details className="version-compare">
               <summary className="btn-link">v{compareVersion.n} 버전과 비교</summary>
@@ -252,91 +68,42 @@ export default function ResultPanel({
 
           {error && <p className="banner banner--error" role="alert">{error}</p>}
 
-          <div className="result-actions">
+          <div className="result-tools">
             <button
               type="button"
-              className="btn btn--primary btn--lg"
-              onClick={handleCopy}
-              disabled={!canAct}
-            >
-              {copyState === 'copied' ? '복사 완료' : copyState === 'failed' ? '복사 실패' : '복사하기'}
-            </button>
-            <button
-              type="button"
-              className="btn btn--secondary btn--lg"
+              className="btn btn--secondary"
               onClick={() => onRegenerate()}
               disabled={disabled || !canGenerate}
             >
-              새로 생성
+              다른 초안 만들기
             </button>
           </div>
-          {Number.isFinite(remaining) && (
-            <p className="field__hint result-remaining">오늘 남은 리뷰 생성·다듬기 {remaining}회</p>
-          )}
 
-          <div className="rewrite">
-            <p className="field__label">이 버전 다듬기</p>
-            <div className="rewrite__actions">
-              {REVIEW_REWRITE_ACTIONS.map((action) => (
-                <button
-                  key={action.id}
-                  type="button"
-                  className="chip chip--action"
-                  onClick={() => rewrite(action)}
-                  disabled={!canAct}
-                >
-                  {action.label}
-                </button>
-              ))}
-            </div>
-            <label className="visually-hidden" htmlFor={customInstructionId}>다듬기 요청 직접 쓰기</label>
-            <div className="keyword-add__row">
-              <input
-                id={customInstructionId}
-                className="text-input"
-                value={customInstruction}
-                maxLength={CUSTOM_INSTRUCTION_MAX}
-                placeholder="예: 가격 얘기는 빼 주세요"
-                disabled={disabled || isStreaming}
-                onChange={(e) => setCustomInstruction(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
-                    e.preventDefault()
-                    rewriteCustom()
-                  }
-                }}
-              />
-              <button
-                type="button"
-                className="btn btn--secondary keyword-add__button"
-                onClick={rewriteCustom}
-                disabled={!canAct || !customInstruction.trim()}
-              >
-                다듬기
-              </button>
-            </div>
-            <p className="field__hint">내용은 유지하고 표현만 바꿔 새 버전으로 남깁니다.</p>
-          </div>
+          <ReviewRewritePanel canAct={canAct} disabled={disabled} isStreaming={isStreaming} onRewrite={onRewrite} />
         </>
       ) : (
         <>
           {error && <p className="banner banner--error" role="alert">{error}</p>}
-          <p className="panel__empty result-panel__empty">
-            키워드를 고르고 리뷰를 생성하면 여기에 결과가 나타납니다. 다시 생성하거나 다듬은 결과는 버전으로 남습니다.
-          </p>
+          <div className="empty-state">
+            <span className="empty-state__icon"><AppIcon name="reviews" /></span>
+            <h3>다시 시도할 수 있어요</h3>
+            <p>키워드 선택으로 돌아가<br />리뷰를 다시 만들어 주세요.</p>
+          </div>
         </>
       )}
 
-      <button
-        type="button"
-        className={`btn btn--ghost result-reset${confirmReset ? ' is-confirm' : ''}`}
-        // 모든 버전과 입력이 지워지므로 한 번 더 눌러야 실행합니다. 다른 곳을 누르면 취소됩니다.
-        onClick={() => (confirmReset ? onReset() : setConfirmReset(true))}
-        onBlur={() => setConfirmReset(false)}
-        disabled={disabled}
-      >
-        {confirmReset ? '한 번 더 누르면 모든 버전과 입력이 지워집니다' : '처음부터 다시 작성'}
-      </button>
+      {version && (
+        <button
+          type="button"
+          className={`btn btn--ghost result-reset${confirmReset ? ' is-confirm' : ''}`}
+          // 모든 버전과 입력이 지워지므로 한 번 더 눌러야 실행합니다. 다른 곳을 누르면 취소됩니다.
+          onClick={() => (confirmReset ? onReset() : setConfirmReset(true))}
+          onBlur={() => setConfirmReset(false)}
+          disabled={disabled}
+        >
+          {confirmReset ? '한 번 더 누르면 모든 버전과 입력이 지워집니다' : '처음부터 다시 작성'}
+        </button>
+      )}
     </section>
   )
 }

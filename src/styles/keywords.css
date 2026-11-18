@@ -1,0 +1,60 @@
+/* 키워드 추가·선택·로딩 */
+.keyword-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+}
+
+.keyword-tools .btn-link {
+  margin: 0;
+}
+
+.keyword-add {
+  margin-bottom: 18px;
+}
+
+.keyword-add__row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: stretch;
+}
+
+.keyword-add__button {
+  min-width: 72px;
+  min-height: 44px;
+  margin: 0;
+}
+
+.chip-skeleton-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 22px;
+}
+
+.chip-skeleton {
+  height: 44px;
+  border-radius: var(--radius-pill);
+  background: var(--border);
+  animation: chip-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes chip-pulse {
+  0% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0.55;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chip-skeleton {
+    animation: none;
+    background-image: none;
+  }
+}

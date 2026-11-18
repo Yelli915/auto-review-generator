@@ -4,7 +4,6 @@ import ChoiceGroup from './ChoiceGroup'
 export default function CategorySection({
   category,
   subcategory,
-  onCategoryChange,
   onSubcategoryChange,
   disabled,
 }) {
@@ -16,30 +15,20 @@ export default function CategorySection({
   )
 
   return (
-    <section className="panel" aria-labelledby="section-category">
-      <h2 className="panel__title" id="section-category">
-        분야
-      </h2>
+    <div className="category-details">
       <ChoiceGroup
-        legend="분야"
-        options={REVIEW_CATEGORY_OPTIONS}
-        value={category}
-        onChange={onCategoryChange}
-        disabled={disabled}
-      />
-      <ChoiceGroup
-        legend="세부 분야"
+        legend="세부 분야 (선택)"
         variant="chips"
-        options={[{ value: '', label: '고르지 않음' }, ...categoryMeta.subcategories]}
+        options={[{ value: '', label: '전체' }, ...categoryMeta.subcategories]}
         value={subcategory}
         onChange={onSubcategoryChange}
         disabled={disabled}
         hint={
           subcategoryMeta
-            ? `${subcategoryMeta.focus} 중심으로 작성합니다.`
-            : '고르면 분야에 맞는 표현을 더 정확하게 사용합니다.'
+            ? `${subcategoryMeta.label}에서의 경험에 맞는 표현을 추천해요.`
+            : '분야를 고르면 더 잘 어울리는 표현을 추천해요.'
         }
       />
-    </section>
+    </div>
   )
 }

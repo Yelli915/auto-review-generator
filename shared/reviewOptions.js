@@ -6,28 +6,24 @@ export const REVIEW_LENGTH_OPTIONS = [
   {
     value: 'short',
     label: '짧게',
-    controlLabel: '짧게 (최소 30자)',
     promptLabel: '30자 이상으로 간결하게',
     minChars: 30,
   },
   {
     value: 'medium',
     label: '보통',
-    controlLabel: '보통 (최소 60자)',
     promptLabel: '60자 이상으로 자연스럽게',
     minChars: 60,
   },
   {
     value: 'long',
     label: '길게',
-    controlLabel: '길게 (최소 90자)',
     promptLabel: '90자 이상으로 자세하게',
     minChars: 90,
   },
   {
     value: 'xlong',
     label: '아주 길게',
-    controlLabel: '아주 길게 (최소 200자)',
     promptLabel: '200자 이상으로 상세하게',
     minChars: 200,
   },
@@ -37,22 +33,18 @@ export const REVIEW_TONE_OPTIONS = [
   {
     value: 'neutral',
     label: '기본',
-    controlLabel: '기본 (자연스럽게)',
   },
   {
     value: 'friendly',
     label: '친근',
-    controlLabel: '친근 (친구처럼)',
   },
   {
     value: 'formal',
     label: '격식',
-    controlLabel: '격식 (정중하게)',
   },
   {
     value: 'casual',
     label: '반말',
-    controlLabel: '반말 (편하게)',
   },
 ]
 

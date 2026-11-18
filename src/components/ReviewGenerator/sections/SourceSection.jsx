@@ -2,6 +2,7 @@ import { useId, useRef, useState } from 'react'
 import { MAX_REVIEW_IMAGE_COUNT } from '#shared/reviewCategories'
 import ChoiceGroup from './ChoiceGroup'
 import ImagePreviewGrid from './ImagePreviewGrid'
+import AppIcon from '../AppIcon'
 import { MAX_FILE_SIZE_MB } from '../utils/uploadImages'
 
 const RATING_LABELS = ['', '매우 불만족', '불만족', '보통', '만족', '매우 만족']
@@ -57,11 +58,10 @@ export default function SourceSection({
   upload,
   missingImageCount,
   disabled,
-  action,
-  error,
+  details,
 }) {
   const inputId = useId()
-  const inputRef = useRef(null)
+  const addInputRef = useRef(null)
   const busy = disabled || upload.busy
   const experiencePlaceholder = category === 'place'
     ? '예: 대기 시간이 조금 있었지만 좌석 간격이 넓고 조명이 편했어요. 직원 안내는 친절했어요.'
@@ -78,19 +78,8 @@ export default function SourceSection({
   return (
     <section className="panel" aria-labelledby="section-source">
       <h2 className="panel__title" id="section-source">
-        리뷰 재료
+        {isLinkMode ? '상품 링크를 알려주세요' : '사진으로 시작해요'}
       </h2>
-
-      <div className="field">
-        <span className="field__label" id={`${inputId}-rating`}>별점</span>
-        <StarRating
-          value={rating}
-          onChange={onRatingChange}
-          disabled={busy}
-          ratingLabels={RATING_LABELS}
-          labelledBy={`${inputId}-rating`}
-        />
-      </div>
 
       {canUseLink && (
         <ChoiceGroup
@@ -142,7 +131,6 @@ export default function SourceSection({
               >
                 <input
                   id={inputId}
-                  ref={inputRef}
                   type="file"
                   accept="image/*"
                   multiple
@@ -154,12 +142,12 @@ export default function SourceSection({
                   <p className="file-drop__text file-drop__text--drag">여기에 놓으세요</p>
                 ) : (
                   <>
-                    <span className="file-drop__icon" aria-hidden="true">+</span>
+                    <span className="file-drop__icon"><AppIcon name="photo" /></span>
                     <p className="file-drop__text">
-                      {images.length ? '사진을 다시 선택하세요' : '사진을 추가하세요'}
+                      {images.length ? '사진 다시 선택하기' : '사진을 추가해 주세요'}
                     </p>
                     <p className="file-drop__sub">
-                      클릭, 붙여넣기(Ctrl+V), 드래그 · 최대 {MAX_REVIEW_IMAGE_COUNT}장 · 각 {MAX_FILE_SIZE_MB}MB
+                      최대 {MAX_REVIEW_IMAGE_COUNT}장 · 사진당 {MAX_FILE_SIZE_MB}MB 이하
                     </p>
                   </>
                 )}
@@ -171,10 +159,19 @@ export default function SourceSection({
               )}
             </div>
 
+            <input
+              ref={addInputRef}
+              type="file"
+              accept="image/*"
+              multiple
+              hidden
+              disabled={busy}
+              onChange={(e) => upload.handleFileChange(e, { append: true })}
+            />
             <ImagePreviewGrid
               images={images}
               isBusy={busy}
-              onAdd={() => inputRef.current?.click()}
+              onAdd={() => addInputRef.current?.click()}
               onRemove={upload.handleRemoveImage}
             />
           </div>
@@ -182,9 +179,22 @@ export default function SourceSection({
         </>
       )}
 
+      {details}
+
+      <div className="field">
+        <span className="field__label" id={`${inputId}-rating`}>이번 경험은 어땠나요?</span>
+        <StarRating
+          value={rating}
+          onChange={onRatingChange}
+          disabled={busy}
+          ratingLabels={RATING_LABELS}
+          labelledBy={`${inputId}-rating`}
+        />
+      </div>
+
       <div className="field">
         <label className="field__label" htmlFor={`${inputId}-experience`}>
-          직접 경험한 내용 <span className="field__label-note">선택 사항</span>
+          짧은 경험 메모 <span className="field__label-note">선택</span>
         </label>
         <textarea
           id={`${inputId}-experience`}
@@ -197,22 +207,10 @@ export default function SourceSection({
           disabled={busy}
         />
         <p className="field__hint">
-          적은 내용만 경험으로 사용하고, 적지 않은 경험은 만들지 않습니다.
+          좋았던 점이나 아쉬웠던 점을 자유롭게 적어주세요.
         </p>
       </div>
 
-      {error && <p className="banner banner--error" role="alert">{error}</p>}
-      {action && (
-        <button
-          type="button"
-          className="btn btn--primary btn--lg"
-          onClick={action.onClick}
-          disabled={action.disabled || busy}
-          aria-busy={action.pending}
-        >
-          {action.label}
-        </button>
-      )}
     </section>
   )
 }

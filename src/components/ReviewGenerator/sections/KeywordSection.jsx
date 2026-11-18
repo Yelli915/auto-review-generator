@@ -11,6 +11,7 @@ import {
   normalizeKeywordText,
 } from '#shared/keywordPhrase'
 import ChoiceGroup from './ChoiceGroup'
+import AppIcon from '../AppIcon'
 
 const SKELETON_WIDTHS = [80, 96, 68, 110, 76, 90]
 
@@ -46,11 +47,9 @@ export default function KeywordSection({
   onLengthChange,
   tone,
   onToneChange,
-  onGenerate,
-  canGenerate,
-  isGenerating,
   hasExperience,
   error,
+  onAddSource,
 }) {
   const customKeywordId = useId()
   const [customInput, setCustomInput] = useState('')
@@ -102,7 +101,7 @@ export default function KeywordSection({
   return (
     <section className="panel" aria-labelledby="section-keywords" ref={sectionRef}>
       <h2 className="panel__title" id="section-keywords">
-        키워드와 문체
+        리뷰에 담을 키워드
         {allKeywords.length > 0 && (
           <span className="selection-badge" aria-live="polite">
             {selected.length}/{allKeywords.length}개 선택
@@ -117,14 +116,17 @@ export default function KeywordSection({
           ))}
         </div>
       ) : !hasSource ? (
-        <p className="panel__empty">
-          위에서 재료를 넣고 키워드를 만들면, 여기서 리뷰에 담을 키워드를 고릅니다.
-        </p>
+        <div className="empty-state">
+          <span className="empty-state__icon"><AppIcon name="keywords" /></span>
+          <h3>어떤 이야기를 담아볼까요?</h3>
+          <p>사진이나 상품 링크를 추가하면<br />리뷰에 어울리는 키워드를 추천해 드려요.</p>
+          <button type="button" className="btn btn--primary" onClick={onAddSource}>리뷰 재료 추가하기</button>
+        </div>
       ) : (
         <>
           {stale && (
             <p className="notice" role="status">
-              입력이 바뀌었습니다. 지금 키워드는 이전 입력 기준이니, 필요하면 위에서 키워드를 다시 만들어 주세요.
+              입력이 바뀌었어요. 새 내용을 반영하려면 이전 단계에서 키워드를 다시 추천받아 주세요.
             </p>
           )}
 
@@ -170,7 +172,7 @@ export default function KeywordSection({
                   setCustomError('')
                 }}
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
+                  if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
                     e.preventDefault()
                     handleAddCustom()
                   }
@@ -188,7 +190,7 @@ export default function KeywordSection({
             {customError && <p className="field__hint field__hint--error">{customError}</p>}
           </div>
 
-          <div className="options-row options-row--2">
+          <div className="options-row">
             <ChoiceGroup
               legend="분량"
               options={REVIEW_LENGTH_OPTIONS}
@@ -219,19 +221,6 @@ export default function KeywordSection({
       )}
 
       {error && <p className="banner banner--error" role="alert">{error}</p>}
-      {hasSource && (
-        <div className="sticky-cta">
-          <button
-            type="button"
-            className="btn btn--primary btn--lg"
-            onClick={onGenerate}
-            disabled={!canGenerate || disabled}
-            aria-busy={isGenerating}
-          >
-            {isGenerating ? '리뷰 작성 중...' : selected.length ? '리뷰 생성' : '키워드를 1개 이상 고르세요'}
-          </button>
-        </div>
-      )}
     </section>
   )
 }

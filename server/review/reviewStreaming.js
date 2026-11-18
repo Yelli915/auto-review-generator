@@ -82,11 +82,13 @@ export async function streamGeminiReview({ key, input, res, refund }) {
     return fail(err instanceof Error ? err.message : '스트리밍 응답을 읽지 못했습니다.')
   }
 
-  const normalizedReview = normalizeKeywordText(fullText)
   if (finishReason === 'MAX_TOKENS') {
     return fail('리뷰가 중간에 잘렸습니다. 글자수보다 완성된 리뷰를 우선해 다시 생성해 주세요.')
   }
-  if (normalizedReview.length < minReviewChars) {
+  if (finishReason !== 'STOP') {
+    return fail('리뷰 작성이 정상적으로 끝나지 않았습니다. 다시 생성해 주세요.')
+  }
+  if (normalizeKeywordText(fullText).length < minReviewChars) {
     return fail('리뷰가 너무 짧게 생성되었습니다. 다시 생성해 주세요.')
   }
   writeJsonLine({ done: true, finishReason })
